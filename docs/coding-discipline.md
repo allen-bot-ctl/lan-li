@@ -15,7 +15,7 @@
 
 ## 可测试性与副作用注入
 
-- 纯逻辑模块（`calendar.js`、`update-feed.js`、`update-status.js`、`app-version.js`、`logger.js`、`mac-self-update.js`）必须能在没有 Electron 的情况下被 `node --test` require。
+- 纯逻辑模块（`calendar.js`、`world-clocks.js`、`update-feed.js`、`update-status.js`、`app-version.js`、`logger.js`、`mac-self-update.js`）必须能在没有 Electron 的情况下被 `node --test` require。
 - 所有外部副作用必须可注入：
   - 网络：`fetch` / `net.fetch`
   - 进程：`execFile`、`spawn`
@@ -38,7 +38,7 @@
 - preload 只暴露已有 IPC，不 `require` 业务模块，不暴露原始 `ipcRenderer`，不新增通用透传。
 - 渲染进程**不算农历**；不要 `require('lunar-javascript')`，不要自己推导节气/节日/更新状态。
 - 主进程负责 42 格、菜单栏标题、「此刻」、更新编排与日志。
-- 不要扩大 IPC 清单而不更新 [implementation.md](implementation.md#5-ipc-完整清单) 与测试。
+- 不要扩大 IPC 清单而不更新 [implementation.md](implementation.md#6-ipc-完整清单) 与测试。
 - 不要新增第二个窗口、设置页、右键菜单、Dock 图标或 Windows/Linux 主窗口。
 
 ## 日历与展示

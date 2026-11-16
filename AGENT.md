@@ -1,6 +1,6 @@
 # AGENT.md
 
-栏历是 macOS 菜单栏公历/农历月历（Electron，当前 `0.1.7`）。仓库：https://github.com/allen-bot-ctl/lan-li ；主页：https://allen-bot-ctl.github.io/lan-li/ 。
+栏历是 macOS 菜单栏公历/农历月历（Electron，当前 `0.1.8`）。仓库：https://github.com/allen-bot-ctl/lan-li ；主页：https://allen-bot-ctl.github.io/lan-li/ 。
 
 ## 文档地图
 

@@ -34,6 +34,16 @@ const { createLogger } = require('./logger');
 const { describeStatus } = require('./update-status');
 const { formatVersionLabel } = require('./app-version');
 const {
+  supportedTimeZoneList,
+  defaultLocalTimeZone,
+  formatClock,
+  normalizeWorldClocks,
+  addClock,
+  removeClock,
+  selectClock,
+  searchCatalog
+} = require('./world-clocks');
+const {
   RELEASES_LATEST_URL,
   HOMEPAGE_URL
 } = require('./update-feed');
@@ -54,6 +64,7 @@ const logger = createLogger();
 
 let view = null;
 let focus = null;
+let worldClocks = { items: [], index: 0 };
 
 function todayParts() {
   const now = new Date();
@@ -80,11 +91,13 @@ function getOpenAtLogin() {
 }
 
 function buildState() {
+  const now = new Date();
   return {
     view: { year: view.year, month: view.month },
     focus: { year: focus.year, month: focus.month, day: focus.day },
-    cells: buildCells(view.year, view.month, new Date()),
-    now: buildNow(new Date()),
+    cells: buildCells(view.year, view.month, now),
+    now: buildNow(now),
+    clocks: currentClockSnapshot(now),
     openAtLogin: getOpenAtLogin()
   };
 }
@@ -110,6 +123,58 @@ function writePreferences(preferences) {
   } catch (error) {
     console.warn('[栏历] 写入偏好文件失败：' + (error && error.message ? error.message : error));
   }
+}
+
+function supportedTimeZones() {
+  return supportedTimeZoneList();
+}
+
+function loadWorldClocks() {
+  const preferences = readPreferences();
+  const stored = preferences.worldClocks;
+  worldClocks = normalizeWorldClocks(stored, supportedTimeZones());
+
+  // Only a missing key means first run / an older install. An explicit empty
+  // list is the user's choice and is never re-seeded.
+  if (stored === undefined) {
+    writePreferences({ ...preferences, worldClocks });
+  }
+}
+
+function persistWorldClocks() {
+  const preferences = readPreferences();
+  writePreferences({ ...preferences, worldClocks });
+}
+
+function currentClockSnapshot(now = new Date()) {
+  const item = worldClocks.items[worldClocks.index] || null;
+  const localZone = defaultLocalTimeZone();
+  const formatted = item ? formatClock(now, item.id, localZone) : null;
+
+  return {
+    items: worldClocks.items.map((clock) => ({ id: clock.id, label: clock.label })),
+    index: worldClocks.index,
+    current: item && formatted
+      ? {
+          id: item.id,
+          label: item.label,
+          time: formatted.time,
+          date: formatted.date,
+          weekday: formatted.weekday,
+          dayRelation: formatted.dayRelation,
+          offsetText: formatted.offsetText,
+          offsetMinutes: formatted.offsetMinutes
+        }
+      : null
+  };
+}
+
+function commitWorldClocks(next) {
+  if (next && next !== worldClocks) {
+    worldClocks = next;
+    persistWorldClocks();
+  }
+  return currentClockSnapshot();
 }
 
 // Update notices are keyed by the release name from the Squirrel feed so a
@@ -386,7 +451,10 @@ function updateClock() {
   }
 
   if (calendarWindow && !calendarWindow.isDestroyed() && calendarWindow.isVisible()) {
-    calendarWindow.webContents.send('calendar:onTick', buildNow(now));
+    calendarWindow.webContents.send('calendar:onTick', {
+      now: buildNow(now),
+      clocks: currentClockSnapshot(now)
+    });
   }
 }
 
@@ -441,6 +509,26 @@ function registerIpc() {
   ipcMain.handle('calendar:goToday', () => {
     resetViewToToday();
     return buildState();
+  });
+
+  ipcMain.handle('clocks:add', (_event, payload) => {
+    return commitWorldClocks(addClock(worldClocks, payload, supportedTimeZones()));
+  });
+
+  ipcMain.handle('clocks:remove', (_event, payload) => {
+    return commitWorldClocks(removeClock(worldClocks, payload));
+  });
+
+  ipcMain.handle('clocks:select', (_event, payload) => {
+    return commitWorldClocks(selectClock(worldClocks, payload));
+  });
+
+  ipcMain.handle('clocks:search', (_event, payload) => {
+    const query = payload && typeof payload.query === 'string' ? payload.query : '';
+    return searchCatalog(query, {
+      supportedValuesOf: supportedTimeZones(),
+      addedIds: worldClocks.items.map((clock) => clock.id)
+    });
   });
 
   ipcMain.on('pointer:enter', () => {
@@ -536,6 +624,7 @@ async function bootstrap() {
   Menu.setApplicationMenu(null);
   initializeLoginItem();
   resetViewToToday();
+  loadWorldClocks();
   registerIpc();
   createCalendarWindow();
   createTray();

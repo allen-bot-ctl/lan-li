@@ -7,6 +7,10 @@ contextBridge.exposeInMainWorld('lanli', {
   getState: () => ipcRenderer.invoke('calendar:getState'),
   setView: (view) => ipcRenderer.invoke('calendar:setView', view),
   goToday: () => ipcRenderer.invoke('calendar:goToday'),
+  addClock: (payload) => ipcRenderer.invoke('clocks:add', payload),
+  removeClock: (payload) => ipcRenderer.invoke('clocks:remove', payload),
+  selectClock: (payload) => ipcRenderer.invoke('clocks:select', payload),
+  searchClocks: (payload) => ipcRenderer.invoke('clocks:search', payload),
   onTick: (callback) => {
     ipcRenderer.on('calendar:onTick', (_event, payload) => callback(payload));
   },

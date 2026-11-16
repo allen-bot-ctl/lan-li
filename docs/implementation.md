@@ -40,16 +40,68 @@ ${M}月${D}日 ${HH}:${mm}:${ss}
 
 **右侧「此刻」（`buildNow`）**
 
-- `hourMinute`：`HH:mm`（不带秒）。
+- `hourMinute`：`HH:mm`（不带秒）。0.1.8 起右栏不再渲染本地 `HH:mm`（菜单栏已有本地时间），但主进程仍返回该字段，`tests/calendar.test.js` 继续约束格式。
 - `weekday`：`WEEKDAY_NAMES[solar.getWeek()]`，即 `星期日`…`星期六`。
-- `day`：公历日数字。
+- `day`：公历日数字，用于右侧黄色日期块。
 - `ganzhiYear`：`` `${lunar.getYearInGanZhi()}年【${lunar.getYearShengXiao()}年】` ``。
 - `lunarMonthDay`：`` `${lunar.getMonthInChinese()}月${lunar.getDayInChinese()}` ``。
 - 只由「现在」决定，不随翻月或焦点日变化。
 
 **测试**：`tests/calendar.test.js`（节气、初七/此刻、42 格与 lead、今日/周末/节日标记、菜单栏标题、禁用 `getOtherFestivals`）。
 
-## 2. 托盘与窗口（`electron/main.js`）
+## 2. 世界时钟（`electron/world-clocks.js`）
+
+纯逻辑模块，**不 require Electron**，也不读写文件/网络；`Intl` 的 supported zones、当前时刻、本地时区都由调用方注入，`node --test` 直接 require。
+
+**城市目录与搜索**
+
+- `CITY_CATALOG` 是离线静态表，覆盖北京/上海、东京、首尔、新加坡、香港、台北、曼谷、新德里、迪拜、莫斯科、伦敦、巴黎、柏林、纽约、洛杉矶/旧金山、芝加哥、温哥华、多伦多、悉尼、奥克兰、圣保罗、UTC。
+- 一个 IANA id 可以对应多行标签：北京与上海都是 `Asia/Shanghai`，洛杉矶与旧金山都是 `America/Los_Angeles`。**去重按 IANA id**，但添加时保存用户点选那一行的 `label`。
+- `searchCatalog(query, { catalog, supportedValuesOf, addedIds })`：先匹配目录的中文标签、别名与 IANA id（下划线按空格处理）。目录无匹配且查询非空时，才用注入的 `Intl.supportedValuesOf('timeZone')` 按 id 或最后一段回退。结果带 `{ id, label, source, added }`；已添加的 id 仍显示但 `added: true`，渲染层禁用。
+- `isValidTimeZone(id, supportedValuesOf)` 以 `Intl.DateTimeFormat` 为准；这样 `Asia/Kolkata` 这类被 ICU 规范化为 `Asia/Calcutta` 的别名也能通过，输入列表不会放行未知 id。
+
+**格式化（`formatClock(now, timeZone, localTimeZone)`）**
+
+- 用 `Intl.DateTimeFormat(..., { timeZone, hourCycle: 'h23' })` 取该时区的年月日时分秒与星期，不依赖运行进程的本地时区。
+- `time`：`HH:mm:ss`，全部补零；`date`：`M月D日`，月日不补零；`weekday`：`星期一`…`星期日`。
+- `dayRelation`：该时区日历日相对**本地日历日**：前一天 `昨天`、后一天 `明天`、同一天为空串（不显示「今天」）。
+- `offsetMinutes`：把该时区的墙上时间当作 UTC 与真实时刻相减，再减去本地时区的同一值。因此夏令时按**当前时刻**计算，而不是标准时差。
+- `offsetText`：`同本地` / `比本地快 13 小时` / `比本地慢 5 小时 30 分` / `比本地快 45 分`；单位用中文，不出现 `+13`、`UTC+8` 或 `快 0 小时`。
+
+**列表操作**
+
+- 状态形状：`{ items: [{ id, label }], index }`。
+- `addClock` 拒绝无效 id 与重复 IANA id；成功时追加并把 `index` 指向新时钟。
+- `removeClock` 可按当前项、`{ id }` 或 `{ index }` 删除；删当前项时索引夹到 `length - 1`，删空时 `{ items: [], index: 0 }`，不会偷偷补回默认城市。
+- `nextClock` / `prevClock` 首尾绕回；少于两个时钟时什么都不做。`selectClock` 接受 `{ index }` 或 `{ direction: 'prev' | 'next' }`。
+- `normalizeWorldClocks(stored, supportedValuesOf)` 丢弃无效/重复 id、清洗 label、夹紧 index。**只有 `stored === undefined`（偏好文件里没有该键）才种入 `北京 / Asia/Shanghai`**；`items: []` 保持空。首次运行默认北京，因为这是中文日历应用，本地时区已由菜单栏显示，默认再显示「同本地」或纽约意义不大。
+
+**持久化**
+
+- 保存在既有 `app.getPath('userData')/preferences.json`（`userData` 在 `.app` 之外，重启与自更新都不会丢）：
+  ```json
+  {
+    "worldClocks": {
+      "items": [{ "id": "Asia/Shanghai", "label": "北京" }],
+      "index": 0
+    }
+  }
+  ```
+- 启动时 `loadWorldClocks()` 读取并 normalize；只有键缺失时立即写回默认。每次成功 add / remove / select 后都用既有 `writePreferences` 整体写回；写失败只 warn，不崩溃。
+- 渲染层不碰文件、不用 `localStorage`。
+
+**IPC 与渲染层**
+
+- `calendar:getState` / `calendar:setView` / `calendar:goToday` 返回的 state 增加 `clocks: { items, index, current }`；`current` 是已格式化的当前时钟，空列表为 `null`。不下发完整 IANA 列表。
+- `calendar:onTick` 每秒发送 `{ now, clocks }`（窗口可见时），`clocks` 重新按当前时刻格式化，所以秒数会走。
+- 右栏「世界时钟」卡片只显示一个时区：城市、`HH:mm:ss`、`M月D日 星期X`、昨天/明天徽标、时差文案；`‹`/`›` 切换并绕回，少于两个时隐藏。编辑键可增删；`+` 在右栏内部打开搜索浮层，不新建窗口、不调用系统对话框。
+- 搜索浮层覆盖 `.now-pane`，列表在浮层内部滚动；已添加项禁用；点选后关闭浮层并显示新时钟。无网络、无定位。
+- 键盘 `←` / `→` 在焦点不在 `input` / `select` / `textarea` / contenteditable 时切换（点过箭头按钮后仍可继续用方向键）；卡片上的水平滚轮/触控板 `deltaX` 也切换，并有 350ms 节流。
+- 空列表显示「点击 + 添加时区」，隐藏箭头、圆点与 `×`。
+
+**测试**：`tests/world-clocks.test.js`（城市/别名/IANA 回退搜索、重复 id、共享时区标签、DST 冬夏偏移、半小时时区、UTC、同本地、昨天/明天、列表增删/绕回/清洗、首次默认 vs 显式空列表）。
+
+## 3. 托盘与窗口（`electron/main.js`）
 
 **托盘**
 
@@ -86,7 +138,7 @@ ${M}月${D}日 ${HH}:${mm}:${ss}
 
 **测试**：托盘/窗口行为目前靠 README 的 macOS 真机项验收，没有自动化 UI 测试。
 
-## 3. 更新（`electron/updater.js` + `electron/mac-self-update.js` + `electron/update-feed.js`）
+## 4. 更新（`electron/updater.js` + `electron/mac-self-update.js` + `electron/update-feed.js`）
 
 调用关系：
 
@@ -114,7 +166,7 @@ main.setupUpdates()
 
 **测试**：`tests/updater.test.js`、`tests/mac-self-update.test.js`、`tests/update-feed.test.js`、`tests/update-status.test.js`。
 
-## 4. 日志（`electron/logger.js`）
+## 5. 日志（`electron/logger.js`）
 
 - 位置：`app.getPath('logs')/main.log`，macOS 上是 `~/Library/Logs/栏历/main.log`。
 - 行格式：`${new Date().toISOString()} [level] message`；`level` 为 `info` / `warn` / `error`。
@@ -125,7 +177,7 @@ main.setupUpdates()
 
 **测试**：`tests/updater.test.js` 中的日志测试（ISO 格式、轮转、路径解析失败不抛）。
 
-## 5. IPC 完整清单
+## 6. IPC 完整清单
 
 以 `electron/preload.js` 与 `electron/main.js` 的 `registerIpc()` 为准：
 
@@ -133,10 +185,14 @@ main.setupUpdates()
 
 | 频道 | preload API | 作用 |
 | --- | --- | --- |
-| `app:version` | `getVersion` | 返回 `formatVersionLabel(app.getVersion())`，如 `v0.1.7` |
-| `calendar:getState` | `getState` | 当前 `view`、`focus`、42 格、`now`、`openAtLogin` |
+| `app:version` | `getVersion` | 返回 `formatVersionLabel(app.getVersion())`，如 `v0.1.8` |
+| `calendar:getState` | `getState` | 当前 `view`、`focus`、42 格、`now`、`clocks`、`openAtLogin` |
 | `calendar:setView` | `setView` | 校验并切换浏览年月/焦点日，返回新状态 |
-| `calendar:goToday` | `goToday` | 浏览年月与焦点日回到今天 |
+| `calendar:goToday` | `goToday` | 浏览年月与焦点日回到今天，返回新状态 |
+| `clocks:add` | `addClock` | `{ id, label? }`；校验/去重后持久化，返回 `clocks` 快照 |
+| `clocks:remove` | `removeClock` | 删除当前时钟或 `{ id }`；持久化并返回快照 |
+| `clocks:select` | `selectClock` | `{ index }` 或 `{ direction: 'prev' \| 'next' }`；持久化并返回快照 |
+| `clocks:search` | `searchClocks` | `{ query }`；返回目录 + IANA 回退结果，已添加项带 `added` |
 | `login:set` | `setLogin` | 设置登录项并返回读回的真实值 |
 | `update:check` | `checkForUpdate` | 立即检查；返回短状态对象 |
 
@@ -154,11 +210,11 @@ main.setupUpdates()
 
 | 频道 | preload API | 说明 |
 | --- | --- | --- |
-| `calendar:onTick` | `onTick` | 每秒「此刻」；仅窗口可见时发送 |
+| `calendar:onTick` | `onTick` | 每秒发送 `{ now, clocks }`；仅窗口可见时发送，`clocks.current` 按当前时刻重新格式化 |
 | `update:notice` | `onUpdateNotice` | `ready` / `manual` 横幅；打开窗口与加载完成时重发 |
 | `update:status` | `onUpdateStatus` | 短状态；**仅手动检查**时发送 |
 
-**preload API 全量**：`getVersion`、`getState`、`setView`、`goToday`、`onTick`、`pointerEnter`、`pointerLeave`、`setLogin`、`quit`、`onUpdateNotice`、`checkForUpdate`、`onUpdateStatus`、`restartToUpdate`、`openLatestRelease`。
+**preload API 全量（18 个）**：`getVersion`、`getState`、`setView`、`goToday`、`addClock`、`removeClock`、`selectClock`、`searchClocks`、`onTick`、`pointerEnter`、`pointerLeave`、`setLogin`、`quit`、`onUpdateNotice`、`checkForUpdate`、`onUpdateStatus`、`restartToUpdate`、`openLatestRelease`。
 
 **状态文案（`electron/update-status.js`）**
 
@@ -174,14 +230,14 @@ main.setupUpdates()
 
 未知或空状态按 `error` 处理（fail closed）。`ready` 的横幅文案在渲染层：「新版本已就绪」「重启更新」；手动失败横幅：「无法自动更新，请手动下载」「下载新版」。`timed` 状态由渲染层约 2600ms 后恢复为「检查更新」。
 
-## 6. 登录项与平台限制
+## 7. 登录项与平台限制
 
 - 首次运行：`initializeLoginItem()` 读 `preferences.json`；若没有 `loginItemInitialized === true`，调用 `app.setLoginItemSettings({ openAtLogin: true })`，然后无论读回什么，都写 `loginItemInitialized: true`。之后启动不再强制打开。
 - 开关：`login:set` 调设置后总是 `getLoginItemSettings().openAtLogin` 读回真实值返回，渲染层用返回值覆盖勾选状态。
 - 若设置 true 后读回 false：写 `console.warn`（也进日志），不改用 LaunchAgent、login hook、crontab。
 - 非 macOS：`dialog.showErrorBox('栏历', '栏历首发只支持 macOS。')` 后 `app.quit()`，不绘制仿菜单栏、不检查更新。
 
-## 7. 底栏版本号（`electron/app-version.js`）
+## 8. 底栏版本号（`electron/app-version.js`）
 
 - `formatVersionLabel`：去首尾空白；已有 `v`/`V` 前缀去重；必须以数字开头且只含 `0-9A-Za-z.+-`；否则返回 `''`。
 - 渲染层 `loadVersion()` → `app:version`，显示在「检查更新」与「退出栏历」之间，不会被检查状态文案覆盖。

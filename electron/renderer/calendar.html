@@ -72,14 +72,63 @@
       </footer>
     </main>
 
-    <aside class="now-pane" aria-label="此刻">
-      <div class="now-time" id="now-time">00:00</div>
-      <div class="now-weekday" id="now-weekday">星期日</div>
-      <div class="now-day-block">
-        <span class="now-day" id="now-day">1</span>
+    <aside class="now-pane" aria-label="此刻与世界时钟">
+      <section class="now-card" aria-label="此刻">
+        <div class="pane-label">此刻</div>
+        <div class="now-main">
+          <div class="now-day-block">
+            <span class="now-day" id="now-day">1</span>
+          </div>
+          <div class="now-info">
+            <div class="now-weekday" id="now-weekday">星期日</div>
+            <div class="now-ganzhi" id="now-ganzhi">—</div>
+            <div class="now-lunar" id="now-lunar">—</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="world-clock" aria-label="世界时钟">
+        <div class="pane-label world-head">
+          <span>世界时钟</span>
+          <span class="world-tools">
+            <button class="clock-tool" id="clock-add" type="button" aria-label="添加时区">+</button>
+            <button class="clock-tool" id="clock-remove" type="button" aria-label="移除当前时区">×</button>
+          </span>
+        </div>
+
+        <div class="clock-card" id="clock-card">
+          <div class="clock-row" id="clock-row">
+            <button class="clock-arrow" id="clock-prev" type="button" aria-label="上一个时区">‹</button>
+            <div class="clock-body">
+              <div class="clock-city-row">
+                <span class="clock-city" id="clock-city">北京</span>
+                <span class="clock-relation" id="clock-relation" hidden></span>
+              </div>
+              <div class="clock-time" id="clock-time">00:00:00</div>
+              <div class="clock-date" id="clock-date">1月1日 星期一</div>
+              <div class="clock-offset" id="clock-offset">同本地</div>
+            </div>
+            <button class="clock-arrow" id="clock-next" type="button" aria-label="下一个时区">›</button>
+          </div>
+          <div class="clock-dots" id="clock-dots" aria-hidden="true"></div>
+          <div class="clock-empty" id="clock-empty" hidden>点击 + 添加时区</div>
+        </div>
+      </section>
+
+      <div class="clock-picker" id="clock-picker" hidden>
+        <div class="picker-head">
+          <input
+            class="clock-search"
+            id="clock-search"
+            type="search"
+            placeholder="搜索城市或时区"
+            autocomplete="off"
+            spellcheck="false"
+          >
+          <button class="picker-close" id="clock-picker-close" type="button">完成</button>
+        </div>
+        <div class="picker-list" id="clock-list" role="listbox" aria-label="选择时区"></div>
       </div>
-      <div class="now-ganzhi" id="now-ganzhi">—</div>
-      <div class="now-lunar" id="now-lunar">—</div>
     </aside>
   </div>
 

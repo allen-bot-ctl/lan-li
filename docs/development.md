@@ -28,7 +28,7 @@ npm test       # node --test tests/*.test.js
 
 1. 菜单栏只有文字，没有额外图标（系统仍保留自身内边距）。
 2. 指针移到菜单栏文字上，面板在正下方展开；离开约 200ms 收起。点击也能打开，已打开时点击不关闭。
-3. 面板固定 `580×400`：左侧白色月历 `420px`，右侧橙色「此刻」`160px`。
+3. 面板固定 `580×400`：左侧白色月历 `420px`，右侧橙色「此刻与世界时钟」栏 `160px`。
 4. 底栏有「登录时打开」、版本号、检查更新、退出；顶部有年份下拉、上/下月、返回今天。
 5. 没有右键菜单、天气、设置页或广告。
 
@@ -78,4 +78,4 @@ npm test       # node --test tests/*.test.js
 - 编码约定：[coding-discipline.md](coding-discipline.md)
 - 测试与真机项：[testing.md](testing.md)
 - 更新行为：[updater.md](updater.md)
-- 日志系统的实现：[implementation.md](implementation.md#4-日志electronloggerjs)
+- 日志系统的实现：[implementation.md](implementation.md#5-日志electronloggerjs)

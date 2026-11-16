@@ -161,7 +161,7 @@ Squirrel 路径保留。签名包 `setFeedURL` 成功后，下载完成仍显示
 
 ## 相关文档
 
-- 实现走读：[implementation.md](implementation.md#3-更新electronupdaterjs-electronmac-self-updatejs-electronupdate-feedjs)
+- 实现走读：[implementation.md](implementation.md#4-更新electronupdaterjs-electronmac-self-updatejs-electronupdate-feedjs)
 - 历史教训：[lessons-learned.md](lessons-learned.md)
 - 发布资产：[release.md](release.md)
 - 真机验收：[testing.md](testing.md#需要-macos-真机确认的事项)

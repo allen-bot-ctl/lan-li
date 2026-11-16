@@ -23,4 +23,4 @@
 ## 相关文档
 
 - [../lessons-learned.md](../lessons-learned.md#8-空托盘图标与紧凑窗口)
-- [../implementation.md](../implementation.md#2-托盘与窗口electronmainjs)
+- [../implementation.md](../implementation.md#3-托盘与窗口electronmainjs)

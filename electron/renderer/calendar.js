@@ -13,11 +13,27 @@ const todayButton = document.getElementById('today-button');
 const grid = document.getElementById('grid');
 const loginToggle = document.getElementById('login-toggle');
 const quitButton = document.getElementById('quit-button');
-const nowTime = document.getElementById('now-time');
 const nowWeekday = document.getElementById('now-weekday');
 const nowDay = document.getElementById('now-day');
 const nowGanzhi = document.getElementById('now-ganzhi');
 const nowLunar = document.getElementById('now-lunar');
+const clockCard = document.getElementById('clock-card');
+const clockRow = document.getElementById('clock-row');
+const clockCity = document.getElementById('clock-city');
+const clockRelation = document.getElementById('clock-relation');
+const clockTime = document.getElementById('clock-time');
+const clockDate = document.getElementById('clock-date');
+const clockOffset = document.getElementById('clock-offset');
+const clockDots = document.getElementById('clock-dots');
+const clockEmpty = document.getElementById('clock-empty');
+const clockPrev = document.getElementById('clock-prev');
+const clockNext = document.getElementById('clock-next');
+const clockAdd = document.getElementById('clock-add');
+const clockRemove = document.getElementById('clock-remove');
+const clockPicker = document.getElementById('clock-picker');
+const clockSearch = document.getElementById('clock-search');
+const clockPickerClose = document.getElementById('clock-picker-close');
+const clockList = document.getElementById('clock-list');
 const updateBanner = document.getElementById('update-banner');
 const updateMessage = document.getElementById('update-message');
 const updateAction = document.getElementById('update-action');
@@ -29,6 +45,10 @@ let state = null;
 let yearOptionsBuilt = false;
 let updateMode = null;
 let checkStatusTimer = null;
+let clocks = null;
+let searchToken = 0;
+let searchTimer = null;
+let wheelLockedAt = 0;
 
 function daysInMonth(year, month) {
   return new Date(year, month, 0).getDate();
@@ -47,11 +67,146 @@ function buildYearOptions() {
 
 function renderNow(now) {
   if (!now) return;
-  nowTime.textContent = now.hourMinute;
   nowWeekday.textContent = now.weekday;
   nowDay.textContent = String(now.day);
   nowGanzhi.textContent = now.ganzhiYear;
   nowLunar.textContent = now.lunarMonthDay;
+}
+
+function renderClockDots(items, index) {
+  clockDots.replaceChildren();
+  clockDots.hidden = items.length === 0;
+  for (let position = 0; position < items.length; position += 1) {
+    const dot = document.createElement('span');
+    dot.className = position === index ? 'clock-dot is-current' : 'clock-dot';
+    clockDots.append(dot);
+  }
+}
+
+function renderClocks(snapshot) {
+  if (!snapshot) return;
+  clocks = snapshot;
+
+  const items = Array.isArray(snapshot.items) ? snapshot.items : [];
+  const current = snapshot.current || null;
+  const empty = !current;
+  const canSwitch = items.length > 1;
+
+  clockRow.hidden = empty;
+  clockEmpty.hidden = !empty;
+  clockRemove.hidden = empty;
+  clockPrev.hidden = !canSwitch;
+  clockNext.hidden = !canSwitch;
+  renderClockDots(items, snapshot.index);
+
+  if (empty) {
+    clockCard.removeAttribute('aria-label');
+    return;
+  }
+
+  clockCity.textContent = current.label;
+  clockCity.title = `${current.label}（${current.id}）`;
+  clockRelation.textContent = current.dayRelation || '';
+  clockRelation.hidden = !current.dayRelation;
+  clockTime.textContent = current.time;
+  clockDate.textContent = `${current.date} ${current.weekday}`;
+  clockOffset.textContent = current.offsetText;
+  clockCard.setAttribute(
+    'aria-label',
+    `${current.label} ${current.time} ${current.date} ${current.weekday} ${current.offsetText}`
+  );
+}
+
+function requestClockSelect(payload) {
+  return api.selectClock(payload).then(renderClocks).catch(() => {
+    refreshState();
+  });
+}
+
+function selectClockRelative(direction) {
+  if (!clocks || !Array.isArray(clocks.items) || clocks.items.length < 2) return;
+  requestClockSelect({ direction });
+}
+
+function renderPicker(rows) {
+  clockList.replaceChildren();
+
+  if (!Array.isArray(rows) || rows.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'picker-empty';
+    empty.textContent = '没有匹配的时区';
+    clockList.append(empty);
+    return;
+  }
+
+  for (const row of rows) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'picker-item';
+    button.setAttribute('role', 'option');
+    button.disabled = Boolean(row.added);
+    button.setAttribute('aria-selected', row.added ? 'true' : 'false');
+
+    const name = document.createElement('span');
+    name.className = 'picker-name';
+    name.textContent = row.label;
+
+    const meta = document.createElement('span');
+    if (row.added) {
+      meta.className = 'picker-added';
+      meta.textContent = '已添加';
+    } else {
+      meta.className = 'picker-zone';
+      meta.textContent = row.id;
+    }
+
+    button.append(name, meta);
+    button.addEventListener('click', () => {
+      if (button.disabled) return;
+      api.addClock({ id: row.id, label: row.label }).then((snapshot) => {
+        renderClocks(snapshot);
+        closeClockPicker();
+      }).catch(() => {
+        refreshState();
+      });
+    });
+    clockList.append(button);
+  }
+}
+
+function runClockSearch() {
+  if (searchTimer) {
+    clearTimeout(searchTimer);
+    searchTimer = null;
+  }
+  searchTimer = setTimeout(() => {
+    searchTimer = null;
+    const token = searchToken + 1;
+    searchToken = token;
+    api.searchClocks({ query: clockSearch.value }).then((rows) => {
+      if (token === searchToken) renderPicker(rows);
+    }).catch(() => {
+      if (token === searchToken) renderPicker([]);
+    });
+  }, 60);
+}
+
+function openClockPicker() {
+  clockPicker.hidden = false;
+  clockSearch.value = '';
+  clockList.replaceChildren();
+  runClockSearch();
+  clockSearch.focus();
+}
+
+function closeClockPicker() {
+  clockPicker.hidden = true;
+  if (searchTimer) {
+    clearTimeout(searchTimer);
+    searchTimer = null;
+  }
+  searchToken += 1;
+  clockList.replaceChildren();
 }
 
 function renderCells(next) {
@@ -111,6 +266,7 @@ function applyState(next) {
 
   renderCells(next);
   renderNow(next.now);
+  renderClocks(next.clocks);
   loginToggle.checked = Boolean(next.openAtLogin);
 }
 
@@ -269,6 +425,63 @@ updateAction.addEventListener('click', () => {
 
 api.onUpdateNotice(showUpdateNotice);
 
+clockPrev.addEventListener('click', () => {
+  selectClockRelative('prev');
+});
+
+clockNext.addEventListener('click', () => {
+  selectClockRelative('next');
+});
+
+clockAdd.addEventListener('click', () => {
+  openClockPicker();
+});
+
+clockRemove.addEventListener('click', () => {
+  api.removeClock().then(renderClocks).catch(() => {
+    refreshState();
+  });
+});
+
+clockPickerClose.addEventListener('click', () => {
+  closeClockPicker();
+});
+
+clockSearch.addEventListener('input', () => {
+  runClockSearch();
+});
+
+// Horizontal trackpad swipe (or shift-wheel) switches clocks. Lock briefly so
+// one gesture does not skip several zones.
+clockCard.addEventListener('wheel', (event) => {
+  if (Math.abs(event.deltaX) <= Math.abs(event.deltaY)) return;
+  if (Math.abs(event.deltaX) < 8) return;
+  event.preventDefault();
+
+  const now = Date.now();
+  if (now - wheelLockedAt < 350) return;
+  wheelLockedAt = now;
+  selectClockRelative(event.deltaX > 0 ? 'next' : 'prev');
+}, { passive: false });
+
+// Left/right switch clocks unless focus is on a text entry control, so the
+// year dropdown and the search field keep their own key handling. After a
+// click the focus usually rests on a button; arrow keys must keep switching.
+document.addEventListener('keydown', (event) => {
+  if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+  if (!clockPicker.hidden) return;
+
+  const target = event.target;
+  const tag = target && target.tagName ? target.tagName : '';
+  if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA' ||
+      (target && target.isContentEditable)) {
+    return;
+  }
+
+  event.preventDefault();
+  selectClockRelative(event.key === 'ArrowLeft' ? 'prev' : 'next');
+});
+
 document.documentElement.addEventListener('mouseenter', () => {
   api.pointerEnter();
   refreshState();
@@ -288,8 +501,10 @@ window.addEventListener('focus', () => {
   refreshState();
 });
 
-api.onTick((now) => {
-  renderNow(now);
+api.onTick((payload) => {
+  if (!payload) return;
+  renderNow(payload.now);
+  renderClocks(payload.clocks);
 });
 
 loadVersion();
