@@ -39,16 +39,14 @@ ${M}月${D}日 ${HH}:${mm}:${ss}
 - 菜单栏实际显示用的时区由世界时钟的「设为当前」决定（见下文）。主进程每秒以及「设为当前」/删除回退后立即用 `electron/world-clocks.js` 的 `formatMenuTitleInZone(now, resolvedMenuBarTimeZone, localTimeZone)` 计算标题并 `tray.setTitle(..., { fontType: 'monospacedDigit' })`；结果仍只含日期时间，不含时区名。默认/未设置/无效时等同本地时区，因此 0.1.8 行为不变。
 - `isValidMenuTitle` 与 `MENU_TITLE_PATTERN`（`calendar.js` / `world-clocks.js`）供测试约束格式。
 
-**右侧「此刻」（`buildNow`）**
+**右侧「黄历」（`buildAlmanac`）**
 
-- `hourMinute`：`HH:mm`（不带秒）。0.1.8 起右栏不再渲染本地 `HH:mm`（菜单栏已有本地时间），但主进程仍返回该字段，`tests/calendar.test.js` 继续约束格式。
-- `weekday`：`WEEKDAY_NAMES[solar.getWeek()]`，即 `星期日`…`星期六`。
-- `day`：公历日数字，用于右侧黄色日期块。
-- `ganzhiYear`：`` `${lunar.getYearInGanZhi()}年【${lunar.getYearShengXiao()}年】` ``。
-- `lunarMonthDay`：`` `${lunar.getMonthInChinese()}月${lunar.getDayInChinese()}` ``。
-- 只由「现在」决定，不随翻月或焦点日变化。
+- 0.1.10 起，右栏顶部改为紧凑的「黄历」卡片；旧的「此刻」卡片（星期、公历日数字、干支年【生肖】、农历月日与本地 `HH:mm` 字段）已整体移除，`formatHourMinute` 一并删除。
+- `yearText`：`` `${lunar.getYearInGanZhi()}${lunar.getYearShengXiao()}年` ``，如 `丙午马年`。
+- `yi` / `ji`：`lunar.getDayYi()` / `lunar.getDayJi()` 的完整数组；`yiText` / `jiText` 只取前 `ALMANAC_MAX_ITEMS`（6）项用空格连接，供单行显示（放不下由 CSS 省略号截断）；`yiTitle` / `jiTitle` 是完整列表，用作悬停 title。
+- 只由「现在」决定，不随翻月或焦点日变化；`calendar:onTick` 每秒重算，跨天（午夜）自动刷新。数据全部来自 lunar-javascript 离线计算，不接网络。
 
-**测试**：`tests/calendar.test.js`（节气、初七/此刻、42 格与 lead、今日/周末/节日标记、菜单栏标题、禁用 `getOtherFestivals`）。
+**测试**：`tests/calendar.test.js`（节气、初七、2026-11-16 黄历「丙午马年 / 纳采 / 上梁」、42 格与 lead、今日/周末/节日标记、菜单栏标题、禁用 `getOtherFestivals`）。
 
 ## 2. 世界时钟（`electron/world-clocks.js`）
 
@@ -84,7 +82,7 @@ ${M}月${D}日 ${HH}:${mm}:${ss}
 - `normalizeMenuBarTimeZone(...)`：用于持久化——当解析结果等同系统本地（按 `sameTimeZone`，`Intl` 解析别名如 `Asia/Kolkata` / `Asia/Calcutta`）时返回 `null`（跟随系统），否则返回要保存的 id。若偏好是未设置且系统本地恰为某时钟（如 `Asia/Shanghai` 的北京），该时钟已被视为「当前」。
 - `nextMenuBarTimeZoneAfterRemove(storedZone, removedId, itemsAfterRemove, localTimeZone)`：删除的时钟是当前菜单栏显示时区（或别名等同）时清除选择并回退到本地；删除其它时钟且选择仍存在时保持不变；选择已不存在时清除。主进程在同一轮 `clocks:remove` 中持久化并刷新托盘标题。
 - `formatMenuTitleInZone(date, timeZone, localTimeZone)`：按给定时区输出与 `calendar.formatMenuTitle` 相同的 `M月D日 HH:mm:ss`；`timeZone` 无效时回退本地。可跨日历日（如上海已是次日、纽约仍是前一日），这是预期行为。
-- **不改变系统时区，不调用任何系统 API。**「此刻」（`buildNow`）与月历今日高亮（`buildCells` / `isToday`）始终按系统本地日期/时间计算，主进程不会把菜单栏显示时区传给它们。
+- **不改变系统时区，不调用任何系统 API。**「黄历」（`buildAlmanac`）与月历今日高亮（`buildCells` / `isToday`）始终按系统本地日期/时间计算，主进程不会把菜单栏显示时区传给它们。
 
 **持久化**
 
@@ -105,12 +103,12 @@ ${M}月${D}日 ${HH}:${mm}:${ss}
 **IPC 与渲染层**
 
 - `calendar:getState` / `calendar:setView` / `calendar:goToday` 返回的 state 增加 `clocks: { items, index, menuBarTimeZone, current }`；`menuBarTimeZone` 为解析后的菜单栏显示时区（未设置时为系统本地）；`current` 是已格式化的当前时钟并包含 `isMenuBar`，空列表为 `null`。不下发完整 IANA 列表。
-- `calendar:onTick` 每秒发送 `{ now, clocks }`（窗口可见时），`clocks` 与菜单栏标题都按当前时刻重新计算。
+- `calendar:onTick` 每秒发送 `{ almanac, clocks }`（窗口可见时），`clocks` 与菜单栏标题都按当前时刻重新计算。
 - 右栏「世界时钟」卡片只显示一个时区：城市、`HH:mm:ss`、`M月D日 星期X`、昨天/明天徽标、时差文案，以及「设为当前 / 当前」按钮；`‹`/`›` 只切换浏览中的时钟并绕回（不自动改变菜单栏显示时区），少于两个时隐藏箭头。编辑键可增删；`+` 在右栏内部打开搜索浮层，不新建窗口、不调用系统对话框。
 - 「设为当前」点击后经 `clocks:setMenuBar` 持久化并立即刷新托盘标题；当前显示时区对应的卡片显示禁用态「当前」。比较按 IANA id 并用 `Intl` 视别名为等同。
 - 搜索浮层覆盖 `.now-pane`，列表在浮层内部滚动；已添加项禁用；点选后关闭浮层并显示新时钟。无网络、无定位。
 - 键盘 `←` / `→` 在焦点不在 `input` / `select` / `textarea` / contenteditable 时切换（点过箭头按钮后仍可继续用方向键）；卡片上的水平滚轮/触控板 `deltaX` 也切换，并有 350ms 节流。
-- 空列表显示「点击 + 添加时区」，隐藏箭头、圆点、`×` 与「设为当前」。`buildNow` / `buildCells` / `isToday` 仍按系统本地时间，不受菜单栏显示时区影响。
+- 空列表显示「点击 + 添加时区」，隐藏箭头、圆点、`×` 与「设为当前」。`buildAlmanac` / `buildCells` / `isToday` 仍按系统本地时间，不受菜单栏显示时区影响。
 
 **测试**：`tests/world-clocks.test.js`（城市/别名/IANA 回退搜索、重复 id、共享时区标签、DST 冬夏偏移、半小时时区、UTC、同本地、昨天/明天、列表增删/绕回/清洗、首次默认 vs 显式空列表）。
 
@@ -198,8 +196,8 @@ main.setupUpdates()
 
 | 频道 | preload API | 作用 |
 | --- | --- | --- |
-| `app:version` | `getVersion` | 返回 `formatVersionLabel(app.getVersion())`，如 `v0.1.9` |
-| `calendar:getState` | `getState` | 当前 `view`、`focus`、42 格、`now`、`clocks`（含 `menuBarTimeZone` 与 `current.isMenuBar`）、`openAtLogin` |
+| `app:version` | `getVersion` | 返回 `formatVersionLabel(app.getVersion())`，如 `v0.1.10` |
+| `calendar:getState` | `getState` | 当前 `view`、`focus`、42 格、`almanac`、`clocks`（含 `menuBarTimeZone` 与 `current.isMenuBar`）、`openAtLogin` |
 | `calendar:setView` | `setView` | 校验并切换浏览年月/焦点日，返回新状态 |
 | `calendar:goToday` | `goToday` | 浏览年月与焦点日回到今天，返回新状态 |
 | `clocks:add` | `addClock` | `{ id, label? }`；校验/去重后持久化，返回 `clocks` 快照 |
@@ -224,7 +222,7 @@ main.setupUpdates()
 
 | 频道 | preload API | 说明 |
 | --- | --- | --- |
-| `calendar:onTick` | `onTick` | 每秒发送 `{ now, clocks }`；仅窗口可见时发送，`clocks.current` 按当前时刻重新格式化 |
+| `calendar:onTick` | `onTick` | 每秒发送 `{ almanac, clocks }`；仅窗口可见时发送，`clocks.current` 按当前时刻重新格式化 |
 | `update:notice` | `onUpdateNotice` | `ready` / `manual` 横幅；打开窗口与加载完成时重发 |
 | `update:status` | `onUpdateStatus` | 短状态；**仅手动检查**时发送 |
 
@@ -251,10 +249,10 @@ main.setupUpdates()
 - 若设置 true 后读回 false：写 `console.warn`（也进日志），不改用 LaunchAgent、login hook、crontab。
 - 非 macOS：`dialog.showErrorBox('栏历', '栏历首发只支持 macOS。')` 后 `app.quit()`，不绘制仿菜单栏、不检查更新。
 
-## 8. 底栏版本号（`electron/app-version.js`）
+## 8. 版本号（`electron/app-version.js`）
 
 - `formatVersionLabel`：去首尾空白；已有 `v`/`V` 前缀去重；必须以数字开头且只含 `0-9A-Za-z.+-`；否则返回 `''`。
-- 渲染层 `loadVersion()` → `app:version`，显示在「检查更新」与「退出栏历」之间，不会被检查状态文案覆盖。
+- 0.1.10 起，渲染层 `loadVersion()` → `app:version`，显示在右栏（橙色区域）最底部，上方有一条细分割线；不再出现在底栏「检查更新」与「退出栏历」之间。底栏右侧现在是同结构的「检查更新」（下载图标）与「退出栏历」（电源图标）两个按钮；版本号不会被检查状态文案覆盖。
 
 **测试**：`tests/app-version.test.js`。
 

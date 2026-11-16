@@ -5,16 +5,6 @@ const { Solar } = require('lunar-javascript');
 const MIN_YEAR = 1900;
 const MAX_YEAR = 2100;
 
-const WEEKDAY_NAMES = [
-  '星期日',
-  '星期一',
-  '星期二',
-  '星期三',
-  '星期四',
-  '星期五',
-  '星期六'
-];
-
 // Menu bar title: month and day are not zero padded; hours, minutes and
 // seconds always are. Example: 1月5日 09:03:07 / 11月15日 22:47:13.
 const MENU_TITLE_PATTERN =
@@ -31,10 +21,6 @@ function formatMenuTitle(date) {
 
 function isValidMenuTitle(text) {
   return typeof text === 'string' && MENU_TITLE_PATTERN.test(text);
-}
-
-function formatHourMinute(date) {
-  return `${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
 }
 
 function daysInMonth(year, month) {
@@ -136,29 +122,37 @@ function buildCells(year, month, today) {
   return cells;
 }
 
-function buildNow(date) {
+// 黄历卡片：干支生肖纪年 + 当日宜忌，全部来自 lunar-javascript 离线计算。
+// 可见文本只取前若干项（单行放不下由渲染层 CSS 省略号截断），
+// title 用完整列表；只由「现在」决定，不随翻月或焦点日变化。
+const ALMANAC_MAX_ITEMS = 6;
+
+function buildAlmanac(date) {
   const solar = Solar.fromYmd(date.getFullYear(), date.getMonth() + 1, date.getDate());
   const lunar = solar.getLunar();
+  const yi = lunar.getDayYi().map(String);
+  const ji = lunar.getDayJi().map(String);
   return {
-    hourMinute: formatHourMinute(date),
-    weekday: WEEKDAY_NAMES[solar.getWeek()],
-    day: solar.getDay(),
-    ganzhiYear: `${lunar.getYearInGanZhi()}年【${lunar.getYearShengXiao()}年】`,
-    lunarMonthDay: `${lunar.getMonthInChinese()}月${lunar.getDayInChinese()}`
+    yearText: `${lunar.getYearInGanZhi()}${lunar.getYearShengXiao()}年`,
+    yi,
+    ji,
+    yiText: yi.slice(0, ALMANAC_MAX_ITEMS).join(' '),
+    jiText: ji.slice(0, ALMANAC_MAX_ITEMS).join(' '),
+    yiTitle: yi.join(' '),
+    jiTitle: ji.join(' ')
   };
 }
 
 module.exports = {
   MIN_YEAR,
   MAX_YEAR,
-  WEEKDAY_NAMES,
   MENU_TITLE_PATTERN,
+  ALMANAC_MAX_ITEMS,
   pad2,
   formatMenuTitle,
   isValidMenuTitle,
-  formatHourMinute,
   daysInMonth,
   buildCell,
   buildCells,
-  buildNow
+  buildAlmanac
 };

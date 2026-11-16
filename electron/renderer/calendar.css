@@ -300,29 +300,47 @@ body {
 }
 
 .app-version {
-  flex: 0 0 auto;
-  padding: 0 4px;
-  color: #999999;
-  font-size: 11.5px;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 10.5px;
   line-height: 1;
   white-space: nowrap;
   cursor: default;
   user-select: none;
 }
 
+.pane-footer {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.28);
+}
+
 .quit-button {
+  display: flex;
+  align-items: center;
+  gap: 3px;
   padding: 3px 5px;
   border: none;
   background: transparent;
   color: #666666;
   font-family: inherit;
   font-size: 11.5px;
+  white-space: nowrap;
   cursor: pointer;
 }
 
 .quit-button:hover {
   color: #1a1a1a;
   text-decoration: underline;
+}
+
+.quit-icon {
+  flex: 0 0 auto;
+  width: 13px;
+  height: 13px;
 }
 
 .now-pane {
@@ -351,62 +369,52 @@ body {
   text-align: left;
 }
 
-.now-card {
+.almanac-card {
   flex: 0 0 auto;
   padding-bottom: 10px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.28);
 }
 
-.now-main {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.almanac-year {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
 }
 
-.now-day-block {
+.almanac-row {
   display: flex;
-  flex: 0 0 48px;
   align-items: center;
-  justify-content: center;
-  width: 48px;
-  height: 48px;
-  border-radius: 7px;
-  background: #f0c14b;
+  gap: 4px;
+  min-width: 0;
+  margin-top: 5px;
 }
 
-.now-day {
+.almanac-tag {
+  flex: 0 0 auto;
+  padding: 0 3px;
+  border-radius: 3px;
   color: #ffffff;
-  font-size: 36px;
-  font-weight: 700;
-  line-height: 1;
+  font-size: 9px;
+  line-height: 14px;
 }
 
-.now-info {
+.almanac-tag-yi {
+  background: #2f8f46;
+}
+
+.almanac-tag-ji {
+  background: #c23b2b;
+}
+
+.almanac-items {
   flex: 1 1 auto;
   min-width: 0;
-  text-align: left;
-}
-
-.now-weekday {
-  font-size: 12px;
-  line-height: 1.15;
-}
-
-.now-ganzhi,
-.now-lunar {
   overflow: hidden;
   font-size: 10.5px;
-  line-height: 1.2;
+  line-height: 1.25;
+  text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.now-ganzhi {
-  margin-top: 3px;
-}
-
-.now-lunar {
-  margin-top: 2px;
 }
 
 .world-clock {

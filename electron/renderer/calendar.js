@@ -13,10 +13,9 @@ const todayButton = document.getElementById('today-button');
 const grid = document.getElementById('grid');
 const loginToggle = document.getElementById('login-toggle');
 const quitButton = document.getElementById('quit-button');
-const nowWeekday = document.getElementById('now-weekday');
-const nowDay = document.getElementById('now-day');
-const nowGanzhi = document.getElementById('now-ganzhi');
-const nowLunar = document.getElementById('now-lunar');
+const almanacYear = document.getElementById('almanac-year');
+const almanacYi = document.getElementById('almanac-yi');
+const almanacJi = document.getElementById('almanac-ji');
 const clockCard = document.getElementById('clock-card');
 const clockRow = document.getElementById('clock-row');
 const clockCity = document.getElementById('clock-city');
@@ -66,12 +65,13 @@ function buildYearOptions() {
   yearOptionsBuilt = true;
 }
 
-function renderNow(now) {
-  if (!now) return;
-  nowWeekday.textContent = now.weekday;
-  nowDay.textContent = String(now.day);
-  nowGanzhi.textContent = now.ganzhiYear;
-  nowLunar.textContent = now.lunarMonthDay;
+function renderAlmanac(almanac) {
+  if (!almanac) return;
+  almanacYear.textContent = almanac.yearText;
+  almanacYi.textContent = almanac.yiText;
+  almanacYi.title = almanac.yiTitle;
+  almanacJi.textContent = almanac.jiText;
+  almanacJi.title = almanac.jiTitle;
 }
 
 function renderClockDots(items, index) {
@@ -274,7 +274,7 @@ function applyState(next) {
   focusLabel.textContent = `${next.focus.month}-${next.focus.day}`;
 
   renderCells(next);
-  renderNow(next.now);
+  renderAlmanac(next.almanac);
   renderClocks(next.clocks);
   loginToggle.checked = Boolean(next.openAtLogin);
 }
@@ -521,7 +521,7 @@ window.addEventListener('focus', () => {
 
 api.onTick((payload) => {
   if (!payload) return;
-  renderNow(payload.now);
+  renderAlmanac(payload.almanac);
   renderClocks(payload.clocks);
 });
 

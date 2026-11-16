@@ -26,7 +26,7 @@ const {
   formatMenuTitle,
   daysInMonth,
   buildCells,
-  buildNow
+  buildAlmanac
 } = require('./calendar');
 const { setupAutoUpdate } = require('./updater');
 const { createMacSelfUpdater } = require('./mac-self-update');
@@ -104,7 +104,7 @@ function buildState() {
     view: { year: view.year, month: view.month },
     focus: { year: focus.year, month: focus.month, day: focus.day },
     cells: buildCells(view.year, view.month, now),
-    now: buildNow(now),
+    almanac: buildAlmanac(now),
     clocks: currentClockSnapshot(now),
     openAtLogin: getOpenAtLogin()
   };
@@ -502,7 +502,7 @@ function updateClock() {
 
   if (calendarWindow && !calendarWindow.isDestroyed() && calendarWindow.isVisible()) {
     calendarWindow.webContents.send('calendar:onTick', {
-      now: buildNow(now),
+      almanac: buildAlmanac(now),
       clocks: currentClockSnapshot(now)
     });
   }

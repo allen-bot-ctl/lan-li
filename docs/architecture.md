@@ -8,7 +8,7 @@
 electron/
   main.js           主进程：生命周期、托盘、窗口、时钟、登录项、更新编排、IPC 注册
   preload.js        contextBridge 暴露 window.lanli，只转发既有 IPC
-  calendar.js       农历/公历/42 格/菜单栏标题/「此刻」纯逻辑
+  calendar.js       农历/公历/42 格/菜单栏标题/「黄历」纯逻辑
   world-clocks.js   多时区城市目录、校验、列表操作与时钟格式化纯逻辑
   updater.js        自动更新编排（Squirrel 路径 + probe-only）
   mac-self-update.js 未签名包的应用内下载、校验、暂存、安装
@@ -36,13 +36,13 @@ site/               GitHub Pages 静态主页（不是应用运行时的一部�
 ```text
 系统本地时间 (new Date())
   ├─ 每秒 → calendar.formatMenuTitle() → tray.setTitle(..., { fontType: 'monospacedDigit' })
-  └─ 面板可见时 → calendar.buildNow() + world-clocks.formatClock()
-       → IPC calendar:onTick { now, clocks } → 渲染右侧「此刻」与世界时钟
+  └─ 面板可见时 → calendar.buildAlmanac() + world-clocks.formatClock()
+       → IPC calendar:onTick { almanac, clocks } → 渲染右侧「黄历」与世界时钟
 
 用户操作（翻月/选年/返回今天/点击格子）
   → preload API → invoke calendar:setView / calendar:goToday
   → 主进程校验年月与焦点日 → calendar.buildCells(year, month, now)
-  → 返回 { view, focus, cells[42], now, clocks, openAtLogin } → 渲染整月
+  → 返回 { view, focus, cells[42], almanac, clocks, openAtLogin } → 渲染整月
 
 世界时钟操作（添加/删除/左右切换/搜索）
   → preload addClock/removeClock/selectClock/searchClocks
@@ -102,7 +102,7 @@ site/               GitHub Pages 静态主页（不是应用运行时的一部�
 
 **职责**
 
-- 渲染主进程给的 `cells`、`now`、`clocks`、`openAtLogin`、版本号与更新横幅。
+- 渲染主进程给的 `cells`、`almanac`、`clocks`、`openAtLogin`、版本号与更新横幅。
 - 交互：上一月/下一月、年份下拉、返回今天、点击格子、登录项开关、世界时钟左右切换/添加/删除/搜索、检查更新、重启更新/下载新版、退出。
 - 指针进入/离开窗口根节点时通知主进程；Esc 由主进程的 `before-input-event` 处理。
 - 手动检查时先本地显示「正在检查…」，之后应用主进程推来的状态；定时状态约 2.6 秒后恢复。
@@ -121,7 +121,7 @@ site/               GitHub Pages 静态主页（不是应用运行时的一部�
 
 **职责**
 
-- `calendar.js`：42 格、次要文字、菜单栏标题、「此刻」。
+- `calendar.js`：42 格、次要文字、菜单栏标题、「黄历」。
 - `world-clocks.js`：城市目录与搜索、IANA 校验、世界时钟格式化、列表增删/绕回、偏好清洗。
 - `update-feed.js`：feed URL 与 204/200 解释。
 - `update-status.js`：状态到短文案/计时标志的映射。

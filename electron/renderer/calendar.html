@@ -66,24 +66,38 @@
             </svg>
             <span class="check-update-label" id="check-update-label">检查更新</span>
           </button>
-          <span class="app-version" id="app-version" aria-label="当前版本"></span>
-          <button class="quit-button" id="quit-button" type="button">退出栏历</button>
+          <button class="quit-button" id="quit-button" type="button" aria-label="退出栏历">
+            <svg
+              class="quit-icon"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <path d="M8 2v5" />
+              <path d="M11.2 3.9a4.6 4.6 0 1 1-6.4 0" />
+            </svg>
+            <span>退出栏历</span>
+          </button>
         </div>
       </footer>
     </main>
 
-    <aside class="now-pane" aria-label="此刻与世界时钟">
-      <section class="now-card" aria-label="此刻">
-        <div class="pane-label">此刻</div>
-        <div class="now-main">
-          <div class="now-day-block">
-            <span class="now-day" id="now-day">1</span>
-          </div>
-          <div class="now-info">
-            <div class="now-weekday" id="now-weekday">星期日</div>
-            <div class="now-ganzhi" id="now-ganzhi">—</div>
-            <div class="now-lunar" id="now-lunar">—</div>
-          </div>
+    <aside class="now-pane" aria-label="黄历与世界时钟">
+      <section class="almanac-card" aria-label="黄历">
+        <div class="pane-label">黄历</div>
+        <div class="almanac-year" id="almanac-year">—</div>
+        <div class="almanac-row">
+          <span class="almanac-tag almanac-tag-yi">宜</span>
+          <span class="almanac-items" id="almanac-yi">—</span>
+        </div>
+        <div class="almanac-row">
+          <span class="almanac-tag almanac-tag-ji">忌</span>
+          <span class="almanac-items" id="almanac-ji">—</span>
         </div>
       </section>
 
@@ -115,6 +129,10 @@
           <div class="clock-empty" id="clock-empty" hidden>点击 + 添加时区</div>
         </div>
       </section>
+
+      <div class="pane-footer">
+        <span class="app-version" id="app-version" aria-label="当前版本"></span>
+      </div>
 
       <div class="clock-picker" id="clock-picker" hidden>
         <div class="picker-head">

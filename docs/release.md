@@ -11,7 +11,7 @@
 | `README.md` | 标题 `# 栏历 X.Y.Z`、打包产物示例、`vX.Y.Z` 相关文案 |
 | `site/index.html` | `data-app-version` 的版本文本；如首页文案有「当前版本」也要同步 |
 
-当前版本：`0.1.9`。现有标签 `v0.1.0` … `v0.1.8`（v0.1.8 已存在；v0.1.9 尚未打标签）。
+当前版本：`0.1.10`。现有标签 `v0.1.0` … `v0.1.9`（v0.1.9 已存在；v0.1.10 尚未打标签）。
 
 ## 本地打包
 
@@ -22,10 +22,10 @@ npm run dist
 等价于 `electron-builder --mac`。`package.json` 的 `build.mac.target` 仍同时包含 dmg 与 zip 的 `x64`、`arm64`，`build.mac.identity` 为 `null`（不签名、不公证）。因此本地可能产出：
 
 ```text
-dist/LanLi-0.1.9-mac-x64.dmg
-dist/LanLi-0.1.9-mac-x64.zip
-dist/LanLi-0.1.9-mac-arm64.dmg
-dist/LanLi-0.1.9-mac-arm64.zip
+dist/LanLi-0.1.10-mac-x64.dmg
+dist/LanLi-0.1.10-mac-x64.zip
+dist/LanLi-0.1.10-mac-arm64.dmg
+dist/LanLi-0.1.10-mac-arm64.zip
 ```
 
 本地不会自动生成 `.zip.sha256`；正式发布由 workflow 生成。**本地 `npm run dist` 不是正式发布**，也不能替代真机验收。
@@ -35,8 +35,8 @@ dist/LanLi-0.1.9-mac-arm64.zip
 触发：推送 `v*` 标签，例如：
 
 ```bash
-git tag v0.1.9
-git push origin v0.1.9
+git tag v0.1.10
+git push origin v0.1.10
 ```
 
 > 本仓库禁止重写**已经有下载**的发布标签。发现问题时发新版本，不要删标签重推。

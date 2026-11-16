@@ -37,7 +37,7 @@
 
 - preload 只暴露已有 IPC，不 `require` 业务模块，不暴露原始 `ipcRenderer`，不新增通用透传。
 - 渲染进程**不算农历**；不要 `require('lunar-javascript')`，不要自己推导节气/节日/更新状态。
-- 主进程负责 42 格、菜单栏标题、「此刻」、更新编排与日志。
+- 主进程负责 42 格、菜单栏标题、「黄历」、更新编排与日志。
 - 不要扩大 IPC 清单而不更新 [implementation.md](implementation.md#6-ipc-完整清单) 与测试。
 - 不要新增第二个窗口、设置页、右键菜单、Dock 图标或 Windows/Linux 主窗口。
 

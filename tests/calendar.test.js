@@ -7,7 +7,8 @@ const { Solar } = require('lunar-javascript');
 const {
   buildCell,
   buildCells,
-  buildNow,
+  buildAlmanac,
+  ALMANAC_MAX_ITEMS,
   formatMenuTitle,
   isValidMenuTitle
 } = require('../electron/calendar');
@@ -61,16 +62,29 @@ test('2026-11-09 is lunar day one and shows 十月', () => {
   assert.equal(cellOn(2026, 11, 9).secondaryKind, 'lunar');
 });
 
-test('2026-11-15 shows 初七 and the right-hand side uses the same lunar data', () => {
+test('2026-11-15 shows 初七', () => {
   const cell = cellOn(2026, 11, 15);
   assert.equal(cell.secondaryText, '初七');
+});
 
-  const now = buildNow(new Date(2026, 10, 15, 22, 47, 13));
-  assert.equal(now.hourMinute, '22:47');
-  assert.equal(now.day, 15);
-  assert.equal(now.lunarMonthDay, '十月初七');
-  assert.equal(now.ganzhiYear, '丙午年【马年】');
-  assert.equal(now.weekday, ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'][Solar.fromYmd(2026, 11, 15).getWeek()]);
+test('2026-11-16 almanac is 丙午马年 with 纳采 / 上梁 first', () => {
+  const almanac = buildAlmanac(new Date(2026, 10, 16));
+
+  assert.equal(almanac.yearText, '丙午马年');
+  assert.equal(almanac.yi[0], '纳采');
+  assert.equal(almanac.ji[0], '上梁');
+
+  assert.ok(almanac.yiText.startsWith('纳采 '));
+  assert.ok(almanac.jiText.startsWith('上梁'));
+  assert.equal(almanac.yiText.split(' ').length, ALMANAC_MAX_ITEMS);
+  assert.equal(almanac.yiTitle, almanac.yi.join(' '));
+  assert.equal(almanac.jiTitle, almanac.ji.join(' '));
+});
+
+test('almanac is built only from the local calendar day', () => {
+  const almanac = buildAlmanac(new Date(2026, 10, 15, 22, 47, 13));
+  assert.equal(almanac.yearText, '丙午马年');
+  assert.equal(almanac.yi.join(' '), buildAlmanac(new Date(2026, 10, 15, 0, 0, 1)).yi.join(' '));
 });
 
 test('November 2026 grid has 42 cells, starts on Monday and follows lead', () => {
