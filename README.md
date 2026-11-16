@@ -1,6 +1,6 @@
-# 栏历 0.1.5
+# 栏历 0.1.6
 
-栏历是一个 macOS 菜单栏应用：菜单栏常驻显示系统本地日期与时间（不再显示图标，只显示 `M月D日 HH:mm:ss`）；指针指向菜单栏项时，在正下方弹出只含公历月历、农历、库内节气与节日、右侧「此刻」信息的面板。日期计算完全在本机完成；打包版只会在启动后向 GitHub Release 检查更新，不上传任何数据。日历窗口左栏底栏始终有「检查更新」入口，并在其旁显示当前版本号（如 `v0.1.5`）。
+栏历是一个 macOS 菜单栏应用：菜单栏常驻显示系统本地日期与时间（不再显示图标，只显示 `M月D日 HH:mm:ss`）；指针指向菜单栏项时，在正下方弹出只含公历月历、农历、库内节气与节日、右侧「此刻」信息的面板。日期计算完全在本机完成；打包版只会在启动后向 GitHub Release 检查更新，不上传任何数据。日历窗口左栏底栏始终有「检查更新」入口，并在其旁显示当前版本号（如 `v0.1.6`）。0.1.6 起，未签名包也能在应用内下载新版本，重启后替换旧应用。
 
 ## 下载与主页
 
@@ -8,7 +8,7 @@
 - 最新安装包：https://github.com/allen-bot-ctl/lan-li/releases/latest
 - 源码仓库：https://github.com/allen-bot-ctl/lan-li
 
-当前 GitHub Release 与主页只提供 macOS Intel（x64）的 `.dmg`；其他平台等验收通过后再扩展。GitHub Actions 打出的正式下载目前只有 Intel x64。安装包未签名，首次打开可能被 Gatekeeper 拦截，处理方式见下文。
+当前 GitHub Release 与主页只提供 macOS Intel（x64）的 `.dmg`；其他平台等验收通过后再扩展。GitHub Actions 打出的正式下载目前只有 Intel x64。安装包未签名，首次打开可能被 Gatekeeper 拦截，处理方式见下文。Release 中的 `.zip` 与同名 `.zip.sha256` 用于 0.1.6 起的应用内自更新。
 
 ## 开发运行
 
@@ -27,7 +27,7 @@ npm start
 npm test
 ```
 
-使用 Node 内置 test runner，覆盖格子次要文字、42 格网格、今日/周末/节日标记、菜单栏标题格式、自动更新 feed URL 的拼接、「检查更新」状态文案的映射、版本号标签 `formatVersionLabel` 的格式化（`v` 前缀、首尾空白与非法输入降级），以及更新器在 `setFeedURL` 抛异常时进入仅探测模式、204/200/网络失败三种探测结果、并发手动检查共享一次请求、Squirrel 报错后的 probe 回落，还有文件日志的 ISO 时间戳与 `main.old.log` 轮转。
+使用 Node 内置 test runner，覆盖格子次要文字、42 格网格、今日/周末/节日标记、菜单栏标题格式、自动更新 feed URL 的拼接、「检查更新」状态文案的映射、版本号标签 `formatVersionLabel` 的格式化（`v` 前缀、首尾空白与非法输入降级），以及更新器在 `setFeedURL` 抛异常时进入仅探测模式、204/200/网络失败三种探测结果、并发手动检查共享一次请求、Squirrel 报错后的 probe 回落。未签名包自更新另有独立测试：更新 URL 校验、semver 比较、DMG 直链推导、sha256 文件解析与校验失败、plist 版本不匹配、AppTranslocation / 不可写目录拒绝、已验证暂存复用、同一时间只跑一个任务，以及安装脚本的等待与回滚内容。文件日志的 ISO 时间戳与 `main.old.log` 轮转也在此覆盖。
 
 ## 打包
 
@@ -39,12 +39,13 @@ npm run dist
 
 `electron-builder` 会生成未签名的 dmg 与 zip，包含 x64 和 arm64：
 
-- `dist/LanLi-0.1.5-mac-x64.dmg`
-- `dist/LanLi-0.1.5-mac-x64.zip`
-- `dist/LanLi-0.1.5-mac-arm64.dmg`
-- `dist/LanLi-0.1.5-mac-arm64.zip`
+- `dist/LanLi-0.1.6-mac-x64.dmg`
+- `dist/LanLi-0.1.6-mac-x64.zip`
+- `dist/LanLi-0.1.6-mac-x64.zip.sha256`（由发布工作流生成）
+- `dist/LanLi-0.1.6-mac-arm64.dmg`
+- `dist/LanLi-0.1.6-mac-arm64.zip`
 
-本轮 `build.mac.identity` 为 `null`，不做代码签名与公证。GitHub Actions 的 Release 工作流只构建并发布 macOS Intel（x64）的 dmg 与 zip；本地执行 `npm run dist` 仍可能同时打出 x64 和 arm64。自动更新服务读取 Release 里的 `LanLi-<version>-mac-x64.zip`，不需要额外上传 `latest-mac.yml`。
+本轮 `build.mac.identity` 为 `null`，不做代码签名与公证。GitHub Actions 的 Release 工作流只构建并发布 macOS Intel（x64）的 dmg、zip 与 zip 的 sha256 校验文件；本地执行 `npm run dist` 仍可能同时打出 x64 和 arm64。自动更新服务读取 Release 里的 `LanLi-<version>-mac-x64.zip`，不需要额外上传 `latest-mac.yml`。
 
 ## 自动更新
 
@@ -54,23 +55,40 @@ npm run dist
 https://update.electronjs.org/allen-bot-ctl/lan-li/${process.platform}-${process.arch}/${app.getVersion()}
 ```
 
-Intel Mac 上的 0.1.5 对应：
+Intel Mac 上的 0.1.6 对应：
 
 ```text
-https://update.electronjs.org/allen-bot-ctl/lan-li/darwin-x64/0.1.5
+https://update.electronjs.org/allen-bot-ctl/lan-li/darwin-x64/0.1.6
 ```
 
-只有 macOS 且 `app.isPackaged === true` 时才设置 feed 并检查更新。启动约 10 秒后检查一次，之后每 6 小时检查一次；这些**自动检查**没有更新时完全静默。日历窗口左栏底栏始终显示「检查更新」入口和当前版本号（如 `v0.1.5`）：点击后立即检查，检查中显示「正在检查…」，无更新时短暂显示「已是最新」再恢复；开发态或非 macOS 显示「开发态不检查更新」。更新下载完成后，日历窗口底栏上方会出现「新版本已就绪」提示，用户点击「重启更新」后才调用 `autoUpdater.quitAndInstall()`，不会在未同意时强制退出。已下载但尚未重启的提示会在安装完成前每次打开窗口时再次出现。
+只有 macOS 且 `app.isPackaged === true` 时才设置 feed 并检查更新。启动约 10 秒后检查一次，之后每 6 小时检查一次；这些**自动检查**没有更新时完全静默。日历窗口左栏底栏始终显示「检查更新」入口和当前版本号（如 `v0.1.6`）：点击后立即检查，检查中显示「正在检查…」，无更新时短暂显示「已是最新」再恢复；开发态或非 macOS 显示「开发态不检查更新」。有更新时手动检查会显示「正在下载…」，自动检查则保持静默。
 
-未签名包无法使用 Squirrel.Mac：`autoUpdater.setFeedURL` 会因缺少代码签名直接抛出 `Could not get code signature for running application`，Squirrel 也不会替换应用。0.1.4 起，初始化遇到该错误不会再让更新器失效，而是进入仅探测 feed 模式：应用直接请求同一个 update.electronjs.org 地址，`204` 表示已是最新并显示「已是最新」，`200` JSON 表示有新版本并显示「需手动下载」，网络异常或超时则显示「检查失败」。手动点击「检查更新」会先显示「正在检查…」，重复点击共享同一次请求。
+### 未签名包的应用内自更新
 
-新版本仍需手动下载安装，不会自动替换当前应用。有新版本时请从 [最新 Release](https://github.com/allen-bot-ctl/lan-li/releases/latest) 或[主页](https://allen-bot-ctl.github.io/lan-li/)下载。Squirrel 能下载但无法安装的旧路径仍会显示一次「无法自动更新，请手动下载」；同一版本不会反复提醒。
+未签名包无法使用 Squirrel.Mac：`autoUpdater.setFeedURL` 会因缺少代码签名直接抛出 `Could not get code signature for running application`。0.1.6 起，初始化遇到该错误会进入仅探测 feed 模式：应用直接请求同一个 update.electronjs.org 地址，`204` 表示已是最新，`200` JSON 既表示有新版本，也给出发布包的 zip 地址。
+
+0.1.6 起，未签名包会尝试真正的应用内更新，而不是把用户送到 Release 页面：
+
+- 校验 feed 里的 URL：必须是 `https://github.com/allen-bot-ctl/lan-li/releases/download/v<version>/LanLi-<version>-mac-x64.zip`，标签与文件名版本一致，且严格大于当前版本。arm64、其他仓库、其他域名或版本不匹配都会直接回退。
+- 从同一 Release 下载 zip 与 `LanLi-<version>-mac-x64.zip.sha256`（发布工作流自动生成），流式计算并比对 sha256。缺失校验文件、文件名不符或摘要不一致都会回退。超过 500 MB 的下载会中止。
+- 用 `/usr/bin/ditto` 解压，确认解压目录顶层只有一个 `.app`，再用 `/usr/bin/plutil` 校验 `CFBundleShortVersionString` 等于目标版本、`CFBundleExecutable` 指向的可执行文件存在。
+- 暂存目录是当前 `.app` 同级的 `.栏历-update-<version>`；验证通过后写入 `verified.json`。同一版本再次检查会复用已验证的暂存包，不会重复下载。同时只会有一个更新任务在跑。
+- 准备完成后，底栏上方显示「新版本已就绪」和「重启更新」，与 Squirrel 下载完成后的提示一致。已就绪提示会在安装完成前每次打开窗口时再次出现。
+- 点击「重启更新」后，应用把静态 `/bin/sh` 安装脚本写入暂存目录，所有路径都作为位置参数传入。脚本最多等待当前进程 60 秒，把旧 `.app` 移到同级 `.栏历-backup-<version>.app`，再把新 `.app` 移到原位置；移动失败会把备份移回。成功后再清除隔离属性、删除备份和暂存目录，并用 `open -n` 重新打开新版本。
+- 任一环节失败都会记录原因并回退到「无法自动更新，请手动下载」，此时「下载新版」直接打开同版本的 `.dmg` 资产；只有版本号完全无法推导时才打开 Release 页面。同一版本的失败提醒仍然只出现一次。
+- AppTranslocation、不可写的 `.app` 或其父目录、arm64、开发态等情况下不会尝试自更新，而是按上面的手动下载路径处理。
+
+如果将来使用 Developer ID 签名，Squirrel.Mac 路径仍保留：下载完成后点击「重启更新」会调用 `autoUpdater.quitAndInstall()`。
+
+**从 0.1.5 及更早版本升级：** 这些版本没有应用内自更新逻辑，必须手动下载并安装一次 0.1.6。安装 0.1.6 之后，后续版本就可以通过「检查更新 → 重启更新」在应用内完成替换。
 
 ### 运行日志
 
-更新检查与错误会写入 `~/Library/Logs/栏历/main.log`（即 `app.getPath('logs')/main.log`），每行带 ISO 时间戳和级别，同时打印到终端。日志超过 1MB 时会在下次写入前轮转为同目录的 `main.old.log`。手动检查的开始和最终状态也会各写一行，例如 `manual check start`、`manual check result: up-to-date`。
+更新检查与错误会写入 `~/Library/Logs/栏历/main.log`（即 `app.getPath('logs')/main.log`），每行带 ISO 时间戳和级别，同时打印到终端。日志超过 1MB 时会在下次写入前轮转为同目录的 `main.old.log`。手动检查的开始和最终状态也会各写一行，例如 `manual check start`、`manual check result: up-to-date`。自更新的校验、暂存、失败原因也会写入这里。
 
-排查「检查更新」问题时，请把 `~/Library/Logs/栏历/main.log` 发给开发者；其中不会包含日历内容或个人数据。
+安装脚本在应用退出后运行，步骤（等待旧进程、备份、替换、回滚、清理、重新打开）会带时间戳写入 `~/Library/Logs/栏历/update-install.log`。
+
+排查更新问题时，请把这两个日志文件发给开发者；其中不会包含日历内容或个人数据。
 
 ## 未签名包的 Gatekeeper 处理
 
@@ -85,7 +103,7 @@ https://update.electronjs.org/allen-bot-ctl/lan-li/darwin-x64/0.1.5
    open "/Applications/栏历.app"
    ```
 
-这些操作只用于本轮未签名体验包，不代表正式分发方式。未签名包也可能无法静默替换自动更新，此时请从主页或 Release 手动下载。
+这些操作只用于本轮未签名体验包，不代表正式分发方式。0.1.6 起的应用内自更新会先校验 sha256，再在重启时替换 `.app`；如果当前 `.app` 所在目录不可写或被 AppTranslocation 隔离，会自动回退到直接下载 `.dmg`。
 
 ## 首次运行与「登录时打开」
 
@@ -104,8 +122,9 @@ https://update.electronjs.org/allen-bot-ctl/lan-li/darwin-x64/0.1.5
 | 菜单栏是否只剩文字 | 0.1.1 起用空 `NativeImage` 创建 `Tray`，不再设置 `trayTemplate.png`；需确认菜单栏项只显示日期时间，图标位置不再占宽。 |
 | 标题左右边距 | Electron / macOS 对纯文字状态项仍有系统级内边距，且没有公开 API 可继续压缩；需在真机确认剩余边距是否可以接受。 |
 | 紧凑窗口是否仍好用 | 窗口已缩为 580×400；需确认 6×7 格子仍容易点击，农历副文案、星期行、右侧「此刻」、底栏都不被裁切或出现滚动条。 |
-| 打包后的更新检查 | 需用 0.1.1 安装包升级到 0.1.2 实测：无更新时自动检查静默；有新版本时会下载并提示重启。由于包未签名，Squirrel.Mac 可能无法静默替换，此时应出现一次手动下载提示。 |
-| 「检查更新」入口 | 底栏左侧「登录时打开」与右侧「检查更新 / 当前版本号 / 退出栏历」应始终可见且不被裁切；版本号应显示当前安装包的真实版本（如 `v0.1.5`），且不会被检查状态文案覆盖。点击后需确认「正在检查…」「已是最新」「新版本已就绪 / 重启更新」「无法自动更新，请手动下载」以及开发态「开发态不检查更新」各状态正确，且自动检查不会长期占着横幅。在未签名包上，点击「检查更新」且已是最新时应显示「已是最新」，不应显示「检查失败」。 |
+| 打包后的更新检查 | 需用 0.1.6 安装包升级到后续版本实测：无更新时自动检查静默；有新版本时手动检查显示「正在下载…」，下载校验成功后出现「新版本已就绪 / 重启更新」。点击重启后确认旧 `.app` 被备份、新 `.app` 替换成功并自动重新打开。 |
+| 「检查更新」入口 | 底栏左侧「登录时打开」与右侧「检查更新 / 当前版本号 / 退出栏历」应始终可见且不被裁切；版本号应显示当前安装包的真实版本（如 `v0.1.6`），且不会被检查状态文案覆盖。点击后需确认「正在检查…」「正在下载…」「已是最新」「新版本已就绪 / 重启更新」「无法自动更新，请手动下载」以及开发态「开发态不检查更新」各状态正确，且自动检查不会长期占着横幅。在未签名包上，点击「检查更新」且已是最新时应显示「已是最新」，不应显示「检查失败」。 |
+| 未签名包自更新 | 确认 zip 与 `.zip.sha256` 同时存在；下载失败、摘要不符、plist 版本不符、当前 `.app` 不可写或被 AppTranslocation 隔离时应回退到直接打开同版本 `.dmg`。安装脚本执行详情见 `~/Library/Logs/栏历/update-install.log`。 |
 | `mouse-enter` / `mouse-leave` 是否始终触发 | 已按悬停打开、离开 200ms 关闭实现；若系统完全不触发悬停事件，点击菜单栏项仍可打开，并需报告平台与系统版本。 |
 | 窗口与菜单栏缝隙 | 当前按 `y = 托盘.y + 托盘高` 无重叠对齐；若真机出现指针可穿过的缝，应将 y 改为 `托盘.y + 托盘高 - 1`，最多重叠 1px。 |
 | 未签名包的 `openAtLogin` | 需确认首次运行后开关是否真的变为打开；若系统拒绝，开关应显示真实值并在运行日志中报告。 |

@@ -203,8 +203,15 @@ test('probe-only mode reports a manual download once for a 200 feed payload', as
   assert.equal(final.state, 'manual');
   assert.equal(final.manual, true);
   assert.equal(final.name, '栏历 v0.1.4');
+  assert.equal(
+    final.url,
+    'https://github.com/allen-bot-ctl/lan-li/releases/download/v0.1.4/LanLi-0.1.4-mac-x64.dmg'
+  );
   assert.equal(env.manualCalls.length, 1);
-  assert.deepEqual(env.manualCalls[0], { name: '栏历 v0.1.4' });
+  assert.deepEqual(env.manualCalls[0], {
+    name: '栏历 v0.1.4',
+    url: 'https://github.com/allen-bot-ctl/lan-li/releases/download/v0.1.4/LanLi-0.1.4-mac-x64.dmg'
+  });
   assert.match(env.logs.join('\n'), /manual check result: manual/);
 });
 

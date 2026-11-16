@@ -46,7 +46,9 @@ function interpretFeedProbe(status, payload) {
       ? payload.url.trim()
       : '';
     if (name || url) {
-      return { state: 'manual', name: name || 'latest' };
+      const result = { state: 'manual', name: name || 'latest' };
+      if (url) result.url = url;
+      return result;
     }
   }
 

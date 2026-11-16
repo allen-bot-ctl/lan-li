@@ -59,18 +59,19 @@ test('feed probe maps 204 to up-to-date', () => {
   assert.deepEqual(interpretFeedProbe(204, null), { state: 'up-to-date' });
 });
 
-test('feed probe maps 200 with a valid update payload to manual download', () => {
+test('feed probe maps 200 with a valid update payload to manual download and keeps the asset url', () => {
+  const assetUrl = 'https://github.com/allen-bot-ctl/lan-li/releases/download/v0.1.3/LanLi-0.1.3-mac-x64.zip';
   assert.deepEqual(
-    interpretFeedProbe(200, { name: 'v0.1.3', url: 'https://example.invalid/LanLi-0.1.3-mac-x64.zip' }),
-    { state: 'manual', name: 'v0.1.3' }
+    interpretFeedProbe(200, { name: 'v0.1.3', url: assetUrl }),
+    { state: 'manual', name: 'v0.1.3', url: assetUrl }
   );
   assert.deepEqual(
     interpretFeedProbe(200, { name: 'v0.1.3' }),
     { state: 'manual', name: 'v0.1.3' }
   );
   assert.deepEqual(
-    interpretFeedProbe(200, { url: 'https://example.invalid/LanLi-0.1.3-mac-x64.zip' }),
-    { state: 'manual', name: 'latest' }
+    interpretFeedProbe(200, { url: assetUrl }),
+    { state: 'manual', name: 'latest', url: assetUrl }
   );
 });
 

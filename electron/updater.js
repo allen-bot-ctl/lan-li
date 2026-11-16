@@ -1,6 +1,14 @@
 'use strict';
 
-const { buildFeedUrl, interpretFeedProbe } = require('./update-feed');
+const {
+  buildFeedUrl,
+  interpretFeedProbe,
+  RELEASES_LATEST_URL
+} = require('./update-feed');
+const {
+  deriveDmgUrl,
+  extractVersion
+} = require('./mac-self-update');
 
 // The first check runs shortly after launch; later checks are deliberately
 // infrequent so the app does not hammer GitHub.
@@ -42,6 +50,7 @@ function setupAutoUpdate(options) {
     onStatus,
     isNotified = () => false,
     markNotified = noop,
+    selfUpdate = null,
     logger
   } = options;
 
@@ -112,7 +121,7 @@ function setupAutoUpdate(options) {
 
   const isManualCheck = () => checkSource === 'manual';
 
-  function announceManual(name) {
+  function announceManual(name, url) {
     const key = `manual:${name || version}`;
     if (isNotified(key)) {
       log(`manual notice already shown for ${key}`);
@@ -121,10 +130,70 @@ function setupAutoUpdate(options) {
     markNotified(key);
     log(`manual update notice for ${name || version}`);
     try {
-      onManual({ name });
+      onManual({ name, url });
     } catch (error) {
       log(`manual callback failed: ${errorMessage(error)}`);
     }
+  }
+
+  // The release page is only the last resort. When a version can be derived we
+  // point "下载新版" directly at the DMG asset instead.
+  function fallbackManualUrl(...candidates) {
+    for (const candidate of candidates) {
+      const parsed = extractVersion(candidate);
+      if (parsed) {
+        const dmgUrl = deriveDmgUrl(parsed);
+        if (dmgUrl) return dmgUrl;
+      }
+    }
+    return RELEASES_LATEST_URL;
+  }
+
+  async function runSelfUpdate(result, manual) {
+    const name = result.name || updateName;
+    emitStatus('downloading', { manual, name });
+
+    let outcome;
+    try {
+      outcome = await selfUpdate.start({ name, url: result.url });
+    } catch (error) {
+      outcome = {
+        ok: false,
+        reason: errorMessage(error),
+        version: extractVersion(name) || extractVersion(result.url)
+      };
+    }
+    if (stopped) return;
+
+    if (outcome && outcome.ok) {
+      updateSeen = true;
+      updateName = outcome.name || name;
+      log(`self-update ready: ${updateName}`);
+      // Keep the normal ready notice so the renderer's existing 「新版本已就绪
+      // / 重启更新」 path is reused; the extra flag only switches the install
+      // mechanism in the main process.
+      try {
+        onReady({ name: updateName, mode: 'ready-self' });
+      } catch (error) {
+        log(`ready callback failed: ${errorMessage(error)}`);
+      }
+      emitStatus('ready', {
+        manual,
+        name: updateName,
+        selfUpdate: true
+      });
+      return;
+    }
+
+    const reason = outcome && outcome.reason ? outcome.reason : 'unknown';
+    log(`self-update failed: ${reason}`);
+    const url = fallbackManualUrl(
+      outcome && outcome.version,
+      name,
+      result.url
+    );
+    announceManual(name, url);
+    emitStatus('manual', { manual, name, url });
   }
 
   async function probeFeed() {
@@ -188,8 +257,18 @@ function setupAutoUpdate(options) {
     if (result && result.state === 'manual' && result.name) {
       updateSeen = true;
       updateName = result.name;
-      announceManual(result.name);
-      emitStatus('manual', { manual, name: result.name });
+
+      // Probe-only mode on an unsigned macOS build can apply the release zip
+      // itself. Preparation is async; 'downloading' gives the manual check
+      // immediate feedback while automatic checks stay silent in main.js.
+      if (result.url && selfUpdate && selfUpdate.available) {
+        void runSelfUpdate(result, manual);
+        return;
+      }
+
+      const url = fallbackManualUrl(result.name, result.url);
+      announceManual(result.name, url);
+      emitStatus('manual', { manual, name: result.name, url });
       return;
     }
 
@@ -267,8 +346,9 @@ function setupAutoUpdate(options) {
     // could not verify/replace this build. Offer the manual download once per
     // release instead of repeating an error.
     if (updateSeen && updateName) {
-      announceManual(updateName);
-      emitStatus('manual', { manual, name: updateName });
+      const url = fallbackManualUrl(updateName);
+      announceManual(updateName, url);
+      emitStatus('manual', { manual, name: updateName, url });
       return;
     }
 

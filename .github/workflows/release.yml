@@ -37,6 +37,13 @@ jobs:
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
+      - name: Generate zip checksum for in-app update
+        run: |
+          cd dist
+          for f in LanLi-*-mac-x64.zip; do
+            shasum -a 256 "$f" > "$f.sha256"
+          done
+
       - name: Upload macOS Intel artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -45,6 +52,7 @@ jobs:
           path: |
             dist/LanLi-*-mac-x64.dmg
             dist/LanLi-*-mac-x64.zip
+            dist/LanLi-*-mac-x64.zip.sha256
 
   publish:
     name: Publish GitHub Release
@@ -67,12 +75,13 @@ jobs:
           body: |
             ## 栏历 ${{ github.ref_name }}
 
-            本轮只提供 macOS Intel（x64）安装包。主下载是 `LanLi-*-mac-x64.dmg`，`LanLi-*-mac-x64.zip` 为备用压缩包。
+            本轮只提供 macOS Intel（x64）安装包。主下载是 `LanLi-*-mac-x64.dmg`；`LanLi-*-mac-x64.zip` 与 `LanLi-*-mac-x64.zip.sha256` 供 0.1.6 起的未签名包应用内自更新使用。
 
             ### 安装
 
             - 下载 `LanLi-*-mac-x64.dmg`，打开后把「栏历」拖入「应用程序」。
-            - 备用：下载 `LanLi-*-mac-x64.zip`，解压后得到「栏历.app」。
+            - 0.1.6 起可在应用内「检查更新」：应用会下载 zip、比对同名 `.sha256`，重启后替换旧版本；校验失败时回退为直接下载同版本 dmg。
+            - 0.1.5 及更早版本没有应用内自更新，必须手动安装一次 0.1.6。
             - 当前只支持 Intel（x64）Mac，暂不提供 Apple Silicon（arm64）、Windows 或 Linux 安装包。
 
             ### 未签名说明
@@ -87,6 +96,7 @@ jobs:
           files: |
             dist/LanLi-*-mac-x64.dmg
             dist/LanLi-*-mac-x64.zip
+            dist/LanLi-*-mac-x64.zip.sha256
           fail_on_unmatched_files: true
           draft: false
           prerelease: false

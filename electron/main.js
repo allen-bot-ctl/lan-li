@@ -15,6 +15,10 @@ const {
 } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
+// Electron patches Node's fs so paths inside app.asar look like virtual
+// directories. Recursive rmSync on staging/backup bundles would follow that
+// patch instead of the real filesystem; original-fs bypasses it.
+const originalFs = require('original-fs');
 
 const {
   MIN_YEAR,
@@ -25,6 +29,7 @@ const {
   buildNow
 } = require('./calendar');
 const { setupAutoUpdate } = require('./updater');
+const { createMacSelfUpdater } = require('./mac-self-update');
 const { createLogger } = require('./logger');
 const { describeStatus } = require('./update-status');
 const { formatVersionLabel } = require('./app-version');
@@ -41,6 +46,7 @@ let calendarWindow = null;
 let clockTimer = null;
 let closeTimer = null;
 let updater = null;
+let selfUpdater = null;
 let updateSetupError = null;
 let updateNotice = null;
 
@@ -229,23 +235,70 @@ function handleUpdateStatus(status) {
   sendUpdateStatus(describeStatus(status));
 }
 
+function isAllowedUpdateUrl(value) {
+  if (typeof value !== 'string' || value.trim() === '') return false;
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'https:' &&
+      parsed.hostname === 'github.com' &&
+      parsed.pathname.startsWith('/allen-bot-ctl/lan-li/');
+  } catch {
+    return false;
+  }
+}
+
 function setupUpdates() {
+  try {
+    selfUpdater = createMacSelfUpdater({
+      appVersion: app.getVersion(),
+      arch: process.arch,
+      platform: process.platform,
+      isPackaged: app.isPackaged === true,
+      execPath: process.execPath,
+      fs: originalFs,
+      fetch: (url, init) => net.fetch(url, init),
+      logger: (message) => logger.info('[栏历] 自更新：' + message),
+      getLogsPath: () => app.getPath('logs'),
+      pid: process.pid,
+      quit: () => {
+        app.quit();
+        // A tray app can occasionally keep a native handle alive after quit.
+        // The installer is already detached, so force an exit as a last resort
+        // after giving app.quit() a short chance to finish cleanly.
+        setTimeout(() => {
+          try {
+            app.exit(0);
+          } catch {
+            // Process already gone.
+          }
+        }, 3000);
+      }
+    });
+  } catch (error) {
+    selfUpdater = null;
+    const reason = error && error.message ? error.message : String(error);
+    logger.error('[栏历] 初始化应用内自更新失败：' + reason);
+  }
+
   try {
     updater = setupAutoUpdate({
       app,
       autoUpdater,
       net,
-      onReady: ({ name }) => {
+      selfUpdate: selfUpdater,
+      onReady: ({ name, mode }) => {
         logger.info('[栏历] 新版本已下载：' + (name || '未知版本'));
-        showUpdateNotice({ mode: 'ready', name });
+        const notice = { mode: 'ready', name };
+        if (mode === 'ready-self') notice.selfUpdate = true;
+        showUpdateNotice(notice);
       },
-      onManual: ({ name }) => {
+      onManual: ({ name, url }) => {
         logger.warn('[栏历] 无法自动应用更新' +
           (name ? '（' + name + '）' : '') + '，改为提示手动下载。');
         showUpdateNotice({
           mode: 'manual',
           name,
-          url: RELEASES_LATEST_URL,
+          url: isAllowedUpdateUrl(url) ? url : RELEASES_LATEST_URL,
           homepage: HOMEPAGE_URL
         });
       },
@@ -430,14 +483,38 @@ function registerIpc() {
   });
 
   ipcMain.on('update:restart', () => {
-    if (updateNotice && updateNotice.mode === 'ready') {
-      autoUpdater.quitAndInstall();
+    if (!updateNotice || updateNotice.mode !== 'ready') return;
+
+    if (updateNotice.selfUpdate) {
+      if (!selfUpdater) {
+        logger.warn('[栏历] 自更新安装器不可用，无法启动安装。');
+        return;
+      }
+      let outcome;
+      try {
+        outcome = selfUpdater.installReady();
+      } catch (error) {
+        outcome = {
+          ok: false,
+          reason: error && error.message ? error.message : String(error)
+        };
+      }
+      if (!outcome.ok) {
+        logger.warn('[栏历] 启动自更新安装失败：' + outcome.reason);
+      }
+      return;
     }
+
+    // Real autoUpdater downloads still use Squirrel.Mac's installer.
+    autoUpdater.quitAndInstall();
   });
 
   ipcMain.on('update:openLatest', () => {
-    shell.openExternal(RELEASES_LATEST_URL).catch((error) => {
-      logger.warn('[栏历] 打开最新 Release 失败：' +
+    const target = updateNotice && isAllowedUpdateUrl(updateNotice.url)
+      ? updateNotice.url
+      : RELEASES_LATEST_URL;
+    shell.openExternal(target).catch((error) => {
+      logger.warn('[栏历] 打开更新下载地址失败：' +
         (error && error.message ? error.message : error));
     });
   });
