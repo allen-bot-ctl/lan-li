@@ -37,7 +37,8 @@ site/               GitHub Pages 静态主页（不是应用运行时的一部�
 
 ```text
 系统本地时间 (new Date())
-  ├─ 每秒 → calendar.formatMenuTitle() → tray.setTitle(..., { fontType: 'monospacedDigit' })
+  ├─ 每秒 → world-clocks.formatMenuTitleInZone(now, resolvedMenuBarTimeZone(), defaultLocalTimeZone())
+  │        （失败时才回退 calendar.formatMenuTitle(now)）→ tray.setTitle(..., { fontType: 'monospacedDigit' })
   └─ 面板可见时 → calendar.buildAlmanac() + world-clocks.formatClock()
        → IPC calendar:onTick { almanac, clocks } → 渲染右侧「黄历」与世界时钟
 
@@ -46,9 +47,10 @@ site/               GitHub Pages 静态主页（不是应用运行时的一部�
   → 主进程校验年月与焦点日 → calendar.buildCells(year, month, now)
   → 返回 { view, focus, cells[42], almanac, clocks, openAtLogin } → 渲染整月
 
-世界时钟操作（添加/删除/左右切换/搜索）
-  → preload addClock/removeClock/selectClock/searchClocks
+世界时钟操作（添加/删除/左右切换/搜索/设为当前）
+  → preload addClock/removeClock/selectClock/searchClocks/setMenuBarClock
   → 主进程 world-clocks 校验与列表操作 → 写 preferences.json
+  → 「设为当前」经 clocks:setMenuBar 写入 preferences.menuBarTimeZone 并立即刷新托盘标题
   → 返回 clocks 快照 → 渲染层只展示
 
 天气（打开窗口/后台刷新）
@@ -60,7 +62,7 @@ site/               GitHub Pages 静态主页（不是应用运行时的一部�
 
 - 农历计算只发生在主进程的 `electron/calendar.js`，底层是 `lunar-javascript@1.7.8` 的 `Solar.fromYmd`。完全离线。
 - 时区格式化只发生在主进程的 `electron/world-clocks.js`，使用 `Intl.DateTimeFormat` 与注入的本地时区；渲染层不推导时差。
-- 偏好文件：`app.getPath('userData')/preferences.json`，保存 `loginItemInitialized`、`updateNotifications`（每个版本的一次性手动下载提醒）与 `worldClocks`（`{ items: [{ id, label }], index }`）。天气结果只缓存在主进程内存，不写偏好文件。
+- 偏好文件：`app.getPath('userData')/preferences.json`，保存 `loginItemInitialized`、`updateNotifications`（每个版本的一次性手动下载提醒）、`worldClocks`（`{ items: [{ id, label }], index }`）与顶层 `menuBarTimeZone`（IANA id；省略或 `null` 表示跟随系统本地时区，不把系统本地时区写死成字符串；非法或对应时钟不在时钟列表中则清除）。天气结果只缓存在主进程内存，不写偏好文件。
 - 网络只在主进程发生：天气（`ipwho.is`、BigDataCloud 反向地理编码、Open-Meteo，均为 HTTPS）与打包后的 `update.electronjs.org` feed 探测、GitHub Release 资产下载。渲染层 CSP 不放开网络，开发态不检查更新。
 - 详细实现见 [implementation.md](implementation.md)；更新细节见 [updater.md](updater.md)。
 
@@ -166,7 +168,7 @@ site/               GitHub Pages 静态主页（不是应用运行时的一部�
 
 - 不要重写已有下载的标签。
 - 不要在没有真机验收的情况下扩大平台矩阵。
-- 不要在 workflow 中改动产品行为（本次文档任务也不改 workflow）。
+- 不要在 workflow 中夹带与发布无关的产品行为改动。
 
 ## 相关文档
 

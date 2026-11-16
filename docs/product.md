@@ -48,7 +48,7 @@
 | 菜单栏图标 | `trayTemplate.png` | `Tray(nativeImage.createEmpty())` 纯文字；图片仍在仓库但未引用 |
 | 自动更新 | 本轮不做 | 已实现 GitHub 自动更新；0.1.6 起未签名包可应用内自更新 |
 | 底栏 | 登录项 + 退出 | 增加「检查更新」；当前版本号移至右栏底部 |
-| IPC | 最初的 7 项 | 增加 `app:version`、`weather:get`、`weather:update`、`update:check`、`update:restart`、`update:openLatest`、`update:notice`、`update:status` |
+| IPC | 最初的 7 项 | 增加的频道以 [implementation.md](implementation.md) 的完整 IPC 清单为准，其中包含 `app:version`、天气、更新，以及世界时钟相关频道（`clocks:add` 等） |
 | 底栏高度 | 40px | CSS 中为 32px（随窗口收紧） |
 | 登录项 / 悬停 / 缝隙等真机风险 | 已列 | 行为按规格保留；仍需真机确认，见 [testing.md](testing.md) |
 
