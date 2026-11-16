@@ -18,9 +18,13 @@ const nowWeekday = document.getElementById('now-weekday');
 const nowDay = document.getElementById('now-day');
 const nowGanzhi = document.getElementById('now-ganzhi');
 const nowLunar = document.getElementById('now-lunar');
+const updateBanner = document.getElementById('update-banner');
+const updateMessage = document.getElementById('update-message');
+const updateAction = document.getElementById('update-action');
 
 let state = null;
 let yearOptionsBuilt = false;
+let updateMode = null;
 
 function daysInMonth(year, month) {
   return new Date(year, month, 0).getDate();
@@ -167,6 +171,30 @@ loginToggle.addEventListener('change', () => {
 quitButton.addEventListener('click', () => {
   api.quit();
 });
+
+function showUpdateNotice(notice) {
+  if (!notice || !updateBanner) return;
+
+  updateMode = notice.mode === 'ready' ? 'ready' : 'manual';
+  if (updateMode === 'ready') {
+    updateMessage.textContent = '新版本已就绪';
+    updateAction.textContent = '重启更新';
+  } else {
+    updateMessage.textContent = '无法自动更新，请手动下载';
+    updateAction.textContent = '下载新版';
+  }
+  updateBanner.hidden = false;
+}
+
+updateAction.addEventListener('click', () => {
+  if (updateMode === 'ready') {
+    api.restartToUpdate();
+  } else if (updateMode === 'manual') {
+    api.openLatestRelease();
+  }
+});
+
+api.onUpdateNotice(showUpdateNotice);
 
 document.documentElement.addEventListener('mouseenter', () => {
   api.pointerEnter();

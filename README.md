@@ -1,6 +1,6 @@
-# 栏历 0.1.0
+# 栏历 0.1.1
 
-栏历是一个 macOS 菜单栏应用：菜单栏常驻显示系统本地日期与时间；指针指向菜单栏项时，在正下方弹出只含公历月历、农历、库内节气与节日、右侧「此刻」信息的面板。完全离线，不发起网络请求。
+栏历是一个 macOS 菜单栏应用：菜单栏常驻显示系统本地日期与时间（不再显示图标，只显示 `M月D日 HH:mm:ss`）；指针指向菜单栏项时，在正下方弹出只含公历月历、农历、库内节气与节日、右侧「此刻」信息的面板。日期计算完全在本机完成；打包版只会在启动后向 GitHub Release 检查更新，不上传任何数据。
 
 ## 下载与主页
 
@@ -19,7 +19,7 @@ npm install
 npm start
 ```
 
-启动后不会出现 Dock 图标或主窗口，只在菜单栏出现栏历图标和 `11月15日 22:47:13` 形式的标题。点击「退出栏历」才会退出进程。
+启动后不会出现 Dock 图标或主窗口，只在菜单栏出现 `11月15日 22:47:13` 形式的纯文字标题（没有托盘图标）。开发态 `electron .` 不会检查更新。点击「退出栏历」才会退出进程。
 
 ## 测试
 
@@ -27,7 +27,7 @@ npm start
 npm test
 ```
 
-使用 Node 内置 test runner，覆盖格子次要文字、42 格网格、今日/周末/节日标记与菜单栏标题格式。
+使用 Node 内置 test runner，覆盖格子次要文字、42 格网格、今日/周末/节日标记、菜单栏标题格式，以及自动更新 feed URL 的拼接。
 
 ## 打包
 
@@ -39,12 +39,30 @@ npm run dist
 
 `electron-builder` 会生成未签名的 dmg 与 zip，包含 x64 和 arm64：
 
-- `dist/LanLi-0.1.0-mac-x64.dmg`
-- `dist/LanLi-0.1.0-mac-x64.zip`
-- `dist/LanLi-0.1.0-mac-arm64.dmg`
-- `dist/LanLi-0.1.0-mac-arm64.zip`
+- `dist/LanLi-0.1.1-mac-x64.dmg`
+- `dist/LanLi-0.1.1-mac-x64.zip`
+- `dist/LanLi-0.1.1-mac-arm64.dmg`
+- `dist/LanLi-0.1.1-mac-arm64.zip`
 
-本轮 `build.mac.identity` 为 `null`，不做代码签名与公证，也不包含自动更新。GitHub Actions 的 Release 工作流只构建并发布 macOS Intel（x64）的 dmg 与 zip；本地执行 `npm run dist` 仍可能同时打出 x64 和 arm64。
+本轮 `build.mac.identity` 为 `null`，不做代码签名与公证。GitHub Actions 的 Release 工作流只构建并发布 macOS Intel（x64）的 dmg 与 zip；本地执行 `npm run dist` 仍可能同时打出 x64 和 arm64。自动更新服务读取 Release 里的 `LanLi-<version>-mac-x64.zip`，不需要额外上传 `latest-mac.yml`。
+
+## 自动更新
+
+打包版使用 Electron 官方 `autoUpdater`，feed 指向官方静态服务：
+
+```text
+https://update.electronjs.org/allen-bot-ctl/lan-li/${process.platform}-${process.arch}/${app.getVersion()}
+```
+
+Intel Mac 上的 0.1.1 对应：
+
+```text
+https://update.electronjs.org/allen-bot-ctl/lan-li/darwin-x64/0.1.1
+```
+
+只有 macOS 且 `app.isPackaged === true` 时才设置 feed 并检查更新。启动约 10 秒后检查一次，之后每 6 小时检查一次；没有更新时完全静默。更新下载完成后，日历窗口底栏上方会出现「新版本已就绪」提示，用户点击「重启更新」后才调用 `autoUpdater.quitAndInstall()`，不会在未同意时强制退出。
+
+当前安装包未签名，Squirrel.Mac 经常无法验证并静默替换应用。如果更新器报错但 feed 仍显示存在新版本，应用会改为显示一次「无法自动更新，请手动下载」，点击后打开最新 Release；同一版本不会反复提醒。此时请从 [最新 Release](https://github.com/allen-bot-ctl/lan-li/releases/latest) 或[主页](https://allen-bot-ctl.github.io/lan-li/)手动下载安装包。
 
 ## 未签名包的 Gatekeeper 处理
 
@@ -59,7 +77,7 @@ npm run dist
    open "/Applications/栏历.app"
    ```
 
-这些操作只用于本轮未签名体验包，不代表正式分发方式。
+这些操作只用于本轮未签名体验包，不代表正式分发方式。未签名包也可能无法静默替换自动更新，此时请从主页或 Release 手动下载。
 
 ## 首次运行与「登录时打开」
 
@@ -69,12 +87,16 @@ npm run dist
 
 ## 非 macOS
 
-在 Windows / Linux 上启动时，会弹出「栏历首发只支持 macOS」的提示并退出，不会绘制仿菜单栏。
+在 Windows / Linux 上启动时，会弹出「栏历首发只支持 macOS」的提示并退出，不会绘制仿菜单栏，也不会检查更新。
 
 ## 需要 macOS 真机确认
 
 | 事项 | 说明 |
 | --- | --- |
+| 菜单栏是否只剩文字 | 0.1.1 用空 `NativeImage` 创建 `Tray`，不再设置 `trayTemplate.png`；需确认菜单栏项只显示日期时间，图标位置不再占宽。 |
+| 标题左右边距 | Electron / macOS 对纯文字状态项仍有系统级内边距，且没有公开 API 可继续压缩；需在真机确认剩余边距是否可以接受。 |
+| 紧凑窗口是否仍好用 | 窗口已缩为 580×400；需确认 6×7 格子仍容易点击，农历副文案、星期行、右侧「此刻」、底栏都不被裁切或出现滚动条。 |
+| 打包后的更新检查 | 需用 0.1.0 安装包升级到 0.1.1 实测：无更新时静默；有新版本时会下载并提示重启。由于包未签名，Squirrel.Mac 可能无法静默替换，此时应出现一次手动下载提示。 |
 | `mouse-enter` / `mouse-leave` 是否始终触发 | 已按悬停打开、离开 200ms 关闭实现；若系统完全不触发悬停事件，点击菜单栏项仍可打开，并需报告平台与系统版本。 |
 | 窗口与菜单栏缝隙 | 当前按 `y = 托盘.y + 托盘高` 无重叠对齐；若真机出现指针可穿过的缝，应将 y 改为 `托盘.y + 托盘高 - 1`，最多重叠 1px。 |
 | 未签名包的 `openAtLogin` | 需确认首次运行后开关是否真的变为打开；若系统拒绝，开关应显示真实值并在运行日志中报告。 |

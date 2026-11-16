@@ -12,5 +12,10 @@ contextBridge.exposeInMainWorld('lanli', {
   pointerEnter: () => ipcRenderer.send('pointer:enter'),
   pointerLeave: () => ipcRenderer.send('pointer:leave'),
   setLogin: (openAtLogin) => ipcRenderer.invoke('login:set', openAtLogin),
-  quit: () => ipcRenderer.send('app:quit')
+  quit: () => ipcRenderer.send('app:quit'),
+  onUpdateNotice: (callback) => {
+    ipcRenderer.on('update:notice', (_event, payload) => callback(payload));
+  },
+  restartToUpdate: () => ipcRenderer.send('update:restart'),
+  openLatestRelease: () => ipcRenderer.send('update:openLatest')
 });

@@ -8,7 +8,10 @@ const {
   nativeImage,
   screen,
   ipcMain,
-  dialog
+  dialog,
+  autoUpdater,
+  net,
+  shell
 } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
@@ -21,14 +24,21 @@ const {
   buildCells,
   buildNow
 } = require('./calendar');
+const { setupAutoUpdate } = require('./updater');
+const {
+  RELEASES_LATEST_URL,
+  HOMEPAGE_URL
+} = require('./update-feed');
 
-const WINDOW_WIDTH = 680;
-const WINDOW_HEIGHT = 470;
+const WINDOW_WIDTH = 580;
+const WINDOW_HEIGHT = 400;
 
 let tray = null;
 let calendarWindow = null;
 let clockTimer = null;
 let closeTimer = null;
+let updater = null;
+let updateNotice = null;
 
 let view = null;
 let focus = null;
@@ -90,6 +100,24 @@ function writePreferences(preferences) {
   }
 }
 
+// Update notices are keyed by the release name from the Squirrel feed so a
+// single release never produces the same reminder on every launch.
+function hasUpdateNotification(key) {
+  const notifications = readPreferences().updateNotifications;
+  return Boolean(notifications && typeof notifications === 'object' &&
+    notifications[key] === true);
+}
+
+function markUpdateNotification(key) {
+  const preferences = readPreferences();
+  const notifications = preferences.updateNotifications &&
+    typeof preferences.updateNotifications === 'object'
+    ? { ...preferences.updateNotifications }
+    : {};
+  notifications[key] = true;
+  writePreferences({ ...preferences, updateNotifications: notifications });
+}
+
 // First launch only: try to turn on the login item and remember that the
 // attempt was made. The system value always remains the source of truth.
 function initializeLoginItem() {
@@ -141,6 +169,10 @@ function createCalendarWindow() {
   calendarWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   calendarWindow.loadFile(path.join(__dirname, 'renderer', 'calendar.html'));
 
+  calendarWindow.webContents.on('did-finish-load', () => {
+    sendUpdateNotice();
+  });
+
   calendarWindow.webContents.on('before-input-event', (event, input) => {
     if (input.type === 'keyDown' && (input.key === 'Escape' || input.key === 'Esc')) {
       event.preventDefault();
@@ -154,9 +186,12 @@ function createCalendarWindow() {
 }
 
 function createTray() {
-  const iconPath = path.join(__dirname, 'assets', 'trayTemplate.png');
-  const image = nativeImage.createFromPath(iconPath);
-  tray = new Tray(image);
+  // Text-only status item. Tray still requires a NativeImage; an empty image
+  // occupies 0x0 and does not use trayTemplate.png. macOS/Electron still add
+  // their own small NSStatusItem padding around the title, and there is no
+  // public API to remove that, so no private API or zero-width characters are
+  // used here.
+  tray = new Tray(nativeImage.createEmpty());
 
   tray.on('mouse-enter', openCalendar);
   tray.on('mouse-leave', scheduleClose);
@@ -164,6 +199,47 @@ function createTray() {
     if (!calendarWindow || calendarWindow.isDestroyed()) return;
     if (!calendarWindow.isVisible()) openCalendar();
   });
+}
+
+function sendUpdateNotice() {
+  if (!updateNotice || !calendarWindow || calendarWindow.isDestroyed()) return;
+  calendarWindow.webContents.send('update:notice', updateNotice);
+}
+
+function showUpdateNotice(notice) {
+  updateNotice = notice;
+  sendUpdateNotice();
+}
+
+function setupUpdates() {
+  try {
+    updater = setupAutoUpdate({
+      app,
+      autoUpdater,
+      net,
+      onReady: ({ name }) => {
+        console.log('[栏历] 新版本已下载：' + (name || '未知版本'));
+        showUpdateNotice({ mode: 'ready', name });
+      },
+      onManual: ({ name }) => {
+        console.warn('[栏历] 无法自动应用更新' +
+          (name ? '（' + name + '）' : '') + '，改为提示手动下载。');
+        showUpdateNotice({
+          mode: 'manual',
+          name,
+          url: RELEASES_LATEST_URL,
+          homepage: HOMEPAGE_URL
+        });
+      },
+      isNotified: hasUpdateNotification,
+      markNotified: markUpdateNotification,
+      logger: (message) => console.log('[栏历] 更新：' + message)
+    });
+  } catch (error) {
+    updater = null;
+    console.warn('[栏历] 初始化自动更新失败：' +
+      (error && error.message ? error.message : error));
+  }
 }
 
 function cancelClose() {
@@ -219,6 +295,7 @@ function openCalendar() {
   }
 
   updateClock();
+  sendUpdateNotice();
 }
 
 function hideCalendar() {
@@ -320,6 +397,19 @@ function registerIpc() {
   ipcMain.on('app:quit', () => {
     app.quit();
   });
+
+  ipcMain.on('update:restart', () => {
+    if (updateNotice && updateNotice.mode === 'ready') {
+      autoUpdater.quitAndInstall();
+    }
+  });
+
+  ipcMain.on('update:openLatest', () => {
+    shell.openExternal(RELEASES_LATEST_URL).catch((error) => {
+      console.warn('[栏历] 打开最新 Release 失败：' +
+        (error && error.message ? error.message : error));
+    });
+  });
 }
 
 async function bootstrap() {
@@ -342,6 +432,7 @@ async function bootstrap() {
   createCalendarWindow();
   createTray();
   registerDisplayListeners();
+  setupUpdates();
 
   // Write the menu bar title immediately instead of waiting for the first
   // one-second interval.
@@ -368,6 +459,10 @@ if (!gotLock) {
   });
 
   app.on('before-quit', () => {
+    if (updater) {
+      updater.stop();
+      updater = null;
+    }
     if (clockTimer) {
       clearInterval(clockTimer);
       clockTimer = null;
