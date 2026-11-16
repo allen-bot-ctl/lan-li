@@ -11,7 +11,8 @@ const {
   dialog,
   autoUpdater,
   net,
-  shell
+  shell,
+  session
 } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
@@ -52,6 +53,12 @@ const {
   RELEASES_LATEST_URL,
   HOMEPAGE_URL
 } = require('./update-feed');
+const {
+  CACHE_TTL_MS: WEATHER_REFRESH_MS,
+  createWeatherService,
+  unavailableWeather
+} = require('./weather');
+const { createLoginItem } = require('./login-item');
 
 const WINDOW_WIDTH = 580;
 const WINDOW_HEIGHT = 400;
@@ -64,6 +71,9 @@ let updater = null;
 let selfUpdater = null;
 let updateSetupError = null;
 let updateNotice = null;
+let weatherService = null;
+let weatherTimer = null;
+let loginItem = null;
 
 const logger = createLogger();
 
@@ -89,13 +99,78 @@ function resetViewToToday() {
   focus = { year: today.year, month: today.month, day: today.day };
 }
 
-function getOpenAtLogin() {
+function getLoginItem() {
+  if (!loginItem) {
+    loginItem = createLoginItem({
+      isPackaged: app.isPackaged,
+      logger: (message) => logger.warn('[栏历] 登录项：' + message)
+    });
+  }
+  return loginItem;
+}
+
+function reasonOf(error) {
+  return error && error.message ? error.message : String(error);
+}
+
+function readSystemOpenAtLogin() {
   try {
     return Boolean(app.getLoginItemSettings().openAtLogin);
   } catch (error) {
-    console.warn('[栏历] 读取登录项失败：' + (error && error.message ? error.message : error));
+    logger.warn('[栏历] 读取系统登录项失败：' + reasonOf(error));
     return false;
   }
+}
+
+function getOpenAtLogin() {
+  // The LaunchAgent fallback is only used for this app's own plist, so its
+  // presence is a legitimate second source of truth.
+  const fallbackEnabled = getLoginItem().isEnabled();
+  return readSystemOpenAtLogin() || fallbackEnabled;
+}
+
+// Applies the desired state through the system API first. Unsigned bundles
+// reject setLoginItemSettings (readback stays false), so a false readback
+// after enabling switches to a per-user LaunchAgent. Returns the final real
+// state so the renderer can show exactly what took effect.
+function applyLoginItem(desired) {
+  const helper = getLoginItem();
+  const wantOpen = Boolean(desired);
+
+  try {
+    app.setLoginItemSettings({ openAtLogin: wantOpen });
+  } catch (error) {
+    logger.warn('[栏历] 设置系统登录项失败：' + reasonOf(error));
+  }
+
+  if (wantOpen) {
+    if (!readSystemOpenAtLogin()) {
+      const outcome = helper.enable();
+      if (outcome.ok) {
+        logger.info('[栏历] 系统登录项未生效，已写入 LaunchAgent：' + outcome.path);
+      } else {
+        logger.warn('[栏历] 系统登录项未生效，LaunchAgent 回退失败：' + outcome.reason);
+      }
+    } else {
+      // A working system login item makes a leftover fallback redundant (and
+      // would otherwise launch the app twice at login).
+      const outcome = helper.disable();
+      if (!outcome.ok) {
+        logger.warn('[栏历] 清理旧 LaunchAgent 失败：' + outcome.reason);
+      }
+    }
+  } else {
+    const outcome = helper.disable();
+    if (!outcome.ok) {
+      logger.warn('[栏历] 删除 LaunchAgent 失败：' + outcome.reason);
+    }
+  }
+
+  const actual = getOpenAtLogin();
+  if (actual !== wantOpen) {
+    logger.warn('[栏历] 登录项最终状态为 ' + actual + '，期望 ' + wantOpen + '。');
+  }
+  return actual;
 }
 
 function buildState() {
@@ -191,9 +266,8 @@ function persistWorldClocks() {
 
 function currentClockSnapshot(now = new Date()) {
   const item = worldClocks.items[worldClocks.index] || null;
-  const localZone = defaultLocalTimeZone();
   const resolvedZone = resolvedMenuBarTimeZone();
-  const formatted = item ? formatClock(now, item.id, localZone) : null;
+  const formatted = item ? formatClock(now, item.id) : null;
 
   return {
     items: worldClocks.items.map((clock) => ({ id: clock.id, label: clock.label })),
@@ -208,9 +282,6 @@ function currentClockSnapshot(now = new Date()) {
           time: formatted.time,
           date: formatted.date,
           weekday: formatted.weekday,
-          dayRelation: formatted.dayRelation,
-          offsetText: formatted.offsetText,
-          offsetMinutes: formatted.offsetMinutes,
           isMenuBar: sameTimeZone(item.id, resolvedZone)
         }
       : null
@@ -244,25 +315,14 @@ function markUpdateNotification(key) {
 }
 
 // First launch only: try to turn on the login item and remember that the
-// attempt was made. The system value always remains the source of truth.
+// attempt was made. applyLoginItem falls back to a LaunchAgent when the system
+// API is rejected (unsigned builds), so the persisted flag matches the real
+// effective state.
 function initializeLoginItem() {
   const preferences = readPreferences();
   if (preferences.loginItemInitialized === true) return;
 
-  try {
-    app.setLoginItemSettings({ openAtLogin: true });
-  } catch (error) {
-    console.warn('[栏历] 首次运行设置登录项失败：' +
-      (error && error.message ? error.message : error));
-  }
-
-  const actual = getOpenAtLogin();
-  if (!actual) {
-    console.warn(
-      '[栏历] 首次运行已调用 setLoginItemSettings({ openAtLogin: true })，' +
-      '但读回 openAtLogin=false；未签名包可能被系统拒绝，开关将显示真实值。'
-    );
-  }
+  applyLoginItem(true);
   writePreferences({ ...preferences, loginItemInitialized: true });
 }
 
@@ -339,6 +399,49 @@ function showUpdateNotice(notice) {
 function sendUpdateStatus(status) {
   if (!calendarWindow || calendarWindow.isDestroyed()) return;
   calendarWindow.webContents.send('update:status', status);
+}
+
+function setupWeatherPermissions() {
+  const ses = session.defaultSession;
+  const isOurWindow = (webContents) =>
+    Boolean(calendarWindow) && webContents === calendarWindow.webContents;
+
+  ses.setPermissionRequestHandler((webContents, permission, callback) => {
+    callback(permission === 'geolocation' && isOurWindow(webContents));
+  });
+  ses.setPermissionCheckHandler((webContents, permission) => {
+    return permission === 'geolocation' && isOurWindow(webContents);
+  });
+}
+
+function setupWeather() {
+  weatherService = createWeatherService({
+    fetch: (url, init) => net.fetch(url, init),
+    logger: {
+      info: (message) => logger.info('[栏历] 天气：' + message),
+      warn: (message) => logger.warn('[栏历] 天气：' + message)
+    }
+  });
+  weatherTimer = setInterval(() => {
+    refreshWeather(true);
+  }, WEATHER_REFRESH_MS);
+}
+
+function sendWeather(result) {
+  if (!result || !calendarWindow || calendarWindow.isDestroyed()) return;
+  calendarWindow.webContents.send('weather:update', result);
+}
+
+function refreshWeather(force = false) {
+  if (!weatherService) return Promise.resolve(null);
+  return weatherService.refresh({ force }).then((result) => {
+    if (result) sendWeather(result);
+    return result;
+  }).catch((error) => {
+    logger.warn('[栏历] 天气：刷新失败：' +
+      (error && error.message ? error.message : error));
+    return null;
+  });
 }
 
 function handleUpdateStatus(status) {
@@ -481,6 +584,7 @@ function openCalendar() {
   }
 
   updateClock();
+  refreshWeather();
   sendUpdateNotice();
 }
 
@@ -551,6 +655,11 @@ function applyViewPayload(payload) {
 
 function registerIpc() {
   ipcMain.handle('app:version', () => formatVersionLabel(app.getVersion()));
+
+  ipcMain.handle('weather:get', (_event, payload) => {
+    if (!weatherService) return unavailableWeather();
+    return weatherService.get(payload);
+  });
 
   ipcMain.handle('calendar:getState', () => buildState());
 
@@ -638,21 +747,7 @@ function registerIpc() {
   });
 
   ipcMain.handle('login:set', (_event, openAtLogin) => {
-    const desired = Boolean(openAtLogin);
-    try {
-      app.setLoginItemSettings({ openAtLogin: desired });
-    } catch (error) {
-      console.warn('[栏历] 设置登录项失败：' +
-        (error && error.message ? error.message : error));
-    }
-    const actual = getOpenAtLogin();
-    if (desired && !actual) {
-      console.warn(
-        '[栏历] 已调用 setLoginItemSettings({ openAtLogin: true })，' +
-        '但读回 openAtLogin=false；系统拒绝了未签名包的登录项，开关保持真实值。'
-      );
-    }
-    return actual;
+    return applyLoginItem(Boolean(openAtLogin));
   });
 
   ipcMain.on('app:quit', () => {
@@ -723,6 +818,8 @@ async function bootstrap() {
   initializeLoginItem();
   resetViewToToday();
   loadWorldClocks();
+  setupWeatherPermissions();
+  setupWeather();
   registerIpc();
   createCalendarWindow();
   createTray();
@@ -761,6 +858,10 @@ if (!gotLock) {
     if (clockTimer) {
       clearInterval(clockTimer);
       clockTimer = null;
+    }
+    if (weatherTimer) {
+      clearInterval(weatherTimer);
+      weatherTimer = null;
     }
     if (closeTimer) {
       clearTimeout(closeTimer);

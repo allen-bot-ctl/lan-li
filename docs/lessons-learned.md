@@ -84,6 +84,16 @@
 
 **教训**：升版本号只能改指向当前版本的下载链接、示例与 `data-app-version` 等；历史版本描述必须逐处确认。替换后专门检查「手动安装一次」「从 … 升级」等句子。
 
+## 10. 未签名包的登录项需要 LaunchAgent 兜底
+
+**现象**：macOS 15.7（Intel）未签名包中勾选「登录时打开」后，开关立即被读回为未勾选，表现成无法勾选；`app.setLoginItemSettings({ openAtLogin: true })` 本身不抛异常。
+
+**根因**：系统登录项依赖应用签名/身份校验。未签名 bundle 的请求会被系统忽略，`app.getLoginItemSettings().openAtLogin` 一直读回 `false`，所以只看「API 没报错」会误判成功。
+
+**处理**：0.1.11 新增 `electron/login-item.js`，在系统读回仍为 false 时写入本应用自己的 `~/Library/LaunchAgents/app.lanli.LanLi.plist`（`/usr/bin/open -a <当前 .app>`，`RunAtLoad`）；关闭时同时清除系统登录项与该 plist。`getOpenAtLogin()` 返回「系统登录项 || plist 存在」，复选框显示最终真实状态。匹配只在 plist 写/删失败时写入 `logger`。
+
+**教训**：对「设置后还能读回」的平台 API，必须以读回值作为成功判据；兜底方案要限定在本应用自己的文件，且删除路径与写入路径同等重要。
+
 ## 相关文档
 
 - 当前更新实现：[updater.md](updater.md)

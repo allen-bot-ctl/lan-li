@@ -19,10 +19,8 @@ const almanacJi = document.getElementById('almanac-ji');
 const clockCard = document.getElementById('clock-card');
 const clockRow = document.getElementById('clock-row');
 const clockCity = document.getElementById('clock-city');
-const clockRelation = document.getElementById('clock-relation');
 const clockTime = document.getElementById('clock-time');
 const clockDate = document.getElementById('clock-date');
-const clockOffset = document.getElementById('clock-offset');
 const clockDots = document.getElementById('clock-dots');
 const clockEmpty = document.getElementById('clock-empty');
 const clockPrev = document.getElementById('clock-prev');
@@ -40,6 +38,7 @@ const updateAction = document.getElementById('update-action');
 const checkUpdateButton = document.getElementById('check-update-button');
 const checkUpdateLabel = document.getElementById('check-update-label');
 const appVersion = document.getElementById('app-version');
+const weatherText = document.getElementById('weather-text');
 
 let state = null;
 let yearOptionsBuilt = false;
@@ -49,6 +48,7 @@ let clocks = null;
 let searchToken = 0;
 let searchTimer = null;
 let wheelLockedAt = 0;
+let weatherToken = 0;
 
 function daysInMonth(year, month) {
   return new Date(year, month, 0).getDate();
@@ -111,18 +111,15 @@ function renderClocks(snapshot) {
 
   clockCity.textContent = current.label;
   clockCity.title = `${current.label}（${current.id}）`;
-  clockRelation.textContent = current.dayRelation || '';
-  clockRelation.hidden = !current.dayRelation;
   clockTime.textContent = current.time;
   clockDate.textContent = `${current.date} ${current.weekday}`;
-  clockOffset.textContent = current.offsetText;
   const isMenuBar = Boolean(current.isMenuBar);
   clockSetCurrent.disabled = isMenuBar;
   clockSetCurrent.textContent = isMenuBar ? '当前' : '设为当前';
   clockSetCurrent.setAttribute('aria-pressed', isMenuBar ? 'true' : 'false');
   clockCard.setAttribute(
     'aria-label',
-    `${current.label} ${current.time} ${current.date} ${current.weekday} ${current.offsetText}`
+    `${current.label} ${current.time} ${current.date} ${current.weekday}`
   );
 }
 
@@ -355,6 +352,51 @@ function loadVersion() {
   });
 }
 
+function renderWeather(result) {
+  if (!weatherText) return;
+  const text = result && typeof result.text === 'string' && result.text.trim()
+    ? result.text.trim()
+    : '天气暂不可用';
+  weatherText.textContent = text;
+  weatherText.title = text;
+}
+
+function requestWeather(coordinates) {
+  const token = weatherToken + 1;
+  weatherToken = token;
+  api.getWeather(coordinates).then((result) => {
+    if (token === weatherToken) renderWeather(result);
+  }).catch(() => {
+    if (token === weatherToken) renderWeather(null);
+  });
+}
+
+// Ask CoreLocation first; on refusal, failure or the 10s timeout the main
+// process falls back to IP location. The main process owns all network access.
+function refreshWeather() {
+  if (!navigator.geolocation) {
+    requestWeather();
+    return;
+  }
+
+  navigator.geolocation.getCurrentPosition(
+    (position) => {
+      const coords = position && position.coords;
+      requestWeather(coords
+        ? { latitude: coords.latitude, longitude: coords.longitude }
+        : undefined);
+    },
+    () => {
+      requestWeather();
+    },
+    {
+      enableHighAccuracy: false,
+      timeout: 10000,
+      maximumAge: 30 * 60 * 1000
+    }
+  );
+}
+
 function showUpdateNotice(notice) {
   if (!notice || !updateBanner) return;
 
@@ -433,6 +475,7 @@ updateAction.addEventListener('click', () => {
 });
 
 api.onUpdateNotice(showUpdateNotice);
+api.onWeatherUpdate(renderWeather);
 
 clockPrev.addEventListener('click', () => {
   selectClockRelative('prev');
@@ -512,7 +555,10 @@ document.documentElement.addEventListener('mouseleave', () => {
 // The main process resets the browsing month whenever the panel moves from
 // hidden to visible. Pick that state up as soon as the window appears.
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') refreshState();
+  if (document.visibilityState === 'visible') {
+    refreshState();
+    refreshWeather();
+  }
 });
 
 window.addEventListener('focus', () => {
@@ -527,3 +573,4 @@ api.onTick((payload) => {
 
 loadVersion();
 refreshState();
+if (document.visibilityState === 'visible') refreshWeather();

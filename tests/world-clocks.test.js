@@ -9,7 +9,6 @@ const {
   MENU_TITLE_PATTERN,
   isValidTimeZone,
   sameTimeZone,
-  formatOffsetText,
   formatClock,
   formatMenuTitleInZone,
   isValidMenuTitle: isValidMenuTitleInZone,
@@ -47,7 +46,6 @@ function instant(iso) {
 test('formatClock shows padded time, unpadded date and Chinese weekday', () => {
   const clock = formatClock(
     instant('2026-11-16T01:02:03Z'),
-    'Asia/Shanghai',
     'Asia/Shanghai'
   );
 
@@ -55,89 +53,49 @@ test('formatClock shows padded time, unpadded date and Chinese weekday', () => {
   assert.equal(clock.time, '09:02:03');
   assert.equal(clock.date, '11月16日');
   assert.equal(clock.weekday, '星期一');
-  assert.equal(clock.dayRelation, '');
-  assert.equal(clock.offsetMinutes, 0);
-  assert.equal(clock.offsetText, '同本地');
+  assert.deepEqual(Object.keys(clock).sort(), ['date', 'time', 'weekday']);
 });
 
-test('New York offset follows DST at the given instant, not the standard offset', () => {
+test('New York clock follows DST at the given instant, not the standard offset', () => {
   const winter = formatClock(
     instant('2026-01-15T12:00:00Z'),
-    'America/New_York',
-    'Asia/Shanghai'
+    'America/New_York'
   );
   const summer = formatClock(
     instant('2026-07-15T12:00:00Z'),
-    'America/New_York',
-    'Asia/Shanghai'
+    'America/New_York'
   );
 
   assert.equal(winter.time, '07:00:00');
-  assert.equal(winter.offsetMinutes, -780);
-  assert.equal(winter.offsetText, '比本地慢 13 小时');
-
   assert.equal(summer.time, '08:00:00');
-  assert.equal(summer.offsetMinutes, -720);
-  assert.equal(summer.offsetText, '比本地慢 12 小时');
 });
 
-test('half-hour zones render hours and minutes', () => {
+test('half-hour zones render the correct wall clock', () => {
   const india = formatClock(
     instant('2026-11-16T01:02:03Z'),
-    'Asia/Kolkata',
-    'Asia/Shanghai'
+    'Asia/Kolkata'
   );
 
   assert.equal(india.time, '06:32:03');
-  assert.equal(india.offsetMinutes, -150);
-  assert.equal(india.offsetText, '比本地慢 2 小时 30 分');
 });
 
-test('UTC is eight hours behind a +8 local zone', () => {
-  const utc = formatClock(instant('2026-11-16T01:02:03Z'), 'UTC', 'Asia/Shanghai');
+test('UTC is rendered without local-offset fields', () => {
+  const utc = formatClock(instant('2026-11-16T01:02:03Z'), 'UTC');
   const etcUtc = formatClock(
     instant('2026-11-16T01:02:03Z'),
-    'Etc/UTC',
-    'Asia/Shanghai'
+    'Etc/UTC'
   );
 
   assert.equal(utc.time, '01:02:03');
-  assert.equal(utc.offsetMinutes, -480);
-  assert.equal(utc.offsetText, '比本地慢 8 小时');
-  assert.equal(etcUtc.offsetText, utc.offsetText);
-});
-
-test('day relation is relative to the local calendar date', () => {
-  const yesterday = formatClock(
-    instant('2026-11-15T17:30:00Z'),
-    'America/New_York',
-    'Asia/Shanghai'
-  );
-  const tomorrow = formatClock(
-    instant('2026-11-15T15:30:00Z'),
-    'Pacific/Auckland',
-    'Asia/Shanghai'
-  );
-
-  assert.equal(yesterday.date, '11月15日');
-  assert.equal(yesterday.dayRelation, '昨天');
-  assert.equal(tomorrow.date, '11月16日');
-  assert.equal(tomorrow.dayRelation, '明天');
-});
-
-test('offset text uses Chinese units and never shows 快 0 小时', () => {
-  assert.equal(formatOffsetText(0), '同本地');
-  assert.equal(formatOffsetText(780), '比本地快 13 小时');
-  assert.equal(formatOffsetText(-300), '比本地慢 5 小时');
-  assert.equal(formatOffsetText(330), '比本地快 5 小时 30 分');
-  assert.equal(formatOffsetText(45), '比本地快 45 分');
-  assert.equal(formatOffsetText(-45), '比本地慢 45 分');
+  assert.equal(etcUtc.time, utc.time);
+  assert.equal(utc.offsetText, undefined);
+  assert.equal(utc.dayRelation, undefined);
 });
 
 test('formatClock rejects invalid instants and zones', () => {
-  assert.equal(formatClock(new Date('nope'), 'Asia/Shanghai', 'Asia/Shanghai'), null);
+  assert.equal(formatClock(new Date('nope'), 'Asia/Shanghai'), null);
   assert.equal(
-    formatClock(instant('2026-11-16T01:02:03Z'), 'Mars/Olympus', 'Asia/Shanghai'),
+    formatClock(instant('2026-11-16T01:02:03Z'), 'Mars/Olympus'),
     null
   );
 });

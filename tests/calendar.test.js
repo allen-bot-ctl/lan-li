@@ -67,10 +67,10 @@ test('2026-11-15 shows 初七', () => {
   assert.equal(cell.secondaryText, '初七');
 });
 
-test('2026-11-16 almanac is 丙午马年 with 纳采 / 上梁 first', () => {
+test('2026-11-16 almanac is 丙午马年·十月 with 纳采 / 上梁 first', () => {
   const almanac = buildAlmanac(new Date(2026, 10, 16));
 
-  assert.equal(almanac.yearText, '丙午马年');
+  assert.equal(almanac.yearText, '丙午马年·十月');
   assert.equal(almanac.yi[0], '纳采');
   assert.equal(almanac.ji[0], '上梁');
 
@@ -83,8 +83,13 @@ test('2026-11-16 almanac is 丙午马年 with 纳采 / 上梁 first', () => {
 
 test('almanac is built only from the local calendar day', () => {
   const almanac = buildAlmanac(new Date(2026, 10, 15, 22, 47, 13));
-  assert.equal(almanac.yearText, '丙午马年');
+  assert.equal(almanac.yearText, '丙午马年·十月');
   assert.equal(almanac.yi.join(' '), buildAlmanac(new Date(2026, 10, 15, 0, 0, 1)).yi.join(' '));
+});
+
+test('almanac keeps the 闰 prefix in a leap lunar month', () => {
+  const almanac = buildAlmanac(new Date(2025, 7, 1));
+  assert.equal(almanac.yearText, '乙巳蛇年·闰六月');
 });
 
 test('November 2026 grid has 42 cells, starts on Monday and follows lead', () => {

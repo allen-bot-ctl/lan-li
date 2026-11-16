@@ -15,7 +15,7 @@
 
 ## 可测试性与副作用注入
 
-- 纯逻辑模块（`calendar.js`、`world-clocks.js`、`update-feed.js`、`update-status.js`、`app-version.js`、`logger.js`、`mac-self-update.js`）必须能在没有 Electron 的情况下被 `node --test` require。
+- 纯逻辑模块（`calendar.js`、`world-clocks.js`、`weather.js`、`update-feed.js`、`update-status.js`、`app-version.js`、`logger.js`、`mac-self-update.js`）必须能在没有 Electron 的情况下被 `node --test` require。
 - 所有外部副作用必须可注入：
   - 网络：`fetch` / `net.fetch`
   - 进程：`execFile`、`spawn`
@@ -58,7 +58,7 @@
 - 目前只正式发布 macOS Intel（x64）。
 - **不要重写已经有下载的发布标签**；需要修正时发新版本。
 - 不要改 EasyLens、mian-xi 等其他项目。
-- 不要在未签名包上改用 LaunchAgent、login hook 或 crontab 做登录项。
+- 未签名包的登录项只允许回退到 `electron/login-item.js` 管理的本应用 LaunchAgent（`app.lanli.LanLi.plist`）；不要用 login hook、crontab，也不要改动其它 LaunchAgent。
 
 ## 文档与完成标准
 

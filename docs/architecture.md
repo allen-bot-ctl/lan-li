@@ -10,11 +10,13 @@ electron/
   preload.js        contextBridge 暴露 window.lanli，只转发既有 IPC
   calendar.js       农历/公历/42 格/菜单栏标题/「黄历」纯逻辑
   world-clocks.js   多时区城市目录、校验、列表操作与时钟格式化纯逻辑
+  weather.js        天气纯逻辑（WMO 映射、城市名、坐标/URL/格式化）与主进程请求服务
+  login-item.js     未签名包登录项回退：生成/删除本应用的 LaunchAgent plist
   updater.js        自动更新编排（Squirrel 路径 + probe-only）
   mac-self-update.js 未签名包的应用内下载、校验、暂存、安装
   update-feed.js    feed URL 拼接与 204/200 语义
   update-status.js  手动检查状态的短文案映射
-  app-version.js    底栏版本号格式化
+  app-version.js    右栏版本号标签格式化
   logger.js         文件日志与轮转
   renderer/         calendar.html / calendar.css / calendar.js，只负责展示与交互
   assets/           icon.png 与未再引用的 trayTemplate*.png
@@ -25,8 +27,8 @@ site/               GitHub Pages 静态主页（不是应用运行时的一部�
 
 - `electron/main.js`：唯一主进程入口（`package.json` 的 `main`）。持有 `Tray`、`BrowserWindow`、每秒定时器与更新器。
 - `electron/preload.js`：窗口 `webPreferences` 中 `contextIsolation: true`、`nodeIntegration: false`、`sandbox: true`；通过 `contextBridge.exposeInMainWorld('lanli', ...)` 暴露有限 API。
-- `electron/renderer/`：静态 HTML/CSS/JS。只做渲染、翻月、开关、世界时钟的显示/切换/搜索浮层、检查更新按钮、指针进出、Esc；不 `require('lunar-javascript')`，也不计算时区。
-- `electron/calendar.js`、`world-clocks.js`、`update-feed.js`、`update-status.js`、`app-version.js`、`logger.js`、`mac-self-update.js`：可在没有 Electron 的情况下被 `node --test` require 的模块（`logger.js` 仅在默认取日志路径时惰性 require Electron）。
+- `electron/renderer/`：静态 HTML/CSS/JS。只做渲染、翻月、开关、世界时钟的显示/切换/搜索浮层、天气行、检查更新按钮、指针进出、Esc；不 `require('lunar-javascript')`，也不计算时区或天气代码。
+- `electron/calendar.js`、`world-clocks.js`、`weather.js`、`login-item.js`、`update-feed.js`、`update-status.js`、`app-version.js`、`logger.js`、`mac-self-update.js`：可在没有 Electron 的情况下被 `node --test` require 的模块（`logger.js` 仅在默认取日志路径时惰性 require Electron；`weather.js` 的网络请求通过注入的 `fetch` 完成；`login-item.js` 的 `fs` 与路径可注入）。
 - `site/`：纯静态主页，由 `.github/workflows/pages.yml` 部署，不参与打包。
 
 窗口尺寸常量在 `electron/main.js`：`WINDOW_WIDTH = 580`、`WINDOW_HEIGHT = 400`；`electron/renderer/calendar.css` 中 `html, body` 也是 `580px × 400px`。左侧目录区 `.calendar-pane` 为 `420px`，右侧橙栏 `.now-pane` 为 `160px`。改尺寸必须两处一起改，并重新做真机验收。
@@ -48,12 +50,18 @@ site/               GitHub Pages 静态主页（不是应用运行时的一部�
   → preload addClock/removeClock/selectClock/searchClocks
   → 主进程 world-clocks 校验与列表操作 → 写 preferences.json
   → 返回 clocks 快照 → 渲染层只展示
+
+天气（打开窗口/后台刷新）
+  → 渲染层 navigator.geolocation（10s 超时）
+  → preload getWeather({ latitude, longitude } | 省略)
+  → 主进程 weather 服务：反向地理编码 + Open-Meteo（无坐标时先 ipwho.is）
+  → 30 分钟缓存 → 返回/推送 weather:update → 渲染层显示一行天气
 ```
 
 - 农历计算只发生在主进程的 `electron/calendar.js`，底层是 `lunar-javascript@1.7.8` 的 `Solar.fromYmd`。完全离线。
 - 时区格式化只发生在主进程的 `electron/world-clocks.js`，使用 `Intl.DateTimeFormat` 与注入的本地时区；渲染层不推导时差。
-- 偏好文件：`app.getPath('userData')/preferences.json`，保存 `loginItemInitialized`、`updateNotifications`（每个版本的一次性手动下载提醒）与 `worldClocks`（`{ items: [{ id, label }], index }`）。
-- 网络只在打包后发生：`update.electronjs.org` 的 feed 探测，以及 GitHub Release 资产下载。开发态不检查更新。
+- 偏好文件：`app.getPath('userData')/preferences.json`，保存 `loginItemInitialized`、`updateNotifications`（每个版本的一次性手动下载提醒）与 `worldClocks`（`{ items: [{ id, label }], index }`）。天气结果只缓存在主进程内存，不写偏好文件。
+- 网络只在主进程发生：天气（`ipwho.is`、BigDataCloud 反向地理编码、Open-Meteo，均为 HTTPS）与打包后的 `update.electronjs.org` feed 探测、GitHub Release 资产下载。渲染层 CSP 不放开网络，开发态不检查更新。
 - 详细实现见 [implementation.md](implementation.md)；更新细节见 [updater.md](updater.md)。
 
 ## 分层职责与边界
@@ -66,26 +74,27 @@ site/               GitHub Pages 静态主页（不是应用运行时的一部�
 - 菜单栏形态：`app.dock.hide()`、`Menu.setApplicationMenu(null)`、`new Tray(nativeImage.createEmpty())`、每秒写文字标题。
 - 窗口：无边框、不可缩放、`alwaysOnTop`、默认隐藏；按托盘 bounds 与 `workArea` 定位；`mouse-enter` / `mouse-leave` / `click` / Esc 的开关逻辑。
 - 状态与偏好：当前浏览年月、焦点日、首次登录项初始化、更新提醒去重、世界时钟列表与当前索引。
+- 天气编排：设置仅允许 `geolocation` 的权限处理器，创建带注入 `net.fetch` 的天气服务，打开窗口/后台定时刷新并推送 `weather:update`。
 - 更新编排：创建 `mac-self-update` 实例、调用 `setupAutoUpdate`、把 `onReady` / `onManual` / `onStatus` 转成 IPC。
 - 日志：`createLogger()` 写文件并在控制台输出。
 
 **边界**
 
-- 月历内容的计算不在这里：交给 `calendar.js`；世界时钟的校验、列表与格式化交给 `world-clocks.js`。
+- 月历内容的计算不在这里：交给 `calendar.js`；世界时钟的校验、列表与格式化交给 `world-clocks.js`；天气映射、城市名选择与请求细节交给 `weather.js`。
 - 更新下载/校验/替换不在这里：交给 `updater.js` 与 `mac-self-update.js`，主进程只做依赖注入与回调。
 - 注意：`main.js` 里仍有少量展示相关字符串（如窗口/托盘文案、更新日志前缀），但不要继续把整块 UI 拼装搬进来。
 
 **不要做**
 
 - 不要新增第二个窗口、设置页、Dock 图标或右键菜单。
-- 不要在未签名包上绕过系统登录项 API（LaunchAgent / crontab / login hook）。
+- 未签名包的系统登录项会失败；只允许回退到本应用自己的 `~/Library/LaunchAgents/app.lanli.LanLi.plist`（见 `login-item.js`），不要使用 login hook、crontab，也不要操作其它 LaunchAgent。
 - 不要把路径或 URL 拼进 shell 字符串。
 
 ### preload（`electron/preload.js`）
 
 **职责**
 
-- 仅通过 `contextBridge` 暴露当前已有的 18 个 API（清单见 [implementation.md](implementation.md#6-ipc-完整清单)）。
+- 仅通过 `contextBridge` 暴露当前已有的 21 个 API（清单见 [implementation.md](implementation.md#6-ipc-完整清单)）。
 - 把 `invoke` / `send` / `on` 一一对应到固定频道。
 
 **边界**
@@ -102,14 +111,15 @@ site/               GitHub Pages 静态主页（不是应用运行时的一部�
 
 **职责**
 
-- 渲染主进程给的 `cells`、`almanac`、`clocks`、`openAtLogin`、版本号与更新横幅。
+- 渲染主进程给的 `cells`、`almanac`、`clocks`、`weather`、`openAtLogin`、版本号与更新横幅。
 - 交互：上一月/下一月、年份下拉、返回今天、点击格子、登录项开关、世界时钟左右切换/添加/删除/搜索、检查更新、重启更新/下载新版、退出。
+- 打开窗口时先用 `navigator.geolocation.getCurrentPosition` 取坐标（10 秒超时），再经 `weather:get` 请求主进程；主进程后台刷新通过 `weather:update` 推回。
 - 指针进入/离开窗口根节点时通知主进程；Esc 由主进程的 `before-input-event` 处理。
 - 手动检查时先本地显示「正在检查…」，之后应用主进程推来的状态；定时状态约 2.6 秒后恢复。
 
 **边界**
 
-- **不算农历**，不算时区，不读 `lunar-javascript`，不访问文件系统或网络。
+- **不算农历**，不算时区，不映射 WMO 天气代码，不读 `lunar-javascript`，不直接访问文件系统或天气 API。CSP 不放开网络。
 - 更新横幅的文案（「新版本已就绪」「重启更新」「无法自动更新，请手动下载」「下载新版」）在渲染层；短状态文案在 `update-status.js`。
 
 **不要做**
@@ -123,6 +133,7 @@ site/               GitHub Pages 静态主页（不是应用运行时的一部�
 
 - `calendar.js`：42 格、次要文字、菜单栏标题、「黄历」。
 - `world-clocks.js`：城市目录与搜索、IANA 校验、世界时钟格式化、列表增删/绕回、偏好清洗。
+- `weather.js`：WMO 代码中文映射、城市名选择、坐标校验、请求 URL、结果格式化，以及可注入 `fetch` 的主进程请求服务与 30 分钟缓存。
 - `update-feed.js`：feed URL 与 204/200 解释。
 - `update-status.js`：状态到短文案/计时标志的映射。
 - `app-version.js`：`v` 前缀规范化。

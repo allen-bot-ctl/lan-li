@@ -2,7 +2,7 @@
 
 ## 领任务
 
-- 先读 [product.md](product.md) 确认是否在范围内；范围外的需求（天气、设置页、第二套主题等）先和产品确认，不要直接实现。
+- 先读 [product.md](product.md) 确认是否在范围内；范围外的需求（多日天气预报、天气设置、设置页、第二套主题等）先和产品确认，不要直接实现。
 - 再读 [architecture.md](architecture.md) 与 [implementation.md](implementation.md) 定位模块；更新相关必须读 [updater.md](updater.md) 与 [lessons-learned.md](lessons-learned.md)。
 - 动手前按 [coding-discipline.md](coding-discipline.md) 检查红线：依赖、IPC、农历计算、外部命令、`original-fs`。
 

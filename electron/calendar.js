@@ -133,7 +133,8 @@ function buildAlmanac(date) {
   const yi = lunar.getDayYi().map(String);
   const ji = lunar.getDayJi().map(String);
   return {
-    yearText: `${lunar.getYearInGanZhi()}${lunar.getYearShengXiao()}年`,
+    yearText: `${lunar.getYearInGanZhi()}${lunar.getYearShengXiao()}年·` +
+      `${lunar.getMonthInChinese()}月`,
     yi,
     ji,
     yiText: yi.slice(0, ALMANAC_MAX_ITEMS).join(' '),

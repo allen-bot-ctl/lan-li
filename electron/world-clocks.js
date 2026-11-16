@@ -158,72 +158,18 @@ function zonedParts(date, timeZone) {
   };
 }
 
-// Offset of `timeZone` at this instant, in minutes east of UTC. Comparing the
-// zone's wall clock (treated as UTC) with the real instant makes this DST
-// correct; it is never based on a standard offset.
-function zoneOffsetMinutes(date, timeZone) {
-  const parts = zonedParts(date, timeZone);
-  const wallAsUtc = Date.UTC(
-    parts.year,
-    parts.month - 1,
-    parts.day,
-    parts.hour,
-    parts.minute,
-    parts.second
-  );
-  const instant = Math.floor(date.getTime() / 1000) * 1000;
-  return Math.round((wallAsUtc - instant) / 60000);
-}
-
-function formatOffsetText(offsetMinutes) {
-  if (offsetMinutes === 0) return '同本地';
-
-  const ahead = offsetMinutes > 0;
-  const absolute = Math.abs(offsetMinutes);
-  const hours = Math.floor(absolute / 60);
-  const minutes = absolute % 60;
-
-  let amount;
-  if (minutes === 0) {
-    amount = `${hours} 小时`;
-  } else if (hours === 0) {
-    amount = `${minutes} 分`;
-  } else {
-    amount = `${hours} 小时 ${minutes} 分`;
-  }
-  return `比本地${ahead ? '快' : '慢'} ${amount}`;
-}
-
-function dayRelationFor(zoneParts, localParts) {
-  const zoneDay = Date.UTC(zoneParts.year, zoneParts.month - 1, zoneParts.day);
-  const localDay = Date.UTC(localParts.year, localParts.month - 1, localParts.day);
-  const difference = Math.round((zoneDay - localDay) / 86400000);
-  if (difference > 0) return '明天';
-  if (difference < 0) return '昨天';
-  return '';
-}
-
-function formatClock(now, timeZone, localTimeZone) {
+// Format the current instant in a specific IANA zone. Local time is not part
+// of this card, so the caller only supplies the clock's own zone.
+function formatClock(now, timeZone) {
   if (!(now instanceof Date) || Number.isNaN(now.getTime())) return null;
   if (!isValidTimeZone(timeZone)) return null;
 
-  const localZone = isValidTimeZone(localTimeZone)
-    ? localTimeZone.trim()
-    : defaultLocalTimeZone();
-  if (!isValidTimeZone(localZone)) return null;
-
   const zone = zonedParts(now, timeZone);
-  const local = zonedParts(now, localZone);
-  const offsetMinutes =
-    zoneOffsetMinutes(now, timeZone) - zoneOffsetMinutes(now, localZone);
 
   return {
     time: `${pad2(zone.hour)}:${pad2(zone.minute)}:${pad2(zone.second)}`,
     date: `${zone.month}月${zone.day}日`,
-    weekday: WEEKDAY_NAMES[zone.weekday] || '',
-    dayRelation: dayRelationFor(zone, local),
-    offsetText: formatOffsetText(offsetMinutes),
-    offsetMinutes
+    weekday: WEEKDAY_NAMES[zone.weekday] || ''
   };
 }
 
@@ -485,7 +431,6 @@ module.exports = {
   isValidTimeZone,
   canonicalTimeZone,
   sameTimeZone,
-  formatOffsetText,
   formatClock,
   formatMenuTitleInZone,
   isValidMenuTitle,
