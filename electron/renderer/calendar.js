@@ -21,10 +21,13 @@ const nowLunar = document.getElementById('now-lunar');
 const updateBanner = document.getElementById('update-banner');
 const updateMessage = document.getElementById('update-message');
 const updateAction = document.getElementById('update-action');
+const checkUpdateButton = document.getElementById('check-update-button');
+const checkUpdateLabel = document.getElementById('check-update-label');
 
 let state = null;
 let yearOptionsBuilt = false;
 let updateMode = null;
+let checkStatusTimer = null;
 
 function daysInMonth(year, month) {
   return new Date(year, month, 0).getDate();
@@ -185,6 +188,61 @@ function showUpdateNotice(notice) {
   }
   updateBanner.hidden = false;
 }
+
+function resetCheckButton() {
+  checkUpdateLabel.textContent = '检查更新';
+  checkUpdateButton.disabled = false;
+  checkUpdateButton.setAttribute('aria-busy', 'false');
+}
+
+function applyCheckStatus(status) {
+  if (!status) return;
+  if (checkStatusTimer) {
+    clearTimeout(checkStatusTimer);
+    checkStatusTimer = null;
+  }
+
+  const label = typeof status.label === 'string' ? status.label : '';
+  if (!label) {
+    resetCheckButton();
+    return;
+  }
+
+  checkUpdateLabel.textContent = label;
+  checkUpdateButton.disabled = true;
+  checkUpdateButton.setAttribute('aria-busy', status.busy ? 'true' : 'false');
+
+  if (status.timed) {
+    checkStatusTimer = setTimeout(() => {
+      checkStatusTimer = null;
+      resetCheckButton();
+    }, 2600);
+  }
+}
+
+checkUpdateButton.addEventListener('click', () => {
+  if (checkUpdateButton.disabled) return;
+
+  applyCheckStatus({
+    state: 'checking',
+    label: '正在检查…',
+    busy: true,
+    timed: false
+  });
+
+  api.checkForUpdate().then((status) => {
+    if (status && status.state !== 'checking') applyCheckStatus(status);
+  }).catch(() => {
+    applyCheckStatus({
+      state: 'error',
+      label: '检查失败',
+      busy: false,
+      timed: true
+    });
+  });
+});
+
+api.onUpdateStatus(applyCheckStatus);
 
 updateAction.addEventListener('click', () => {
   if (updateMode === 'ready') {

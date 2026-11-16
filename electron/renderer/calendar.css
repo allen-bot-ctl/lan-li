@@ -263,6 +263,42 @@ body {
   accent-color: #e8892c;
 }
 
+.footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.check-update-button {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 5px;
+  border: none;
+  background: transparent;
+  color: #666666;
+  font-family: inherit;
+  font-size: 11.5px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.check-update-button:hover:not(:disabled) {
+  color: #1a1a1a;
+  text-decoration: underline;
+}
+
+.check-update-button:disabled {
+  color: #999999;
+  cursor: default;
+}
+
+.check-update-icon {
+  flex: 0 0 auto;
+  width: 13px;
+  height: 13px;
+}
+
 .quit-button {
   padding: 3px 5px;
   border: none;

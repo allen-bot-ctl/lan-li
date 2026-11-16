@@ -25,6 +25,7 @@ const {
   buildNow
 } = require('./calendar');
 const { setupAutoUpdate } = require('./updater');
+const { describeStatus } = require('./update-status');
 const {
   RELEASES_LATEST_URL,
   HOMEPAGE_URL
@@ -211,6 +212,18 @@ function showUpdateNotice(notice) {
   sendUpdateNotice();
 }
 
+function sendUpdateStatus(status) {
+  if (!calendarWindow || calendarWindow.isDestroyed()) return;
+  calendarWindow.webContents.send('update:status', status);
+}
+
+function handleUpdateStatus(status) {
+  // Automatic startup and 6-hour checks stay silent; only a click on the
+  // always-visible entry gets the short state feedback.
+  if (!status || status.manual !== true) return;
+  sendUpdateStatus(describeStatus(status));
+}
+
 function setupUpdates() {
   try {
     updater = setupAutoUpdate({
@@ -231,6 +244,7 @@ function setupUpdates() {
           homepage: HOMEPAGE_URL
         });
       },
+      onStatus: handleUpdateStatus,
       isNotified: hasUpdateNotification,
       markNotified: markUpdateNotification,
       logger: (message) => console.log('[栏历] 更新：' + message)
@@ -396,6 +410,11 @@ function registerIpc() {
 
   ipcMain.on('app:quit', () => {
     app.quit();
+  });
+
+  ipcMain.handle('update:check', () => {
+    if (!updater) return describeStatus({ state: 'error' });
+    return describeStatus(updater.checkNow({ manual: true }));
   });
 
   ipcMain.on('update:restart', () => {

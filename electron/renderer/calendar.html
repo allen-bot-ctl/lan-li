@@ -42,7 +42,32 @@
           <input class="login-checkbox" id="login-toggle" type="checkbox">
           <span>登录时打开</span>
         </label>
-        <button class="quit-button" id="quit-button" type="button">退出栏历</button>
+        <div class="footer-actions">
+          <button
+            class="check-update-button"
+            id="check-update-button"
+            type="button"
+            aria-label="检查更新"
+          >
+            <svg
+              class="check-update-icon"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <path d="M4.4 8.2a2.3 2.3 0 0 1 .5-4.5 3 3 0 0 1 5.7.4 2.1 2.1 0 0 1 .1 4.1" />
+              <path d="M8 8.6v4.2" />
+              <path d="M6.4 11.2 8 12.8l1.6-1.6" />
+            </svg>
+            <span class="check-update-label" id="check-update-label">检查更新</span>
+          </button>
+          <button class="quit-button" id="quit-button" type="button">退出栏历</button>
+        </div>
       </footer>
     </main>
 

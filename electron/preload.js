@@ -16,6 +16,10 @@ contextBridge.exposeInMainWorld('lanli', {
   onUpdateNotice: (callback) => {
     ipcRenderer.on('update:notice', (_event, payload) => callback(payload));
   },
+  checkForUpdate: () => ipcRenderer.invoke('update:check'),
+  onUpdateStatus: (callback) => {
+    ipcRenderer.on('update:status', (_event, payload) => callback(payload));
+  },
   restartToUpdate: () => ipcRenderer.send('update:restart'),
   openLatestRelease: () => ipcRenderer.send('update:openLatest')
 });
