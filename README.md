@@ -1,4 +1,4 @@
-# 栏历 0.1.2
+# 栏历 0.1.3
 
 栏历是一个 macOS 菜单栏应用：菜单栏常驻显示系统本地日期与时间（不再显示图标，只显示 `M月D日 HH:mm:ss`）；指针指向菜单栏项时，在正下方弹出只含公历月历、农历、库内节气与节日、右侧「此刻」信息的面板。日期计算完全在本机完成；打包版只会在启动后向 GitHub Release 检查更新，不上传任何数据。日历窗口左栏底栏始终有「检查更新」入口。
 
@@ -39,10 +39,10 @@ npm run dist
 
 `electron-builder` 会生成未签名的 dmg 与 zip，包含 x64 和 arm64：
 
-- `dist/LanLi-0.1.2-mac-x64.dmg`
-- `dist/LanLi-0.1.2-mac-x64.zip`
-- `dist/LanLi-0.1.2-mac-arm64.dmg`
-- `dist/LanLi-0.1.2-mac-arm64.zip`
+- `dist/LanLi-0.1.3-mac-x64.dmg`
+- `dist/LanLi-0.1.3-mac-x64.zip`
+- `dist/LanLi-0.1.3-mac-arm64.dmg`
+- `dist/LanLi-0.1.3-mac-arm64.zip`
 
 本轮 `build.mac.identity` 为 `null`，不做代码签名与公证。GitHub Actions 的 Release 工作流只构建并发布 macOS Intel（x64）的 dmg 与 zip；本地执行 `npm run dist` 仍可能同时打出 x64 和 arm64。自动更新服务读取 Release 里的 `LanLi-<version>-mac-x64.zip`，不需要额外上传 `latest-mac.yml`。
 
@@ -54,10 +54,10 @@ npm run dist
 https://update.electronjs.org/allen-bot-ctl/lan-li/${process.platform}-${process.arch}/${app.getVersion()}
 ```
 
-Intel Mac 上的 0.1.2 对应：
+Intel Mac 上的 0.1.3 对应：
 
 ```text
-https://update.electronjs.org/allen-bot-ctl/lan-li/darwin-x64/0.1.2
+https://update.electronjs.org/allen-bot-ctl/lan-li/darwin-x64/0.1.3
 ```
 
 只有 macOS 且 `app.isPackaged === true` 时才设置 feed 并检查更新。启动约 10 秒后检查一次，之后每 6 小时检查一次；这些**自动检查**没有更新时完全静默。日历窗口左栏底栏始终显示「检查更新」入口：点击后立即检查，检查中显示「正在检查…」，无更新时短暂显示「已是最新」再恢复；开发态或非 macOS 显示「开发态不检查更新」。更新下载完成后，日历窗口底栏上方会出现「新版本已就绪」提示，用户点击「重启更新」后才调用 `autoUpdater.quitAndInstall()`，不会在未同意时强制退出。已下载但尚未重启的提示会在安装完成前每次打开窗口时再次出现。
@@ -97,7 +97,7 @@ https://update.electronjs.org/allen-bot-ctl/lan-li/darwin-x64/0.1.2
 | 标题左右边距 | Electron / macOS 对纯文字状态项仍有系统级内边距，且没有公开 API 可继续压缩；需在真机确认剩余边距是否可以接受。 |
 | 紧凑窗口是否仍好用 | 窗口已缩为 580×400；需确认 6×7 格子仍容易点击，农历副文案、星期行、右侧「此刻」、底栏都不被裁切或出现滚动条。 |
 | 打包后的更新检查 | 需用 0.1.1 安装包升级到 0.1.2 实测：无更新时自动检查静默；有新版本时会下载并提示重启。由于包未签名，Squirrel.Mac 可能无法静默替换，此时应出现一次手动下载提示。 |
-| 「检查更新」入口 | 底栏左侧「登录时打开」与右侧「检查更新 / 退出栏历」应始终可见且不被裁切；点击后需确认「正在检查…」「已是最新」「新版本已就绪 / 重启更新」「无法自动更新，请手动下载」以及开发态「开发态不检查更新」各状态正确，且自动检查不会长期占着横幅。 |
+| 「检查更新」入口 | 底栏左侧「登录时打开」与右侧「检查更新 / 退出栏历」应始终可见且不被裁切；点击后需确认「正在检查…」「已是最新」「新版本已就绪 / 重启更新」「无法自动更新，请手动下载」以及开发态「开发态不检查更新」各状态正确，且自动检查不会长期占着横幅。在未签名包上，点击「检查更新」且已是最新时应显示「已是最新」，不应显示「检查失败」。 |
 | `mouse-enter` / `mouse-leave` 是否始终触发 | 已按悬停打开、离开 200ms 关闭实现；若系统完全不触发悬停事件，点击菜单栏项仍可打开，并需报告平台与系统版本。 |
 | 窗口与菜单栏缝隙 | 当前按 `y = 托盘.y + 托盘高` 无重叠对齐；若真机出现指针可穿过的缝，应将 y 改为 `托盘.y + 托盘高 - 1`，最多重叠 1px。 |
 | 未签名包的 `openAtLogin` | 需确认首次运行后开关是否真的变为打开；若系统拒绝，开关应显示真实值并在运行日志中报告。 |

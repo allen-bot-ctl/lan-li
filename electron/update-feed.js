@@ -30,11 +30,35 @@ function buildFeedUrl(options = {}) {
   return `${server}/${owner}/${repo}/${platform}-${arch}/${version}`;
 }
 
+// Interprets a probe of the update feed without doing any network I/O.
+// 204 means "no update" (up-to-date). 200 with a valid update payload means a
+// newer release exists but this unsigned build cannot apply it automatically, so
+// the caller should offer a manual download. Any other status or an invalid
+// payload is treated as a real check failure.
+function interpretFeedProbe(status, payload) {
+  if (status === 204) return { state: 'up-to-date' };
+
+  if (status === 200) {
+    const name = payload && typeof payload.name === 'string'
+      ? payload.name.trim()
+      : '';
+    const url = payload && typeof payload.url === 'string'
+      ? payload.url.trim()
+      : '';
+    if (name || url) {
+      return { state: 'manual', name: name || 'latest' };
+    }
+  }
+
+  return { state: 'error' };
+}
+
 module.exports = {
   GITHUB_OWNER,
   GITHUB_REPO,
   UPDATE_SERVER,
   RELEASES_LATEST_URL,
   HOMEPAGE_URL,
-  buildFeedUrl
+  buildFeedUrl,
+  interpretFeedProbe
 };

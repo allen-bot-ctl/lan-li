@@ -1,6 +1,6 @@
 'use strict';
 
-const { buildFeedUrl } = require('./update-feed');
+const { buildFeedUrl, interpretFeedProbe } = require('./update-feed');
 
 // The first check runs shortly after launch; later checks are deliberately
 // infrequent so the app does not hammer GitHub.
@@ -122,26 +122,31 @@ function setupAutoUpdate(options) {
     void handleUpdateError({ manual: isManualCheck() });
   });
 
-  async function probeFeedJson() {
-    if (!net || typeof net.fetch !== 'function') return '';
+  async function probeFeed() {
+    if (!net || typeof net.fetch !== 'function') return { state: 'error' };
     try {
       const response = await net.fetch(feedUrl, {
         headers,
         cache: 'no-store',
         signal: timeoutSignal(FEED_TIMEOUT_MS)
       });
-      if (response.status !== 200) {
+
+      let payload = null;
+      if (response.status === 200) {
+        try {
+          payload = await response.json();
+        } catch (error) {
+          log(`feed probe JSON parse failed: ${errorMessage(error)}`);
+          return { state: 'error' };
+        }
+      } else if (response.status !== 204) {
         log(`feed probe status ${response.status}`);
-        return '';
       }
-      const payload = await response.json();
-      const name = payload && typeof payload.name === 'string'
-        ? payload.name.trim()
-        : '';
-      return name || 'latest';
+
+      return interpretFeedProbe(response.status, payload);
     } catch (error) {
       log(`feed probe failed: ${errorMessage(error)}`);
-      return '';
+      return { state: 'error' };
     }
   }
 
@@ -171,24 +176,33 @@ function setupAutoUpdate(options) {
     }
 
     // Some unsigned builds fail before 'update-available' is emitted. Probe
-    // the same JSON feed once to confirm a newer release really exists.
+    // the same JSON feed once to confirm what the feed actually reports.
     if (probeAttempted) {
       emitStatus('error', { manual });
       return;
     }
     probeAttempted = true;
-    if (!probePromise) probePromise = probeFeedJson();
-    const name = await probePromise;
+    if (!probePromise) probePromise = probeFeed();
+    const result = await probePromise;
     probePromise = null;
-    if (!name) {
+
+    if (result && result.state === 'up-to-date') {
+      updateSeen = false;
+      updateName = '';
+      log('feed probe indicates up-to-date after updater error');
+      emitStatus('up-to-date', { manual });
+      return;
+    }
+
+    if (!result || result.state !== 'manual' || !result.name) {
       emitStatus('error', { manual });
       return;
     }
 
     updateSeen = true;
-    updateName = name;
-    announceManual(name);
-    emitStatus('manual', { manual, name });
+    updateName = result.name;
+    announceManual(result.name);
+    emitStatus('manual', { manual, name: result.name });
   }
 
   function checkNow(flags) {
