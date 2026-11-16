@@ -11,7 +11,7 @@
 | `README.md` | 标题 `# 栏历 X.Y.Z`、打包产物示例、`vX.Y.Z` 相关文案 |
 | `site/index.html` | `data-app-version` 的版本文本；如首页文案有「当前版本」也要同步 |
 
-当前版本：`0.1.11`。现有标签 `v0.1.0` … `v0.1.9`（v0.1.9 已存在；v0.1.10 与 v0.1.11 尚未打标签）。
+当前版本：`0.1.11`。现有标签 `v0.1.0` 至 `v0.1.11` 均已存在。
 
 ## 本地打包
 
@@ -74,6 +74,16 @@ git push origin v0.1.11
 - `LanLi-<ver>-mac-x64.zip.sha256`
 
 **不需要** `latest-mac.yml`；update.electronjs.org 直接读 Release 资产。Release body 与 README/主页统一写明「0.1.5 及更早版本需手动安装一次 0.1.6」，见 [updater.md](updater.md#升级路径与文档口径)。
+
+## 何时算发布完成
+
+给任何协作者的判断标准，以下全部满足后一次发布才算完成：
+
+- `npm test` 通过；
+- 标签已推送，GitHub Release 上已有 `LanLi-<ver>-mac-x64.dmg`、`LanLi-<ver>-mac-x64.zip`、`LanLi-<ver>-mac-x64.zip.sha256`；
+- 上一版本的更新接口 `https://update.electronjs.org/allen-bot-ctl/lan-li/darwin-x64/<上一版本>` 返回 200，并指向本版 zip。此时才能说上一版本可以应用内更新到本版。
+
+该接口可能延迟 10 分钟以上；资产已可下载时可以先用资产，不必卡在接口上。
 
 ## GitHub Pages
 

@@ -8,9 +8,9 @@
 
 ## 在本仓库工作
 
-- 仓库：`/workspace/projects/lan-li`，主分支 **`master`**。
+- 仓库：`https://github.com/allen-bot-ctl/lan-li`，主分支 **`master`**。
 - 当前没有书面规定的复杂分支模型；不要发明 GitFlow。修一个小问题可以直接在 `master` 上工作，较大改动建议单独分支，提交前与维护者确认。
-- 只改本仓库。不要改 EasyLens、mian-xi 等其他项目。
+- 只改本仓库，不要夹带或修改其他仓库的文件。
 - 不要新增 npm 依赖；如确有必要，先讨论，并同步 `package.json` 与 `package-lock.json`。
 
 ## 提交
@@ -21,7 +21,7 @@
   - `在日历窗口底栏显示当前版本号`
   - `将发布构建改用 macos-15-intel 以避开 arm64 队列不足`
 - 一次提交尽量只做一件事；更新逻辑、UI、文档可以分开提交。
-- 提交前至少跑 `npm test`（当前 71 个测试应全过）。
+- 提交前至少跑 `npm test`，必须全部通过。
 
 ## PR / 合并
 

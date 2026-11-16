@@ -57,7 +57,7 @@
 - `electron-builder` 始终 `--publish never`；发布由 workflow 上传资产。
 - 目前只正式发布 macOS Intel（x64）。
 - **不要重写已经有下载的发布标签**；需要修正时发新版本。
-- 不要改 EasyLens、mian-xi 等其他项目。
+- 只改本仓库，不要夹带或修改其他仓库的文件。
 - 未签名包的登录项只允许回退到 `electron/login-item.js` 管理的本应用 LaunchAgent（`app.lanli.LanLi.plist`）；不要用 login hook、crontab，也不要改动其它 LaunchAgent。
 
 ## 文档与完成标准
