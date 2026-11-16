@@ -3,6 +3,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('lanli', {
+  getVersion: () => ipcRenderer.invoke('app:version'),
   getState: () => ipcRenderer.invoke('calendar:getState'),
   setView: (view) => ipcRenderer.invoke('calendar:setView', view),
   goToday: () => ipcRenderer.invoke('calendar:goToday'),

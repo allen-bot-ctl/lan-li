@@ -27,6 +27,7 @@ const {
 const { setupAutoUpdate } = require('./updater');
 const { createLogger } = require('./logger');
 const { describeStatus } = require('./update-status');
+const { formatVersionLabel } = require('./app-version');
 const {
   RELEASES_LATEST_URL,
   HOMEPAGE_URL
@@ -378,6 +379,8 @@ function applyViewPayload(payload) {
 }
 
 function registerIpc() {
+  ipcMain.handle('app:version', () => formatVersionLabel(app.getVersion()));
+
   ipcMain.handle('calendar:getState', () => buildState());
 
   ipcMain.handle('calendar:setView', (_event, payload) => applyViewPayload(payload));

@@ -23,6 +23,7 @@ const updateMessage = document.getElementById('update-message');
 const updateAction = document.getElementById('update-action');
 const checkUpdateButton = document.getElementById('check-update-button');
 const checkUpdateLabel = document.getElementById('check-update-label');
+const appVersion = document.getElementById('app-version');
 
 let state = null;
 let yearOptionsBuilt = false;
@@ -175,6 +176,20 @@ quitButton.addEventListener('click', () => {
   api.quit();
 });
 
+function renderVersion(label) {
+  if (!appVersion) return;
+  const text = typeof label === 'string' ? label : '';
+  appVersion.textContent = text;
+  appVersion.setAttribute('aria-label', text ? `当前版本 ${text}` : '当前版本');
+}
+
+function loadVersion() {
+  if (!appVersion) return;
+  api.getVersion().then(renderVersion).catch(() => {
+    renderVersion('');
+  });
+}
+
 function showUpdateNotice(notice) {
   if (!notice || !updateBanner) return;
 
@@ -277,4 +292,5 @@ api.onTick((now) => {
   renderNow(now);
 });
 
+loadVersion();
 refreshState();
