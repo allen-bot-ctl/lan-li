@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>栏历</title>
+  <link rel="stylesheet" href="calendar.css">
+</head>
+<body>
+  <div class="app" id="app">
+    <main class="calendar-pane">
+      <header class="toolbar">
+        <select class="year-select" id="year-select" aria-label="选择公历年份"></select>
+        <div class="focus-nav">
+          <button class="nav-button" id="prev-month" type="button" aria-label="上一月">‹</button>
+          <span class="focus-label" id="focus-label">1-1</span>
+          <button class="nav-button" id="next-month" type="button" aria-label="下一月">›</button>
+        </div>
+        <button class="today-button" id="today-button" type="button">返回今天</button>
+      </header>
+
+      <div class="weekdays" aria-hidden="true">
+        <span class="weekday">周一</span>
+        <span class="weekday">周二</span>
+        <span class="weekday">周三</span>
+        <span class="weekday">周四</span>
+        <span class="weekday">周五</span>
+        <span class="weekday weekday-weekend">周六</span>
+        <span class="weekday weekday-weekend">周日</span>
+      </div>
+
+      <div class="grid" id="grid" role="grid" aria-label="月历"></div>
+
+      <footer class="footer">
+        <label class="login-label" for="login-toggle">
+          <input class="login-checkbox" id="login-toggle" type="checkbox">
+          <span>登录时打开</span>
+        </label>
+        <button class="quit-button" id="quit-button" type="button">退出栏历</button>
+      </footer>
+    </main>
+
+    <aside class="now-pane" aria-label="此刻">
+      <div class="now-time" id="now-time">00:00</div>
+      <div class="now-weekday" id="now-weekday">星期日</div>
+      <div class="now-day-block">
+        <span class="now-day" id="now-day">1</span>
+      </div>
+      <div class="now-ganzhi" id="now-ganzhi">—</div>
+      <div class="now-lunar" id="now-lunar">—</div>
+    </aside>
+  </div>
+
+  <script src="calendar.js"></script>
+</body>
+</html>

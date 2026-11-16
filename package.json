@@ -1,0 +1,60 @@
+{
+  "name": "lan-li",
+  "version": "0.1.0",
+  "private": true,
+  "description": "栏历：macOS 菜单栏公历与农历月历。",
+  "main": "electron/main.js",
+  "productName": "栏历",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test tests/*.test.js",
+    "dist": "electron-builder --mac"
+  },
+  "dependencies": {
+    "lunar-javascript": "1.7.8"
+  },
+  "devDependencies": {
+    "electron": "^31.7.7",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "app.lanli.LanLi",
+    "productName": "栏历",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "electron/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "identity": null,
+      "category": "public.app-category.utilities",
+      "artifactName": "LanLi-${version}-mac-${arch}.${ext}",
+      "icon": "electron/assets/icon.png",
+      "extendInfo": {
+        "LSUIElement": true
+      }
+    }
+  }
+}
