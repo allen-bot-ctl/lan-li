@@ -15,6 +15,9 @@ const WEEKDAY_NAMES = {
   Sat: '星期六'
 };
 
+const MENU_TITLE_PATTERN =
+  /^(?:[1-9]|1[0-2])月(?:[1-9]|[12]\d|3[01])日 (?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d$/;
+
 const DEFAULT_WORLD_CLOCK = Object.freeze({
   id: 'Asia/Shanghai',
   label: '北京'
@@ -224,6 +227,86 @@ function formatClock(now, timeZone, localTimeZone) {
   };
 }
 
+// Menu bar title in a specific IANA zone. Same format as
+// calendar.formatMenuTitle: month/day not zero-padded, HH:mm:ss zero-padded.
+// `localTimeZone` is only used when `timeZone` is unset/invalid.
+function formatMenuTitleInZone(date, timeZone, localTimeZone) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '';
+  const localZone = isValidTimeZone(localTimeZone)
+    ? localTimeZone.trim()
+    : defaultLocalTimeZone();
+  const zone = isValidTimeZone(timeZone) ? timeZone.trim() : localZone;
+  if (!isValidTimeZone(zone)) return '';
+
+  const parts = zonedParts(date, zone);
+  return `${parts.month}月${parts.day}日 ` +
+    `${pad2(parts.hour)}:${pad2(parts.minute)}:${pad2(parts.second)}`;
+}
+
+function isValidMenuTitle(text) {
+  return typeof text === 'string' && MENU_TITLE_PATTERN.test(text);
+}
+
+function canonicalTimeZone(id) {
+  if (!isValidTimeZone(id)) return null;
+  try {
+    return new Intl.DateTimeFormat('en-US', { timeZone: id.trim() }).resolvedOptions().timeZone;
+  } catch {
+    return id.trim();
+  }
+}
+
+function sameTimeZone(a, b) {
+  const ca = canonicalTimeZone(a);
+  const cb = canonicalTimeZone(b);
+  return ca !== null && cb !== null && ca === cb;
+}
+
+// Resolve the menu-bar display zone. Unset / null / invalid / unknown stored
+// zone falls back to the injected local zone. The stored zone is only kept when
+// it is a valid IANA id AND present in the clock list (by IANA id, aliases
+// equal).
+function resolveMenuBarTimeZone(storedZone, items, localTimeZone, supportedValuesOf) {
+  void supportedValuesOf;
+  const localZone = isValidTimeZone(localTimeZone)
+    ? localTimeZone.trim()
+    : defaultLocalTimeZone();
+  if (!Array.isArray(items)) return localZone;
+
+  const stored = typeof storedZone === 'string' ? storedZone.trim() : '';
+  if (!stored || !isValidTimeZone(stored)) return localZone;
+
+  const present = items.some((item) => item && sameTimeZone(item.id, stored));
+  return present ? stored : localZone;
+}
+
+function normalizeMenuBarTimeZone(storedZone, items, localTimeZone, supportedValuesOf) {
+  const resolved = resolveMenuBarTimeZone(storedZone, items, localTimeZone, supportedValuesOf);
+  const localZone = isValidTimeZone(localTimeZone)
+    ? localTimeZone.trim()
+    : defaultLocalTimeZone();
+  // Persist only an explicit non-local selection that is still present.
+  if (sameTimeZone(resolved, localZone)) return null;
+  return resolved;
+}
+
+// After removing a clock, return the next persisted menu-bar zone value:
+// cleared (null) when the removed clock was the stored menu-bar zone or the
+// stored zone is no longer present; otherwise unchanged.
+function nextMenuBarTimeZoneAfterRemove(storedZone, removedId, itemsAfterRemove, localTimeZone) {
+  const localZone = isValidTimeZone(localTimeZone)
+    ? localTimeZone.trim()
+    : defaultLocalTimeZone();
+  const stored = typeof storedZone === 'string' ? storedZone.trim() : '';
+  if (!stored || !isValidTimeZone(stored)) return null;
+  if (removedId && sameTimeZone(stored, removedId)) return null;
+
+  const present = Array.isArray(itemsAfterRemove) &&
+    itemsAfterRemove.some((item) => item && sameTimeZone(item.id, stored));
+  if (!present) return null;
+  return sameTimeZone(stored, localZone) ? null : stored;
+}
+
 function cloneClock(clock) {
   return { id: clock.id, label: clock.label };
 }
@@ -396,11 +479,19 @@ module.exports = {
   CITY_CATALOG,
   MAX_LABEL_LENGTH,
   MAX_SEARCH_RESULTS,
+  MENU_TITLE_PATTERN,
   supportedTimeZoneList,
   defaultLocalTimeZone,
   isValidTimeZone,
+  canonicalTimeZone,
+  sameTimeZone,
   formatOffsetText,
   formatClock,
+  formatMenuTitleInZone,
+  isValidMenuTitle,
+  resolveMenuBarTimeZone,
+  normalizeMenuBarTimeZone,
+  nextMenuBarTimeZoneAfterRemove,
   normalizeWorldClocks,
   addClock,
   removeClock,

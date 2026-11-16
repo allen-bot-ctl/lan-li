@@ -554,6 +554,39 @@ body {
   white-space: nowrap;
 }
 
+.clock-set-current {
+  display: inline-block;
+  max-width: 100%;
+  margin-top: 4px;
+  padding: 2px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.16);
+  color: #ffffff;
+  font-family: inherit;
+  font-size: 10px;
+  line-height: 1.2;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.clock-set-current:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.26);
+}
+
+.clock-set-current:disabled {
+  border-color: rgba(240, 193, 75, 0.9);
+  background: #f0c14b;
+  color: #7a3f08;
+  cursor: default;
+}
+
+.clock-set-current[hidden] {
+  display: none;
+}
+
 .clock-dots {
   display: flex;
   flex: 0 0 12px;

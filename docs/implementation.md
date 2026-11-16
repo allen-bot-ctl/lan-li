@@ -27,7 +27,7 @@
 
 **禁止**调用 `getOtherFestivals`。因此 2026-11-11 显示农历日（如「初三」），不显示「光棍节」；`tests/calendar.test.js` 还用源码正则确保 `calendar.js` 不出现该调用。
 
-**菜单栏标题（`formatMenuTitle`）**
+**菜单栏标题（`formatMenuTitle` / `formatMenuTitleInZone`）**
 
 ```text
 ${M}月${D}日 ${HH}:${mm}:${ss}
@@ -35,8 +35,9 @@ ${M}月${D}日 ${HH}:${mm}:${ss}
 
 - 月、日不补零：`1月5日` 合法，`01月05日` 不合法。
 - 时、分、秒补零：`09:03:07`。
-- 主进程每秒 `tray.setTitle(formatMenuTitle(now), { fontType: 'monospacedDigit' })`。
-- `isValidMenuTitle` 与 `MENU_TITLE_PATTERN` 供测试约束格式。
+- `electron/calendar.js` 的 `formatMenuTitle(date)` 保持「当前进程本地时区」语义（现有测试不变）。
+- 菜单栏实际显示用的时区由世界时钟的「设为当前」决定（见下文）。主进程每秒以及「设为当前」/删除回退后立即用 `electron/world-clocks.js` 的 `formatMenuTitleInZone(now, resolvedMenuBarTimeZone, localTimeZone)` 计算标题并 `tray.setTitle(..., { fontType: 'monospacedDigit' })`；结果仍只含日期时间，不含时区名。默认/未设置/无效时等同本地时区，因此 0.1.8 行为不变。
+- `isValidMenuTitle` 与 `MENU_TITLE_PATTERN`（`calendar.js` / `world-clocks.js`）供测试约束格式。
 
 **右侧「此刻」（`buildNow`）**
 
@@ -51,7 +52,7 @@ ${M}月${D}日 ${HH}:${mm}:${ss}
 
 ## 2. 世界时钟（`electron/world-clocks.js`）
 
-纯逻辑模块，**不 require Electron**，也不读写文件/网络；`Intl` 的 supported zones、当前时刻、本地时区都由调用方注入，`node --test` 直接 require。
+纯逻辑模块，**不 require Electron**，也不读写文件/网络；`Intl` 的 supported zones、当前时刻、本地时区都由调用方注入，`node --test` 直接 require。它还负责菜单栏显示时区的解析/回退与按指定时区格式化菜单栏标题（同一格式、无时区标识）。
 
 **城市目录与搜索**
 
@@ -76,28 +77,40 @@ ${M}月${D}日 ${HH}:${mm}:${ss}
 - `nextClock` / `prevClock` 首尾绕回；少于两个时钟时什么都不做。`selectClock` 接受 `{ index }` 或 `{ direction: 'prev' | 'next' }`。
 - `normalizeWorldClocks(stored, supportedValuesOf)` 丢弃无效/重复 id、清洗 label、夹紧 index。**只有 `stored === undefined`（偏好文件里没有该键）才种入 `北京 / Asia/Shanghai`**；`items: []` 保持空。首次运行默认北京，因为这是中文日历应用，本地时区已由菜单栏显示，默认再显示「同本地」或纽约意义不大。
 
+**菜单栏显示时区（「设为当前」）**
+
+- 偏好键：`preferences.json` 顶层 `menuBarTimeZone`（IANA id 字符串）。省略或 `null` 表示跟随系统本地时区；不要把系统本地时区写死成字符串。
+- `resolveMenuBarTimeZone(storedZone, items, localTimeZone)`：`storedZone` 未设置/`null`/非法/未知，或对应时钟已不在 `items` 中时，解析为注入的 `localTimeZone`。`storedZone` 仍在列表中且有效时解析为该 id。
+- `normalizeMenuBarTimeZone(...)`：用于持久化——当解析结果等同系统本地（按 `sameTimeZone`，`Intl` 解析别名如 `Asia/Kolkata` / `Asia/Calcutta`）时返回 `null`（跟随系统），否则返回要保存的 id。若偏好是未设置且系统本地恰为某时钟（如 `Asia/Shanghai` 的北京），该时钟已被视为「当前」。
+- `nextMenuBarTimeZoneAfterRemove(storedZone, removedId, itemsAfterRemove, localTimeZone)`：删除的时钟是当前菜单栏显示时区（或别名等同）时清除选择并回退到本地；删除其它时钟且选择仍存在时保持不变；选择已不存在时清除。主进程在同一轮 `clocks:remove` 中持久化并刷新托盘标题。
+- `formatMenuTitleInZone(date, timeZone, localTimeZone)`：按给定时区输出与 `calendar.formatMenuTitle` 相同的 `M月D日 HH:mm:ss`；`timeZone` 无效时回退本地。可跨日历日（如上海已是次日、纽约仍是前一日），这是预期行为。
+- **不改变系统时区，不调用任何系统 API。**「此刻」（`buildNow`）与月历今日高亮（`buildCells` / `isToday`）始终按系统本地日期/时间计算，主进程不会把菜单栏显示时区传给它们。
+
 **持久化**
 
 - 保存在既有 `app.getPath('userData')/preferences.json`（`userData` 在 `.app` 之外，重启与自更新都不会丢）：
   ```json
   {
     "worldClocks": {
-      "items": [{ "id": "Asia/Shanghai", "label": "北京" }],
-      "index": 0
-    }
+      "items": [{ "id": "Asia/Shanghai", "label": "北京" }, { "id": "America/New_York", "label": "纽约" }],
+      "index": 1
+    },
+    "menuBarTimeZone": "America/New_York"
   }
   ```
-- 启动时 `loadWorldClocks()` 读取并 normalize；只有键缺失时立即写回默认。每次成功 add / remove / select 后都用既有 `writePreferences` 整体写回；写失败只 warn，不崩溃。
+  跟随系统本地时区时省略 `menuBarTimeZone`（或为 `null`，读取时清理为省略）。
+- 启动时 `loadWorldClocks()` 读取并 normalize；只有 `worldClocks` 键缺失时才种入默认北京。`menuBarTimeZone` 若未设置/非法/对应时钟已不在列表中则清除并不再持久化。每次成功 add / remove / select / setMenuBar 后都用既有 `writePreferences` 整体写回；写失败只 warn，不崩溃。
 - 渲染层不碰文件、不用 `localStorage`。
 
 **IPC 与渲染层**
 
-- `calendar:getState` / `calendar:setView` / `calendar:goToday` 返回的 state 增加 `clocks: { items, index, current }`；`current` 是已格式化的当前时钟，空列表为 `null`。不下发完整 IANA 列表。
-- `calendar:onTick` 每秒发送 `{ now, clocks }`（窗口可见时），`clocks` 重新按当前时刻格式化，所以秒数会走。
-- 右栏「世界时钟」卡片只显示一个时区：城市、`HH:mm:ss`、`M月D日 星期X`、昨天/明天徽标、时差文案；`‹`/`›` 切换并绕回，少于两个时隐藏。编辑键可增删；`+` 在右栏内部打开搜索浮层，不新建窗口、不调用系统对话框。
+- `calendar:getState` / `calendar:setView` / `calendar:goToday` 返回的 state 增加 `clocks: { items, index, menuBarTimeZone, current }`；`menuBarTimeZone` 为解析后的菜单栏显示时区（未设置时为系统本地）；`current` 是已格式化的当前时钟并包含 `isMenuBar`，空列表为 `null`。不下发完整 IANA 列表。
+- `calendar:onTick` 每秒发送 `{ now, clocks }`（窗口可见时），`clocks` 与菜单栏标题都按当前时刻重新计算。
+- 右栏「世界时钟」卡片只显示一个时区：城市、`HH:mm:ss`、`M月D日 星期X`、昨天/明天徽标、时差文案，以及「设为当前 / 当前」按钮；`‹`/`›` 只切换浏览中的时钟并绕回（不自动改变菜单栏显示时区），少于两个时隐藏箭头。编辑键可增删；`+` 在右栏内部打开搜索浮层，不新建窗口、不调用系统对话框。
+- 「设为当前」点击后经 `clocks:setMenuBar` 持久化并立即刷新托盘标题；当前显示时区对应的卡片显示禁用态「当前」。比较按 IANA id 并用 `Intl` 视别名为等同。
 - 搜索浮层覆盖 `.now-pane`，列表在浮层内部滚动；已添加项禁用；点选后关闭浮层并显示新时钟。无网络、无定位。
 - 键盘 `←` / `→` 在焦点不在 `input` / `select` / `textarea` / contenteditable 时切换（点过箭头按钮后仍可继续用方向键）；卡片上的水平滚轮/触控板 `deltaX` 也切换，并有 350ms 节流。
-- 空列表显示「点击 + 添加时区」，隐藏箭头、圆点与 `×`。
+- 空列表显示「点击 + 添加时区」，隐藏箭头、圆点、`×` 与「设为当前」。`buildNow` / `buildCells` / `isToday` 仍按系统本地时间，不受菜单栏显示时区影响。
 
 **测试**：`tests/world-clocks.test.js`（城市/别名/IANA 回退搜索、重复 id、共享时区标签、DST 冬夏偏移、半小时时区、UTC、同本地、昨天/明天、列表增删/绕回/清洗、首次默认 vs 显式空列表）。
 
@@ -185,13 +198,14 @@ main.setupUpdates()
 
 | 频道 | preload API | 作用 |
 | --- | --- | --- |
-| `app:version` | `getVersion` | 返回 `formatVersionLabel(app.getVersion())`，如 `v0.1.8` |
-| `calendar:getState` | `getState` | 当前 `view`、`focus`、42 格、`now`、`clocks`、`openAtLogin` |
+| `app:version` | `getVersion` | 返回 `formatVersionLabel(app.getVersion())`，如 `v0.1.9` |
+| `calendar:getState` | `getState` | 当前 `view`、`focus`、42 格、`now`、`clocks`（含 `menuBarTimeZone` 与 `current.isMenuBar`）、`openAtLogin` |
 | `calendar:setView` | `setView` | 校验并切换浏览年月/焦点日，返回新状态 |
 | `calendar:goToday` | `goToday` | 浏览年月与焦点日回到今天，返回新状态 |
 | `clocks:add` | `addClock` | `{ id, label? }`；校验/去重后持久化，返回 `clocks` 快照 |
-| `clocks:remove` | `removeClock` | 删除当前时钟或 `{ id }`；持久化并返回快照 |
-| `clocks:select` | `selectClock` | `{ index }` 或 `{ direction: 'prev' \| 'next' }`；持久化并返回快照 |
+| `clocks:remove` | `removeClock` | 删除当前时钟或 `{ id }`；若删掉菜单栏显示时区则回退本地并刷新托盘；持久化并返回快照 |
+| `clocks:select` | `selectClock` | `{ index }` 或 `{ direction: 'prev' \| 'next' }`；持久化并返回快照（不改变菜单栏显示时区） |
+| `clocks:setMenuBar` | `setMenuBarClock` | `{ id }`（省略时取当前显示时钟）；校验后将其设为菜单栏显示时区，持久化并刷新托盘标题，返回快照；无效/不在列表中为无操作 |
 | `clocks:search` | `searchClocks` | `{ query }`；返回目录 + IANA 回退结果，已添加项带 `added` |
 | `login:set` | `setLogin` | 设置登录项并返回读回的真实值 |
 | `update:check` | `checkForUpdate` | 立即检查；返回短状态对象 |
@@ -214,7 +228,7 @@ main.setupUpdates()
 | `update:notice` | `onUpdateNotice` | `ready` / `manual` 横幅；打开窗口与加载完成时重发 |
 | `update:status` | `onUpdateStatus` | 短状态；**仅手动检查**时发送 |
 
-**preload API 全量（18 个）**：`getVersion`、`getState`、`setView`、`goToday`、`addClock`、`removeClock`、`selectClock`、`searchClocks`、`onTick`、`pointerEnter`、`pointerLeave`、`setLogin`、`quit`、`onUpdateNotice`、`checkForUpdate`、`onUpdateStatus`、`restartToUpdate`、`openLatestRelease`。
+**preload API 全量（19 个）**：`getVersion`、`getState`、`setView`、`goToday`、`addClock`、`removeClock`、`selectClock`、`setMenuBarClock`、`searchClocks`、`onTick`、`pointerEnter`、`pointerLeave`、`setLogin`、`quit`、`onUpdateNotice`、`checkForUpdate`、`onUpdateStatus`、`restartToUpdate`、`openLatestRelease`。
 
 **状态文案（`electron/update-status.js`）**
 

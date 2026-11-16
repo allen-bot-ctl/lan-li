@@ -36,7 +36,12 @@ const { formatVersionLabel } = require('./app-version');
 const {
   supportedTimeZoneList,
   defaultLocalTimeZone,
+  sameTimeZone,
   formatClock,
+  formatMenuTitleInZone,
+  resolveMenuBarTimeZone,
+  normalizeMenuBarTimeZone,
+  nextMenuBarTimeZoneAfterRemove,
   normalizeWorldClocks,
   addClock,
   removeClock,
@@ -65,6 +70,9 @@ const logger = createLogger();
 let view = null;
 let focus = null;
 let worldClocks = { items: [], index: 0 };
+// Stored IANA id for the menu-bar display zone. null/omitted means follow the
+// system local zone. The renderer never reads or writes preferences directly.
+let menuBarTimeZone = null;
 
 function todayParts() {
   const now = new Date();
@@ -129,31 +137,70 @@ function supportedTimeZones() {
   return supportedTimeZoneList();
 }
 
+function resolvedMenuBarTimeZone() {
+  return resolveMenuBarTimeZone(
+    menuBarTimeZone,
+    worldClocks.items,
+    defaultLocalTimeZone(),
+    supportedTimeZones()
+  );
+}
+
 function loadWorldClocks() {
   const preferences = readPreferences();
   const stored = preferences.worldClocks;
+  const storedMenuBar = preferences.menuBarTimeZone;
   worldClocks = normalizeWorldClocks(stored, supportedTimeZones());
+  menuBarTimeZone = normalizeMenuBarTimeZone(
+    storedMenuBar,
+    worldClocks.items,
+    defaultLocalTimeZone(),
+    supportedTimeZones()
+  );
 
   // Only a missing key means first run / an older install. An explicit empty
-  // list is the user's choice and is never re-seeded.
-  if (stored === undefined) {
-    writePreferences({ ...preferences, worldClocks });
+  // list is the user's choice and is never re-seeded. Also clear an invalid or
+  // no-longer-present menu-bar zone so it does not come back after restart.
+  const needsSeed = stored === undefined;
+  const menuBarChanged = (storedMenuBar ?? null) !== (menuBarTimeZone ?? null);
+  if (needsSeed || menuBarChanged) {
+    const next = { ...preferences, worldClocks };
+    if (menuBarTimeZone) {
+      next.menuBarTimeZone = menuBarTimeZone;
+    } else {
+      delete next.menuBarTimeZone;
+    }
+    writePreferences(next);
   }
 }
 
-function persistWorldClocks() {
+function persistWorldClockPreferences() {
   const preferences = readPreferences();
-  writePreferences({ ...preferences, worldClocks });
+  const next = { ...preferences, worldClocks };
+  if (menuBarTimeZone) {
+    next.menuBarTimeZone = menuBarTimeZone;
+  } else {
+    delete next.menuBarTimeZone;
+  }
+  writePreferences(next);
+}
+
+function persistWorldClocks() {
+  persistWorldClockPreferences();
 }
 
 function currentClockSnapshot(now = new Date()) {
   const item = worldClocks.items[worldClocks.index] || null;
   const localZone = defaultLocalTimeZone();
+  const resolvedZone = resolvedMenuBarTimeZone();
   const formatted = item ? formatClock(now, item.id, localZone) : null;
 
   return {
     items: worldClocks.items.map((clock) => ({ id: clock.id, label: clock.label })),
     index: worldClocks.index,
+    // Resolved IANA id actually used for the tray title (falls back to the
+    // system local zone when unset/invalid or the selected clock was removed).
+    menuBarTimeZone: resolvedZone,
     current: item && formatted
       ? {
           id: item.id,
@@ -163,7 +210,8 @@ function currentClockSnapshot(now = new Date()) {
           weekday: formatted.weekday,
           dayRelation: formatted.dayRelation,
           offsetText: formatted.offsetText,
-          offsetMinutes: formatted.offsetMinutes
+          offsetMinutes: formatted.offsetMinutes,
+          isMenuBar: sameTimeZone(item.id, resolvedZone)
         }
       : null
   };
@@ -447,7 +495,9 @@ function updateClock() {
   const now = new Date();
 
   if (tray) {
-    tray.setTitle(formatMenuTitle(now), { fontType: 'monospacedDigit' });
+    const title = formatMenuTitleInZone(now, resolvedMenuBarTimeZone(), defaultLocalTimeZone()) ||
+      formatMenuTitle(now);
+    tray.setTitle(title, { fontType: 'monospacedDigit' });
   }
 
   if (calendarWindow && !calendarWindow.isDestroyed() && calendarWindow.isVisible()) {
@@ -516,7 +566,55 @@ function registerIpc() {
   });
 
   ipcMain.handle('clocks:remove', (_event, payload) => {
-    return commitWorldClocks(removeClock(worldClocks, payload));
+    const previous = worldClocks;
+    const next = removeClock(worldClocks, payload);
+    if (next === previous) return currentClockSnapshot();
+
+    // Determine which id was actually removed so we only clear the menu-bar
+    // selection when that specific clock (or its alias-equivalent) is gone.
+    let removedId = null;
+    if (typeof payload === 'string') {
+      removedId = payload;
+    } else if (payload && typeof payload === 'object' && typeof payload.id === 'string') {
+      removedId = payload.id;
+    } else {
+      const removeIndex = payload && Number.isInteger(payload.index)
+        ? payload.index
+        : previous.index;
+      const removedItem = previous.items[removeIndex];
+      removedId = removedItem ? removedItem.id : null;
+    }
+
+    worldClocks = next;
+    menuBarTimeZone = nextMenuBarTimeZoneAfterRemove(
+      menuBarTimeZone,
+      removedId,
+      worldClocks.items,
+      defaultLocalTimeZone()
+    );
+    persistWorldClockPreferences();
+    updateClock();
+    return currentClockSnapshot();
+  });
+
+  ipcMain.handle('clocks:setMenuBar', (_event, payload) => {
+    const id = payload && typeof payload.id === 'string'
+      ? payload.id.trim()
+      : (worldClocks.items[worldClocks.index] && worldClocks.items[worldClocks.index].id);
+    if (!id) return currentClockSnapshot();
+
+    const target = worldClocks.items.find((item) => sameTimeZone(item.id, id));
+    if (!target) return currentClockSnapshot();
+
+    menuBarTimeZone = normalizeMenuBarTimeZone(
+      target.id,
+      worldClocks.items,
+      defaultLocalTimeZone(),
+      supportedTimeZones()
+    );
+    persistWorldClockPreferences();
+    updateClock();
+    return currentClockSnapshot();
   });
 
   ipcMain.handle('clocks:select', (_event, payload) => {

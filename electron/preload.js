@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('lanli', {
   addClock: (payload) => ipcRenderer.invoke('clocks:add', payload),
   removeClock: (payload) => ipcRenderer.invoke('clocks:remove', payload),
   selectClock: (payload) => ipcRenderer.invoke('clocks:select', payload),
+  setMenuBarClock: (payload) => ipcRenderer.invoke('clocks:setMenuBar', payload),
   searchClocks: (payload) => ipcRenderer.invoke('clocks:search', payload),
   onTick: (callback) => {
     ipcRenderer.on('calendar:onTick', (_event, payload) => callback(payload));

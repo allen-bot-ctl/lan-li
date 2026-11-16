@@ -30,6 +30,7 @@ const clockPrev = document.getElementById('clock-prev');
 const clockNext = document.getElementById('clock-next');
 const clockAdd = document.getElementById('clock-add');
 const clockRemove = document.getElementById('clock-remove');
+const clockSetCurrent = document.getElementById('clock-set-current');
 const clockPicker = document.getElementById('clock-picker');
 const clockSearch = document.getElementById('clock-search');
 const clockPickerClose = document.getElementById('clock-picker-close');
@@ -95,11 +96,15 @@ function renderClocks(snapshot) {
   clockRow.hidden = empty;
   clockEmpty.hidden = !empty;
   clockRemove.hidden = empty;
+  clockSetCurrent.hidden = empty;
   clockPrev.hidden = !canSwitch;
   clockNext.hidden = !canSwitch;
   renderClockDots(items, snapshot.index);
 
   if (empty) {
+    clockSetCurrent.disabled = false;
+    clockSetCurrent.textContent = '设为当前';
+    clockSetCurrent.removeAttribute('aria-pressed');
     clockCard.removeAttribute('aria-label');
     return;
   }
@@ -111,6 +116,10 @@ function renderClocks(snapshot) {
   clockTime.textContent = current.time;
   clockDate.textContent = `${current.date} ${current.weekday}`;
   clockOffset.textContent = current.offsetText;
+  const isMenuBar = Boolean(current.isMenuBar);
+  clockSetCurrent.disabled = isMenuBar;
+  clockSetCurrent.textContent = isMenuBar ? '当前' : '设为当前';
+  clockSetCurrent.setAttribute('aria-pressed', isMenuBar ? 'true' : 'false');
   clockCard.setAttribute(
     'aria-label',
     `${current.label} ${current.time} ${current.date} ${current.weekday} ${current.offsetText}`
@@ -441,6 +450,15 @@ clockRemove.addEventListener('click', () => {
   api.removeClock().then(renderClocks).catch(() => {
     refreshState();
   });
+});
+
+clockSetCurrent.addEventListener('click', () => {
+  if (clockSetCurrent.disabled) return;
+  api.setMenuBarClock({ id: clocks && clocks.current ? clocks.current.id : undefined })
+    .then(renderClocks)
+    .catch(() => {
+      refreshState();
+    });
 });
 
 clockPickerClose.addEventListener('click', () => {

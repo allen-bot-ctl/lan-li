@@ -6,9 +6,16 @@ const assert = require('node:assert/strict');
 const {
   DEFAULT_WORLD_CLOCK,
   CITY_CATALOG,
+  MENU_TITLE_PATTERN,
   isValidTimeZone,
+  sameTimeZone,
   formatOffsetText,
   formatClock,
+  formatMenuTitleInZone,
+  isValidMenuTitle: isValidMenuTitleInZone,
+  resolveMenuBarTimeZone,
+  normalizeMenuBarTimeZone,
+  nextMenuBarTimeZoneAfterRemove,
   normalizeWorldClocks,
   addClock,
   removeClock,
@@ -17,6 +24,8 @@ const {
   selectClock,
   searchCatalog
 } = require('../electron/world-clocks');
+
+const { isValidMenuTitle } = require('../electron/calendar');
 
 // Fixed fake "supported" list. Formatting validity still uses Node's Intl,
 // but catalog fallback search never depends on the host ICU dataset.
@@ -327,4 +336,103 @@ test('searchCatalog shows shared-zone rows but marks both as added', () => {
     addedIds: ['Asia/Shanghai']
   });
   assert.equal(shanghai[0].added, true);
+});
+
+test('resolveMenuBarTimeZone falls back to local for unset/null/invalid/unknown stored zone', () => {
+  const items = [
+    { id: 'Asia/Shanghai', label: '北京' },
+    { id: 'America/New_York', label: '纽约' }
+  ];
+  const local = 'Asia/Shanghai';
+
+  assert.equal(resolveMenuBarTimeZone(undefined, items, local, SUPPORTED), local);
+  assert.equal(resolveMenuBarTimeZone(null, items, local, SUPPORTED), local);
+  assert.equal(resolveMenuBarTimeZone('', items, local, SUPPORTED), local);
+  assert.equal(resolveMenuBarTimeZone('Mars/Olympus', items, local, SUPPORTED), local);
+  assert.equal(resolveMenuBarTimeZone('Europe/London', items, local, SUPPORTED), local);
+  assert.equal(resolveMenuBarTimeZone('America/New_York', [], local, SUPPORTED), local);
+});
+
+test('resolveMenuBarTimeZone keeps a stored zone that is still present in the clock list', () => {
+  const items = [
+    { id: 'Asia/Shanghai', label: '北京' },
+    { id: 'America/New_York', label: '纽约' }
+  ];
+
+  assert.equal(
+    resolveMenuBarTimeZone('America/New_York', items, 'Asia/Shanghai', SUPPORTED),
+    'America/New_York'
+  );
+  assert.equal(
+    normalizeMenuBarTimeZone('America/New_York', items, 'Asia/Shanghai', SUPPORTED),
+    'America/New_York'
+  );
+  // Same as local resolves to local and normalizes to null (follow system).
+  assert.equal(
+    normalizeMenuBarTimeZone('Asia/Shanghai', items, 'Asia/Shanghai', SUPPORTED),
+    null
+  );
+});
+
+test('resolveMenuBarTimeZone treats ICU aliases as equal', () => {
+  const items = [{ id: 'Asia/Kolkata', label: '新德里' }];
+  assert.equal(sameTimeZone('Asia/Kolkata', 'Asia/Calcutta'), true);
+  assert.equal(
+    resolveMenuBarTimeZone('Asia/Calcutta', items, 'Asia/Shanghai', SUPPORTED),
+    'Asia/Calcutta'
+  );
+});
+
+test('nextMenuBarTimeZoneAfterRemove clears selection when stored zone is deleted', () => {
+  const after = [{ id: 'Asia/Shanghai', label: '北京' }];
+  assert.equal(
+    nextMenuBarTimeZoneAfterRemove('America/New_York', 'America/New_York', after, 'Asia/Shanghai'),
+    null
+  );
+  // Stored zone missing from remaining list is also cleared.
+  assert.equal(
+    nextMenuBarTimeZoneAfterRemove('America/New_York', 'Asia/Tokyo', after, 'Asia/Shanghai'),
+    null
+  );
+});
+
+test('removing another clock does not clear a still-valid menu-bar selection', () => {
+  const after = [
+    { id: 'Asia/Shanghai', label: '北京' },
+    { id: 'America/New_York', label: '纽约' }
+  ];
+  assert.equal(
+    nextMenuBarTimeZoneAfterRemove('America/New_York', 'Asia/Shanghai', after, 'Asia/Tokyo'),
+    'America/New_York'
+  );
+  assert.equal(
+    nextMenuBarTimeZoneAfterRemove('America/New_York', 'Asia/Shanghai', after, 'America/New_York'),
+    null
+  );
+});
+
+test('formatMenuTitleInZone matches menu title format and handles date rollover across zones', () => {
+  const instant = new Date('2026-11-16T04:30:00.000Z');
+  const shanghai = formatMenuTitleInZone(instant, 'Asia/Shanghai', 'Asia/Shanghai');
+  const newYork = formatMenuTitleInZone(instant, 'America/New_York', 'Asia/Shanghai');
+
+  assert.equal(shanghai, '11月16日 12:30:00');
+  assert.equal(newYork, '11月15日 23:30:00');
+  assert.equal(isValidMenuTitle(shanghai), true);
+  assert.equal(isValidMenuTitle(newYork), true);
+  assert.equal(isValidMenuTitleInZone(shanghai), true);
+  assert.equal(MENU_TITLE_PATTERN.test(shanghai), true);
+});
+
+test('formatMenuTitleInZone formats the same instant in UTC and a +8 zone', () => {
+  const instant = new Date('2026-11-16T01:02:03.000Z');
+  assert.equal(formatMenuTitleInZone(instant, 'UTC', 'Asia/Shanghai'), '11月16日 01:02:03');
+  assert.equal(formatMenuTitleInZone(instant, 'Asia/Shanghai', 'Asia/Shanghai'), '11月16日 09:02:03');
+});
+
+test('formatMenuTitleInZone falls back to local zone for unset/invalid zone', () => {
+  const instant = new Date('2026-01-05T01:03:07.000Z');
+  assert.equal(formatMenuTitleInZone(instant, undefined, 'Asia/Shanghai'), '1月5日 09:03:07');
+  assert.equal(formatMenuTitleInZone(instant, null, 'Asia/Shanghai'), '1月5日 09:03:07');
+  assert.equal(formatMenuTitleInZone(instant, 'Mars/Olympus', 'Asia/Shanghai'), '1月5日 09:03:07');
 });
