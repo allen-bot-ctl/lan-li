@@ -8,6 +8,8 @@ const FIRST_CHECK_DELAY_MS = 10 * 1000;
 const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const FEED_TIMEOUT_MS = 15 * 1000;
 
+const FINAL_STATES = new Set(['up-to-date', 'manual', 'error']);
+
 function timeoutSignal(ms) {
   if (typeof AbortSignal !== 'undefined' &&
       typeof AbortSignal.timeout === 'function') {
@@ -20,27 +22,52 @@ function errorMessage(error) {
   return error && error.message ? error.message : String(error);
 }
 
+function noop() {}
+
 // Wires Electron's built-in autoUpdater to the official update.electronjs.org
 // feed. Squirrel.Mac is the thing that actually replaces the app; this module
 // only decides what to tell the user when that cannot happen.
+//
+// Unsigned macOS builds cannot use Squirrel.Mac at all: setFeedURL itself
+// throws "Could not get code signature for running application". In that case
+// we enter probe-only mode and ask the same HTTP feed directly, which still
+// answers "up-to-date" (204) or "a newer release exists" (200 JSON).
 function setupAutoUpdate(options) {
   const {
     app,
     autoUpdater,
     net,
-    onReady,
-    onManual,
+    onReady = noop,
+    onManual = noop,
     onStatus,
-    isNotified,
-    markNotified,
+    isNotified = () => false,
+    markNotified = noop,
     logger
   } = options;
+
+  const platform = options.platform || process.platform;
+  const arch = options.arch || process.arch;
+  const schedule = options.schedule !== false;
+  const setTimeoutFn = options.setTimeout || setTimeout;
+  const clearTimeoutFn = options.clearTimeout || clearTimeout;
+  const setIntervalFn = options.setInterval || setInterval;
+  const clearIntervalFn = options.clearInterval || clearInterval;
+  const probeTimeoutMs = Number.isFinite(options.probeTimeoutMs)
+    ? options.probeTimeoutMs
+    : FEED_TIMEOUT_MS;
 
   const log = (message) => {
     if (typeof logger === 'function') logger(message);
   };
 
+  let stopped = false;
+
   function emitStatus(state, extra) {
+    if (stopped) return;
+    const manual = Boolean(extra && extra.manual === true);
+    if (manual && FINAL_STATES.has(state)) {
+      log(`manual check result: ${state}`);
+    }
     if (typeof onStatus !== 'function') return;
     try {
       onStatus({ state, ...extra });
@@ -50,6 +77,8 @@ function setupAutoUpdate(options) {
   }
 
   const disabled = {
+    mode: 'disabled',
+    setupError: null,
     feedUrl: null,
     checkNow(flags) {
       if (flags && flags.manual === true) {
@@ -61,20 +90,18 @@ function setupAutoUpdate(options) {
   };
 
   // Development runs and non-macOS platforms must stay completely quiet.
-  if (process.platform !== 'darwin' || app.isPackaged !== true) {
+  if (platform !== 'darwin' || app.isPackaged !== true) {
     return disabled;
   }
 
-  const feedUrl = buildFeedUrl({
-    platform: process.platform,
-    arch: process.arch,
-    version: app.getVersion()
-  });
+  const version = app.getVersion();
+  const feedUrl = buildFeedUrl({ platform, arch, version });
   const headers = {
-    'User-Agent': `LanLi/${app.getVersion()} (${process.platform}: ${process.arch})`
+    'User-Agent': `LanLi/${version} (${platform}: ${arch})`
   };
 
-  let stopped = false;
+  let mode = 'squirrel';
+  let setupError = null;
   let updateSeen = false;
   let updateName = '';
   let probePromise = null;
@@ -85,42 +112,20 @@ function setupAutoUpdate(options) {
 
   const isManualCheck = () => checkSource === 'manual';
 
-  log(`feed ${feedUrl}`);
-  autoUpdater.setFeedURL({ url: feedUrl, headers, serverType: 'default' });
-
-  autoUpdater.on('checking-for-update', () => {
-    probeAttempted = false;
-    log('checking for update');
-  });
-
-  autoUpdater.on('update-available', () => {
-    updateSeen = true;
-    log('update available; downloading');
-    emitStatus('downloading', { manual: isManualCheck() });
-  });
-
-  autoUpdater.on('update-not-available', () => {
-    updateSeen = false;
-    updateName = '';
-    log('update not available');
-    emitStatus('up-to-date', { manual: isManualCheck() });
-  });
-
-  autoUpdater.on('update-downloaded', (_event, _notes, releaseName) => {
-    updateSeen = true;
-    updateName = String(releaseName || '').trim();
-    log(`update downloaded: ${updateName || 'unknown release'}`);
-    // A downloaded update waits for the user to click 「重启更新」. Unlike the
-    // one-time manual-download reminder, this notice must be shown again every
-    // time the window opens until the app is actually replaced.
-    onReady({ name: updateName });
-    emitStatus('ready', { manual: isManualCheck(), name: updateName });
-  });
-
-  autoUpdater.on('error', (error) => {
-    log(`update error: ${errorMessage(error)}`);
-    void handleUpdateError({ manual: isManualCheck() });
-  });
+  function announceManual(name) {
+    const key = `manual:${name || version}`;
+    if (isNotified(key)) {
+      log(`manual notice already shown for ${key}`);
+      return;
+    }
+    markNotified(key);
+    log(`manual update notice for ${name || version}`);
+    try {
+      onManual({ name });
+    } catch (error) {
+      log(`manual callback failed: ${errorMessage(error)}`);
+    }
+  }
 
   async function probeFeed() {
     if (!net || typeof net.fetch !== 'function') return { state: 'error' };
@@ -128,7 +133,7 @@ function setupAutoUpdate(options) {
       const response = await net.fetch(feedUrl, {
         headers,
         cache: 'no-store',
-        signal: timeoutSignal(FEED_TIMEOUT_MS)
+        signal: timeoutSignal(probeTimeoutMs)
       });
 
       let payload = null;
@@ -150,15 +155,107 @@ function setupAutoUpdate(options) {
     }
   }
 
-  function announceManual(name) {
-    const key = `manual:${name || app.getVersion()}`;
-    if (isNotified(key)) {
-      log(`manual notice already shown for ${key}`);
+  // Concurrent manual clicks (and an automatic timer firing at the same time)
+  // share one in-flight fetch. Each caller still emits its own final state.
+  function startProbe() {
+    if (!probePromise) {
+      probePromise = probeFeed().then(
+        (result) => {
+          probePromise = null;
+          return result;
+        },
+        (error) => {
+          probePromise = null;
+          log(`feed probe rejected: ${errorMessage(error)}`);
+          return { state: 'error' };
+        }
+      );
+    }
+    return probePromise;
+  }
+
+  function applyProbeResult(result, manual) {
+    if (stopped) return;
+
+    if (result && result.state === 'up-to-date') {
+      updateSeen = false;
+      updateName = '';
+      log('feed probe indicates up-to-date');
+      emitStatus('up-to-date', { manual });
       return;
     }
-    markNotified(key);
-    log(`manual update notice for ${name || app.getVersion()}`);
-    onManual({ name });
+
+    if (result && result.state === 'manual' && result.name) {
+      updateSeen = true;
+      updateName = result.name;
+      announceManual(result.name);
+      emitStatus('manual', { manual, name: result.name });
+      return;
+    }
+
+    log('feed probe did not determine update status');
+    emitStatus('error', { manual });
+  }
+
+  async function runProbeCheck(manual) {
+    const result = await startProbe();
+    applyProbeResult(result, manual);
+  }
+
+  function attachAutoUpdaterListeners() {
+    autoUpdater.on('checking-for-update', () => {
+      probeAttempted = false;
+      log('checking for update');
+    });
+
+    autoUpdater.on('update-available', () => {
+      updateSeen = true;
+      log('update available; downloading');
+      emitStatus('downloading', { manual: isManualCheck() });
+    });
+
+    autoUpdater.on('update-not-available', () => {
+      updateSeen = false;
+      updateName = '';
+      log('update not available');
+      emitStatus('up-to-date', { manual: isManualCheck() });
+    });
+
+    autoUpdater.on('update-downloaded', (_event, _notes, releaseName) => {
+      updateSeen = true;
+      updateName = String(releaseName || '').trim();
+      log(`update downloaded: ${updateName || 'unknown release'}`);
+      // A downloaded update waits for the user to click 「重启更新」. Unlike the
+      // one-time manual-download reminder, this notice must be shown again every
+      // time the window opens until the app is actually replaced.
+      try {
+        onReady({ name: updateName });
+      } catch (error) {
+        log(`ready callback failed: ${errorMessage(error)}`);
+      }
+      emitStatus('ready', { manual: isManualCheck(), name: updateName });
+    });
+
+    autoUpdater.on('error', (error) => {
+      log(`update error: ${errorMessage(error)}`);
+      void handleUpdateError({ manual: isManualCheck() });
+    });
+  }
+
+  log(`feed ${feedUrl}`);
+
+  // An unsigned build makes setFeedURL throw before any 'error' event can
+  // fire, so setup must survive it and fall back to probing the feed itself.
+  try {
+    autoUpdater.setFeedURL({ url: feedUrl, headers, serverType: 'default' });
+    attachAutoUpdaterListeners();
+  } catch (error) {
+    setupError = error;
+    mode = 'probe-only';
+    log(
+      `autoUpdater setup failed: ${errorMessage(error)}; ` +
+      'entering probe-only mode'
+    );
   }
 
   async function handleUpdateError(context) {
@@ -167,8 +264,8 @@ function setupAutoUpdate(options) {
     const manual = Boolean(context && context.manual);
 
     // A known update plus an updater error almost always means Squirrel.Mac
-    // could not verify/replace this unsigned build. Offer the manual download
-    // once per release instead of repeating an error.
+    // could not verify/replace this build. Offer the manual download once per
+    // release instead of repeating an error.
     if (updateSeen && updateName) {
       announceManual(updateName);
       emitStatus('manual', { manual, name: updateName });
@@ -177,40 +274,32 @@ function setupAutoUpdate(options) {
 
     // Some unsigned builds fail before 'update-available' is emitted. Probe
     // the same JSON feed once to confirm what the feed actually reports.
+    // Repeated errors while that probe is pending/done must not emit a second,
+    // conflicting final state.
     if (probeAttempted) {
-      emitStatus('error', { manual });
+      log('ignoring repeated updater error; feed probe already attempted');
       return;
     }
     probeAttempted = true;
-    if (!probePromise) probePromise = probeFeed();
-    const result = await probePromise;
-    probePromise = null;
 
-    if (result && result.state === 'up-to-date') {
-      updateSeen = false;
-      updateName = '';
-      log('feed probe indicates up-to-date after updater error');
-      emitStatus('up-to-date', { manual });
-      return;
-    }
-
-    if (!result || result.state !== 'manual' || !result.name) {
-      emitStatus('error', { manual });
-      return;
-    }
-
-    updateSeen = true;
-    updateName = result.name;
-    announceManual(result.name);
-    emitStatus('manual', { manual, name: result.name });
+    const result = await startProbe();
+    applyProbeResult(result, manual);
   }
 
   function checkNow(flags) {
     const manual = Boolean(flags && flags.manual === true);
     if (stopped) return { state: 'error', stopped: true };
 
+    if (mode === 'probe-only') {
+      log(`${manual ? 'manual' : 'automatic'} check start`);
+      if (manual) emitStatus('checking', { manual: true });
+      void runProbeCheck(manual);
+      return { state: 'checking', mode };
+    }
+
     checkSource = manual ? 'manual' : 'auto';
     probeAttempted = false;
+    log(`${manual ? 'manual' : 'automatic'} check start`);
     if (manual) emitStatus('checking', { manual: true });
     try {
       autoUpdater.checkForUpdates();
@@ -222,16 +311,20 @@ function setupAutoUpdate(options) {
     return { state: 'checking' };
   }
 
-  firstCheckTimer = setTimeout(checkNow, FIRST_CHECK_DELAY_MS);
-  checkTimer = setInterval(checkNow, CHECK_INTERVAL_MS);
+  if (schedule) {
+    firstCheckTimer = setTimeoutFn(checkNow, FIRST_CHECK_DELAY_MS);
+    checkTimer = setIntervalFn(checkNow, CHECK_INTERVAL_MS);
+  }
 
   return {
+    mode,
+    setupError: setupError ? errorMessage(setupError) : null,
     feedUrl,
     checkNow,
     stop() {
       stopped = true;
-      if (firstCheckTimer) clearTimeout(firstCheckTimer);
-      if (checkTimer) clearInterval(checkTimer);
+      if (firstCheckTimer) clearTimeoutFn(firstCheckTimer);
+      if (checkTimer) clearIntervalFn(checkTimer);
       firstCheckTimer = null;
       checkTimer = null;
     }

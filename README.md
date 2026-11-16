@@ -1,4 +1,4 @@
-# 栏历 0.1.3
+# 栏历 0.1.4
 
 栏历是一个 macOS 菜单栏应用：菜单栏常驻显示系统本地日期与时间（不再显示图标，只显示 `M月D日 HH:mm:ss`）；指针指向菜单栏项时，在正下方弹出只含公历月历、农历、库内节气与节日、右侧「此刻」信息的面板。日期计算完全在本机完成；打包版只会在启动后向 GitHub Release 检查更新，不上传任何数据。日历窗口左栏底栏始终有「检查更新」入口。
 
@@ -27,7 +27,7 @@ npm start
 npm test
 ```
 
-使用 Node 内置 test runner，覆盖格子次要文字、42 格网格、今日/周末/节日标记、菜单栏标题格式、自动更新 feed URL 的拼接，以及「检查更新」状态文案的映射。
+使用 Node 内置 test runner，覆盖格子次要文字、42 格网格、今日/周末/节日标记、菜单栏标题格式、自动更新 feed URL 的拼接、「检查更新」状态文案的映射，以及更新器在 `setFeedURL` 抛异常时进入仅探测模式、204/200/网络失败三种探测结果、并发手动检查共享一次请求、Squirrel 报错后的 probe 回落，还有文件日志的 ISO 时间戳与 `main.old.log` 轮转。
 
 ## 打包
 
@@ -39,10 +39,10 @@ npm run dist
 
 `electron-builder` 会生成未签名的 dmg 与 zip，包含 x64 和 arm64：
 
-- `dist/LanLi-0.1.3-mac-x64.dmg`
-- `dist/LanLi-0.1.3-mac-x64.zip`
-- `dist/LanLi-0.1.3-mac-arm64.dmg`
-- `dist/LanLi-0.1.3-mac-arm64.zip`
+- `dist/LanLi-0.1.4-mac-x64.dmg`
+- `dist/LanLi-0.1.4-mac-x64.zip`
+- `dist/LanLi-0.1.4-mac-arm64.dmg`
+- `dist/LanLi-0.1.4-mac-arm64.zip`
 
 本轮 `build.mac.identity` 为 `null`，不做代码签名与公证。GitHub Actions 的 Release 工作流只构建并发布 macOS Intel（x64）的 dmg 与 zip；本地执行 `npm run dist` 仍可能同时打出 x64 和 arm64。自动更新服务读取 Release 里的 `LanLi-<version>-mac-x64.zip`，不需要额外上传 `latest-mac.yml`。
 
@@ -54,15 +54,23 @@ npm run dist
 https://update.electronjs.org/allen-bot-ctl/lan-li/${process.platform}-${process.arch}/${app.getVersion()}
 ```
 
-Intel Mac 上的 0.1.3 对应：
+Intel Mac 上的 0.1.4 对应：
 
 ```text
-https://update.electronjs.org/allen-bot-ctl/lan-li/darwin-x64/0.1.3
+https://update.electronjs.org/allen-bot-ctl/lan-li/darwin-x64/0.1.4
 ```
 
 只有 macOS 且 `app.isPackaged === true` 时才设置 feed 并检查更新。启动约 10 秒后检查一次，之后每 6 小时检查一次；这些**自动检查**没有更新时完全静默。日历窗口左栏底栏始终显示「检查更新」入口：点击后立即检查，检查中显示「正在检查…」，无更新时短暂显示「已是最新」再恢复；开发态或非 macOS 显示「开发态不检查更新」。更新下载完成后，日历窗口底栏上方会出现「新版本已就绪」提示，用户点击「重启更新」后才调用 `autoUpdater.quitAndInstall()`，不会在未同意时强制退出。已下载但尚未重启的提示会在安装完成前每次打开窗口时再次出现。
 
-当前安装包未签名，Squirrel.Mac 经常无法验证并静默替换应用。如果更新器报错但 feed 仍显示存在新版本，应用会改为显示一次「无法自动更新，请手动下载」，点击后打开最新 Release；同一版本不会反复提醒。此时请从 [最新 Release](https://github.com/allen-bot-ctl/lan-li/releases/latest) 或[主页](https://allen-bot-ctl.github.io/lan-li/)手动下载安装包。
+未签名包无法使用 Squirrel.Mac：`autoUpdater.setFeedURL` 会因缺少代码签名直接抛出 `Could not get code signature for running application`，Squirrel 也不会替换应用。0.1.4 起，初始化遇到该错误不会再让更新器失效，而是进入仅探测 feed 模式：应用直接请求同一个 update.electronjs.org 地址，`204` 表示已是最新并显示「已是最新」，`200` JSON 表示有新版本并显示「需手动下载」，网络异常或超时则显示「检查失败」。手动点击「检查更新」会先显示「正在检查…」，重复点击共享同一次请求。
+
+新版本仍需手动下载安装，不会自动替换当前应用。有新版本时请从 [最新 Release](https://github.com/allen-bot-ctl/lan-li/releases/latest) 或[主页](https://allen-bot-ctl.github.io/lan-li/)下载。Squirrel 能下载但无法安装的旧路径仍会显示一次「无法自动更新，请手动下载」；同一版本不会反复提醒。
+
+### 运行日志
+
+更新检查与错误会写入 `~/Library/Logs/栏历/main.log`（即 `app.getPath('logs')/main.log`），每行带 ISO 时间戳和级别，同时打印到终端。日志超过 1MB 时会在下次写入前轮转为同目录的 `main.old.log`。手动检查的开始和最终状态也会各写一行，例如 `manual check start`、`manual check result: up-to-date`。
+
+排查「检查更新」问题时，请把 `~/Library/Logs/栏历/main.log` 发给开发者；其中不会包含日历内容或个人数据。
 
 ## 未签名包的 Gatekeeper 处理
 

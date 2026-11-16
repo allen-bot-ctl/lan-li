@@ -25,6 +25,7 @@ const {
   buildNow
 } = require('./calendar');
 const { setupAutoUpdate } = require('./updater');
+const { createLogger } = require('./logger');
 const { describeStatus } = require('./update-status');
 const {
   RELEASES_LATEST_URL,
@@ -39,7 +40,10 @@ let calendarWindow = null;
 let clockTimer = null;
 let closeTimer = null;
 let updater = null;
+let updateSetupError = null;
 let updateNotice = null;
+
+const logger = createLogger();
 
 let view = null;
 let focus = null;
@@ -231,11 +235,11 @@ function setupUpdates() {
       autoUpdater,
       net,
       onReady: ({ name }) => {
-        console.log('[栏历] 新版本已下载：' + (name || '未知版本'));
+        logger.info('[栏历] 新版本已下载：' + (name || '未知版本'));
         showUpdateNotice({ mode: 'ready', name });
       },
       onManual: ({ name }) => {
-        console.warn('[栏历] 无法自动应用更新' +
+        logger.warn('[栏历] 无法自动应用更新' +
           (name ? '（' + name + '）' : '') + '，改为提示手动下载。');
         showUpdateNotice({
           mode: 'manual',
@@ -247,12 +251,13 @@ function setupUpdates() {
       onStatus: handleUpdateStatus,
       isNotified: hasUpdateNotification,
       markNotified: markUpdateNotification,
-      logger: (message) => console.log('[栏历] 更新：' + message)
+      logger: (message) => logger.info('[栏历] 更新：' + message)
     });
+    updateSetupError = null;
   } catch (error) {
     updater = null;
-    console.warn('[栏历] 初始化自动更新失败：' +
-      (error && error.message ? error.message : error));
+    updateSetupError = error && error.message ? error.message : String(error);
+    logger.error('[栏历] 初始化自动更新失败：' + updateSetupError);
   }
 }
 
@@ -413,7 +418,11 @@ function registerIpc() {
   });
 
   ipcMain.handle('update:check', () => {
-    if (!updater) return describeStatus({ state: 'error' });
+    if (!updater) {
+      const reason = updateSetupError || 'updater not initialized';
+      logger.warn('update:check but updater unavailable: ' + reason);
+      return describeStatus({ state: 'error' });
+    }
     return describeStatus(updater.checkNow({ manual: true }));
   });
 
@@ -425,7 +434,7 @@ function registerIpc() {
 
   ipcMain.on('update:openLatest', () => {
     shell.openExternal(RELEASES_LATEST_URL).catch((error) => {
-      console.warn('[栏历] 打开最新 Release 失败：' +
+      logger.warn('[栏历] 打开最新 Release 失败：' +
         (error && error.message ? error.message : error));
     });
   });
