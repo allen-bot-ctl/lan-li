@@ -2,6 +2,14 @@
 
 栏历是一个 macOS 菜单栏应用：菜单栏常驻显示系统本地日期与时间；指针指向菜单栏项时，在正下方弹出只含公历月历、农历、库内节气与节日、右侧「此刻」信息的面板。完全离线，不发起网络请求。
 
+## 下载与主页
+
+- 项目主页：https://allen-bot-ctl.github.io/lan-li/
+- 最新安装包：https://github.com/allen-bot-ctl/lan-li/releases/latest
+- 源码仓库：https://github.com/allen-bot-ctl/lan-li
+
+当前 GitHub Release 与主页只提供 macOS Intel（x64）的 `.dmg`；其他平台等验收通过后再扩展。GitHub Actions 打出的正式下载目前只有 Intel x64。安装包未签名，首次打开可能被 Gatekeeper 拦截，处理方式见下文。
+
 ## 开发运行
 
 需要 Node.js 20 或更高版本，并且只能在 macOS 上运行。
@@ -36,7 +44,7 @@ npm run dist
 - `dist/LanLi-0.1.0-mac-arm64.dmg`
 - `dist/LanLi-0.1.0-mac-arm64.zip`
 
-本轮 `build.mac.identity` 为 `null`，不做代码签名与公证，也不包含自动更新。
+本轮 `build.mac.identity` 为 `null`，不做代码签名与公证，也不包含自动更新。GitHub Actions 的 Release 工作流只构建并发布 macOS Intel（x64）的 dmg 与 zip；本地执行 `npm run dist` 仍可能同时打出 x64 和 arm64。
 
 ## 未签名包的 Gatekeeper 处理
 

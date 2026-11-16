@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>栏历 — macOS 菜单栏日历</title>
+    <meta
+      name="description"
+      content="栏历是 macOS 菜单栏日历：菜单栏显示日期与时间，悬停展开公历、农历、节气与节日。完全离线。当前提供 macOS Intel（x64）安装包。"
+    />
+    <meta name="theme-color" content="#faf6ef" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="栏历 — macOS 菜单栏日历" />
+    <meta
+      property="og:description"
+      content="菜单栏显示日期与时间，悬停展开公历、农历、节气与节日。完全离线。当前提供 macOS Intel（x64）安装包。"
+    />
+    <meta property="og:url" content="https://allen-bot-ctl.github.io/lan-li/" />
+    <meta property="og:image" content="https://allen-bot-ctl.github.io/lan-li/assets/icon.png" />
+    <link rel="canonical" href="https://allen-bot-ctl.github.io/lan-li/" />
+    <link rel="icon" type="image/png" href="./assets/icon.png" />
+    <link rel="apple-touch-icon" href="./assets/icon.png" />
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="./main.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">跳到主要内容</a>
+
+    <header class="site-header">
+      <div class="wrap header-inner">
+        <a class="brand" href="./" aria-label="栏历主页">
+          <img src="./assets/icon.png" alt="" width="30" height="30" />
+          <span>栏历</span>
+        </a>
+        <nav class="site-nav" aria-label="主导航">
+          <a href="#features">功能</a>
+          <a href="#download">下载</a>
+          <a class="nav-source" href="https://github.com/allen-bot-ctl/lan-li" target="_blank" rel="noreferrer">
+            源码
+          </a>
+        </nav>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="hero">
+        <div class="wrap hero-inner">
+          <div class="hero-copy">
+            <p class="eyebrow">macOS 菜单栏应用</p>
+            <h1>栏历</h1>
+            <p class="tagline">时间在栏上，日子在眼前。</p>
+            <p class="lede">
+              菜单栏常驻显示 <span class="literal">M月D日 HH:mm:ss</span>。指针移到菜单栏项上，正下方展开当月月历：公历、农历、库内节气与节日，右侧是「此刻」信息。
+            </p>
+            <p class="lede muted">
+              不做天气、设置页、备忘或广告。所有日期计算都在本机完成，应用完全离线。
+            </p>
+            <div class="hero-actions">
+              <a
+                class="btn btn-primary"
+                id="download-latest"
+                href="https://github.com/allen-bot-ctl/lan-li/releases/latest"
+              >
+                下载 macOS Intel 安装包
+              </a>
+              <a class="btn btn-ghost" href="https://github.com/allen-bot-ctl/lan-li" target="_blank" rel="noreferrer">
+                查看源码
+              </a>
+            </div>
+            <p class="hero-meta">当前版本 <span data-app-version>0.1.0</span> · 仅 macOS Intel（x64）· 未签名</p>
+          </div>
+
+          <div class="hero-visual" aria-hidden="true">
+            <div class="menubar">
+              <div class="menubar-left">
+                <span class="menubar-apple"></span>
+                <span>栏历</span>
+                <span>文件</span>
+                <span>编辑</span>
+              </div>
+              <div class="menubar-right">
+                <span class="menubar-clock">11月16日 09:41:08</span>
+              </div>
+            </div>
+            <div class="popover">
+              <div class="popover-head">
+                <div>
+                  <p class="popover-month">2026年11月</p>
+                  <p class="popover-lunar">农历十月初七 · 立冬后</p>
+                </div>
+                <div class="popover-now">
+                  <span class="now-time">09:41</span>
+                  <span class="now-label">星期一</span>
+                </div>
+              </div>
+              <div class="weekdays">
+                <span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span>
+              </div>
+              <div class="days">
+                <span class="day outside"><b>26</b><i>十六</i></span>
+                <span class="day outside"><b>27</b><i>十七</i></span>
+                <span class="day outside"><b>28</b><i>十八</i></span>
+                <span class="day outside"><b>29</b><i>十九</i></span>
+                <span class="day outside"><b>30</b><i>二十</i></span>
+                <span class="day outside"><b>31</b><i>廿一</i></span>
+                <span class="day"><b>1</b><i>廿二</i></span>
+                <span class="day"><b>2</b><i>廿三</i></span>
+                <span class="day"><b>3</b><i>廿四</i></span>
+                <span class="day"><b>4</b><i>廿五</i></span>
+                <span class="day"><b>5</b><i>廿六</i></span>
+                <span class="day"><b>6</b><i>廿七</i></span>
+                <span class="day festival"><b>7</b><i>立冬</i></span>
+                <span class="day weekend"><b>8</b><i>廿九</i></span>
+                <span class="day weekend"><b>9</b><i>十月</i></span>
+                <span class="day"><b>10</b><i>初二</i></span>
+                <span class="day"><b>11</b><i>初三</i></span>
+                <span class="day"><b>12</b><i>初四</i></span>
+                <span class="day"><b>13</b><i>初五</i></span>
+                <span class="day"><b>14</b><i>初六</i></span>
+                <span class="day weekend"><b>15</b><i>初七</i></span>
+                <span class="day weekend today"><b>16</b><i>初八</i></span>
+                <span class="day"><b>17</b><i>初九</i></span>
+                <span class="day"><b>18</b><i>初十</i></span>
+                <span class="day"><b>19</b><i>十一</i></span>
+                <span class="day"><b>20</b><i>十二</i></span>
+                <span class="day"><b>21</b><i>十三</i></span>
+                <span class="day weekend"><b>22</b><i>小雪</i></span>
+                <span class="day weekend"><b>23</b><i>十五</i></span>
+                <span class="day"><b>24</b><i>十六</i></span>
+                <span class="day"><b>25</b><i>十七</i></span>
+                <span class="day"><b>26</b><i>十八</i></span>
+                <span class="day"><b>27</b><i>十九</i></span>
+                <span class="day"><b>28</b><i>二十</i></span>
+                <span class="day weekend"><b>29</b><i>廿一</i></span>
+                <span class="day weekend"><b>30</b><i>廿二</i></span>
+                <span class="day outside"><b>1</b><i>廿三</i></span>
+                <span class="day outside"><b>2</b><i>廿四</i></span>
+                <span class="day outside"><b>3</b><i>廿五</i></span>
+                <span class="day outside"><b>4</b><i>廿六</i></span>
+                <span class="day outside"><b>5</b><i>廿七</i></span>
+                <span class="day outside"><b>6</b><i>廿八</i></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="features">
+        <div class="wrap">
+          <p class="eyebrow">功能</p>
+          <h2>只把日历放在该在的位置</h2>
+          <div class="feature-grid">
+            <article class="feature">
+              <span class="feature-mark">01</span>
+              <h3>菜单栏常驻</h3>
+              <p>标题固定为 <span class="literal">M月D日 HH:mm:ss</span>，不额外占用 Dock 或桌面窗口。</p>
+            </article>
+            <article class="feature">
+              <span class="feature-mark">02</span>
+              <h3>悬停即见</h3>
+              <p>指针移到菜单栏项上，月历在正下方展开；离开后自动收起，也可以点击打开。</p>
+            </article>
+            <article class="feature">
+              <span class="feature-mark">03</span>
+              <h3>完全离线</h3>
+              <p>公历、农历、二十四节气与节日都来自本地库，不发起网络请求，不上传任何数据。</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section section-tinted" id="download">
+        <div class="wrap download-wrap">
+          <div class="download-copy">
+            <p class="eyebrow">下载</p>
+            <h2>macOS Intel（x64）</h2>
+            <p class="lede">
+              从最新 GitHub Release 获取 <span class="literal">.dmg</span> 安装包。打开后把「栏历」拖入「应用程序」。
+            </p>
+            <p class="release-status" id="release-status" aria-live="polite">正在读取最新版本…</p>
+            <p class="release-meta" id="release-meta" hidden></p>
+            <p class="release-fallback" id="release-fallback" hidden></p>
+            <noscript>
+              <p class="release-fallback">
+                需要 JavaScript 才能自动读取最新安装包。也可以直接访问
+                <a href="https://github.com/allen-bot-ctl/lan-li/releases/latest">最新 Release 页面</a>。
+              </p>
+            </noscript>
+          </div>
+          <div class="download-card">
+            <img src="./assets/icon.png" alt="栏历应用图标" width="72" height="72" />
+            <p class="download-title">栏历</p>
+            <p class="download-sub">macOS Intel（x64）· 未签名</p>
+            <a
+              class="btn btn-primary btn-block"
+              id="download-latest-card"
+              href="https://github.com/allen-bot-ctl/lan-li/releases/latest"
+            >
+              前往最新 Release
+            </a>
+            <a
+              class="text-link"
+              href="https://github.com/allen-bot-ctl/lan-li/releases/latest"
+              target="_blank"
+              rel="noreferrer"
+            >
+              查看 Release 页面
+            </a>
+            <p class="gatekeeper">
+              当前安装包未签名，不是 Developer ID，也未公证。首次打开若被 Gatekeeper 拦截：在 Finder 中右键「栏历」选择「打开」，或到「系统设置 → 隐私与安全性」选择「仍要打开」。
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="wrap about-wrap">
+          <div>
+            <p class="eyebrow">说明</p>
+            <h2>当前范围</h2>
+          </div>
+          <div class="about-copy">
+            <p>本轮 GitHub Release 与主页只提供 macOS Intel（x64）的 <span class="literal">.dmg</span>，zip 仅作备用。其他平台等验收通过后再扩展。</p>
+            <p>本地执行 <span class="literal">npm run dist</span> 仍可能同时打出 x64 与 arm64 包；GitHub Actions 打出的正式下载目前只有 Intel x64。</p>
+            <p>源码、问题与开发说明都在 <a href="https://github.com/allen-bot-ctl/lan-li" target="_blank" rel="noreferrer">allen-bot-ctl/lan-li</a>。</p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="wrap footer-inner">
+        <p>栏历 · macOS 菜单栏日历</p>
+        <nav aria-label="页脚链接">
+          <a href="https://allen-bot-ctl.github.io/lan-li/">主页</a>
+          <a href="https://github.com/allen-bot-ctl/lan-li" target="_blank" rel="noreferrer">源码仓库</a>
+          <a href="https://github.com/allen-bot-ctl/lan-li/releases/latest" target="_blank" rel="noreferrer">最新 Release</a>
+        </nav>
+      </div>
+    </footer>
+  </body>
+</html>
