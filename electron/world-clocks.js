@@ -173,6 +173,64 @@ function formatClock(now, timeZone) {
   };
 }
 
+// Compact wall-clock time for the right-hand clock list: HH:mm, no seconds.
+function formatClockTime(now, timeZone) {
+  if (!(now instanceof Date) || Number.isNaN(now.getTime())) return '';
+  if (!isValidTimeZone(timeZone)) return '';
+
+  const zone = zonedParts(now, timeZone);
+  return `${pad2(zone.hour)}:${pad2(zone.minute)}`;
+}
+
+function offsetMinutesAt(now, timeZone) {
+  const zone = zonedParts(now, timeZone);
+  const wallAsUtc = Date.UTC(
+    zone.year,
+    zone.month - 1,
+    zone.day,
+    zone.hour,
+    zone.minute,
+    zone.second
+  );
+  return Math.round((wallAsUtc - now.getTime()) / 60000);
+}
+
+function dayNumber(parts) {
+  return Math.round(Date.UTC(parts.year, parts.month - 1, parts.day) / 86400000);
+}
+
+// Human-readable offset against the host zone, e.g. +1 小时 / −13 小时.
+// Half-hour zones keep one decimal so 新德里 reads +5.5 小时. Returns an empty
+// string when the two zones agree.
+function formatClockOffset(offsetMinutes) {
+  if (!Number.isFinite(offsetMinutes) || offsetMinutes === 0) return '';
+  const sign = offsetMinutes > 0 ? '+' : '−';
+  const hours = Math.round((Math.abs(offsetMinutes) / 60) * 10) / 10;
+  return `${sign}${hours} 小时`;
+}
+
+// Relative label shown under each city: 今天 / 明天 / 昨天 plus the offset
+// against the local zone. Same-zone cities only show 今天.
+function describeClockRelative(now, timeZone, localTimeZone) {
+  if (!(now instanceof Date) || Number.isNaN(now.getTime())) return null;
+  if (!isValidTimeZone(timeZone) || !isValidTimeZone(localTimeZone)) return null;
+
+  const zone = zonedParts(now, timeZone);
+  const local = zonedParts(now, localTimeZone);
+  const dayDelta = dayNumber(zone) - dayNumber(local);
+  const dayText = dayDelta > 0 ? '明天' : dayDelta < 0 ? '昨天' : '今天';
+  const offsetMinutes = offsetMinutesAt(now, timeZone) - offsetMinutesAt(now, localTimeZone);
+  const offsetText = formatClockOffset(offsetMinutes);
+
+  return {
+    dayText,
+    dayDelta,
+    offsetMinutes,
+    offsetText,
+    text: offsetText ? `${dayText} · ${offsetText}` : dayText
+  };
+}
+
 // Menu bar title in a specific IANA zone. Same format as
 // calendar.formatMenuTitle: month/day not zero-padded, HH:mm:ss zero-padded.
 // `localTimeZone` is only used when `timeZone` is unset/invalid.
@@ -346,32 +404,6 @@ function removeClock(state, target) {
   return { items, index };
 }
 
-function nextClock(state) {
-  if (!state || !Array.isArray(state.items) || state.items.length < 2) return state;
-  const index = (state.index + 1) % state.items.length;
-  return { items: state.items.map(cloneClock), index };
-}
-
-function prevClock(state) {
-  if (!state || !Array.isArray(state.items) || state.items.length < 2) return state;
-  const index = (state.index - 1 + state.items.length) % state.items.length;
-  return { items: state.items.map(cloneClock), index };
-}
-
-function selectClock(state, payload) {
-  if (!state || !Array.isArray(state.items) || state.items.length === 0) {
-    return state;
-  }
-  if (payload && payload.direction === 'next') return nextClock(state);
-  if (payload && payload.direction === 'prev') return prevClock(state);
-  if (payload && Number.isInteger(payload.index)) {
-    const index = Math.max(0, Math.min(payload.index, state.items.length - 1));
-    if (index === state.index) return state;
-    return { items: state.items.map(cloneClock), index };
-  }
-  return state;
-}
-
 function searchCatalog(query, options) {
   const settings = options && typeof options === 'object' ? options : {};
   const catalog = Array.isArray(settings.catalog) ? settings.catalog : CITY_CATALOG;
@@ -432,6 +464,9 @@ module.exports = {
   canonicalTimeZone,
   sameTimeZone,
   formatClock,
+  formatClockTime,
+  formatClockOffset,
+  describeClockRelative,
   formatMenuTitleInZone,
   isValidMenuTitle,
   resolveMenuBarTimeZone,
@@ -440,8 +475,5 @@ module.exports = {
   normalizeWorldClocks,
   addClock,
   removeClock,
-  nextClock,
-  prevClock,
-  selectClock,
   searchCatalog
 };

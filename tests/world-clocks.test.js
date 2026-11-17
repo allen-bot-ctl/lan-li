@@ -10,6 +10,9 @@ const {
   isValidTimeZone,
   sameTimeZone,
   formatClock,
+  formatClockTime,
+  formatClockOffset,
+  describeClockRelative,
   formatMenuTitleInZone,
   isValidMenuTitle: isValidMenuTitleInZone,
   resolveMenuBarTimeZone,
@@ -18,9 +21,6 @@ const {
   normalizeWorldClocks,
   addClock,
   removeClock,
-  nextClock,
-  prevClock,
-  selectClock,
   searchCatalog
 } = require('../electron/world-clocks');
 
@@ -96,6 +96,77 @@ test('formatClock rejects invalid instants and zones', () => {
   assert.equal(formatClock(new Date('nope'), 'Asia/Shanghai'), null);
   assert.equal(
     formatClock(instant('2026-11-16T01:02:03Z'), 'Mars/Olympus'),
+    null
+  );
+});
+
+test('formatClockTime returns compact HH:mm wall-clock time', () => {
+  assert.equal(formatClockTime(instant('2026-11-16T07:16:42Z'), 'Asia/Shanghai'), '15:16');
+  assert.equal(formatClockTime(instant('2026-11-16T07:16:42Z'), 'America/New_York'), '02:16');
+  assert.equal(formatClockTime(instant('2026-11-16T07:16:42Z'), 'UTC'), '07:16');
+  assert.equal(formatClockTime(new Date('nope'), 'UTC'), '');
+  assert.equal(formatClockTime(instant('2026-11-16T07:16:42Z'), 'Mars/Olympus'), '');
+});
+
+test('formatClockOffset renders whole and half-hour offsets against local time', () => {
+  assert.equal(formatClockOffset(0), '');
+  assert.equal(formatClockOffset(60), '+1 小时');
+  assert.equal(formatClockOffset(-780), '−13 小时');
+  assert.equal(formatClockOffset(90), '+1.5 小时');
+  assert.equal(formatClockOffset(-150), '−2.5 小时');
+  assert.equal(formatClockOffset(Number.NaN), '');
+});
+
+test('describeClockRelative labels today with the signed hour difference', () => {
+  const now = instant('2026-11-16T07:16:00Z');
+
+  assert.equal(
+    describeClockRelative(now, 'Asia/Shanghai', 'Asia/Shanghai').text,
+    '今天'
+  );
+  assert.equal(
+    describeClockRelative(now, 'Asia/Tokyo', 'Asia/Shanghai').text,
+    '今天 · +1 小时'
+  );
+  assert.equal(
+    describeClockRelative(now, 'America/New_York', 'Asia/Shanghai').text,
+    '今天 · −13 小时'
+  );
+  assert.equal(
+    describeClockRelative(now, 'Asia/Kolkata', 'Asia/Shanghai').text,
+    '今天 · −2.5 小时'
+  );
+});
+
+test('describeClockRelative uses 昨天 / 明天 when the city is on another date', () => {
+  const now = instant('2026-11-16T20:30:00Z');
+
+  assert.equal(
+    describeClockRelative(now, 'America/New_York', 'Asia/Shanghai').text,
+    '昨天 · −13 小时'
+  );
+  assert.equal(
+    describeClockRelative(now, 'Asia/Tokyo', 'Asia/Shanghai').text,
+    '今天 · +1 小时'
+  );
+});
+
+test('describeClockRelative follows DST when computing the offset', () => {
+  const summer = instant('2026-07-15T12:00:00Z');
+  const relative = describeClockRelative(summer, 'America/New_York', 'Asia/Shanghai');
+
+  assert.equal(relative.text, '今天 · −12 小时');
+  assert.equal(relative.offsetMinutes, -720);
+});
+
+test('describeClockRelative rejects invalid instants and zones', () => {
+  assert.equal(describeClockRelative(new Date('nope'), 'Asia/Tokyo', 'Asia/Shanghai'), null);
+  assert.equal(
+    describeClockRelative(instant('2026-11-16T07:16:00Z'), 'Mars/Olympus', 'Asia/Shanghai'),
+    null
+  );
+  assert.equal(
+    describeClockRelative(instant('2026-11-16T07:16:00Z'), 'Asia/Tokyo', 'Mars/Olympus'),
     null
   );
 });
@@ -214,42 +285,6 @@ test('removing the last remaining clock leaves an explicit empty list', () => {
   const one = { items: [{ id: 'Asia/Shanghai', label: '北京' }], index: 0 };
   assert.deepEqual(removeClock(one), { items: [], index: 0 });
   assert.deepEqual(removeClock({ items: [], index: 0 }), { items: [], index: 0 });
-});
-
-test('nextClock / prevClock wrap and do nothing with fewer than two clocks', () => {
-  const two = {
-    items: [
-      { id: 'Asia/Shanghai', label: '北京' },
-      { id: 'Asia/Tokyo', label: '东京' }
-    ],
-    index: 1
-  };
-
-  assert.equal(nextClock(two).index, 0);
-  assert.equal(prevClock(two).index, 0);
-  assert.equal(prevClock(nextClock(two)).index, 1);
-
-  const one = { items: [{ id: 'Asia/Shanghai', label: '北京' }], index: 0 };
-  assert.equal(nextClock(one), one);
-  assert.equal(prevClock(one), one);
-  assert.equal(selectClock(one, { direction: 'next' }), one);
-});
-
-test('selectClock accepts an index or a direction and clamps indexes', () => {
-  const three = {
-    items: [
-      { id: 'Asia/Shanghai', label: '北京' },
-      { id: 'Asia/Tokyo', label: '东京' },
-      { id: 'Europe/London', label: '伦敦' }
-    ],
-    index: 0
-  };
-
-  assert.equal(selectClock(three, { index: 2 }).index, 2);
-  assert.equal(selectClock(three, { index: 99 }).index, 2);
-  assert.equal(selectClock(three, { index: -1 }).index, 0);
-  assert.equal(selectClock(three, { direction: 'next' }).index, 1);
-  assert.equal(selectClock(three, { direction: 'prev' }).index, 2);
 });
 
 test('searchCatalog finds Chinese labels and aliases first', () => {

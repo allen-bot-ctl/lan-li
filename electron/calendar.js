@@ -122,7 +122,8 @@ function buildCells(year, month, today) {
   return cells;
 }
 
-// 黄历卡片：干支生肖纪年 + 当日宜忌，全部来自 lunar-javascript 离线计算。
+// 黄历卡片：干支生肖纪年与农历月用于左侧顶栏，农历月日用于卡片标题行右侧；
+// 当日宜忌全部来自 lunar-javascript 离线计算。
 // 可见文本只取前若干项（单行放不下由渲染层 CSS 省略号截断），
 // title 用完整列表；只由「现在」决定，不随翻月或焦点日变化。
 const ALMANAC_MAX_ITEMS = 6;
@@ -132,9 +133,12 @@ function buildAlmanac(date) {
   const lunar = solar.getLunar();
   const yi = lunar.getDayYi().map(String);
   const ji = lunar.getDayJi().map(String);
+  const ganZhiText = `${lunar.getYearInGanZhi()}${lunar.getYearShengXiao()}年`;
+  const lunarMonthText = `${lunar.getMonthInChinese()}月`;
   return {
-    yearText: `${lunar.getYearInGanZhi()}${lunar.getYearShengXiao()}年·` +
-      `${lunar.getMonthInChinese()}月`,
+    ganZhiText,
+    lunarMonthText,
+    lunarDayText: `${lunar.getMonthInChinese()}月${lunar.getDayInChinese()}`,
     yi,
     ji,
     yiText: yi.slice(0, ALMANAC_MAX_ITEMS).join(' '),

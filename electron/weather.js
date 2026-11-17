@@ -27,7 +27,7 @@ const UNAVAILABLE_TEXT = '天气暂不可用';
 const CITY_SUFFIXES = ['市', '区', '县'];
 
 function unavailableWeather() {
-  return { ok: false, text: UNAVAILABLE_TEXT };
+  return { ok: false, text: UNAVAILABLE_TEXT, emoji: '🌡️' };
 }
 
 function textValue(value) {
@@ -240,6 +240,30 @@ function formatTemperature(value) {
   return `${Math.round(temperature)}°C`;
 }
 
+// Weather text comes from itboy/wttr.in in Chinese. Match the broader
+// phenomena first so 雷阵雨 / 小雨 / 多云转晴 pick the right glyph. Unknown
+// text falls back to the thermometer.
+const WEATHER_EMOJI = Object.freeze([
+  { match: '雷', emoji: '⛈️' },
+  { match: '雪', emoji: '❄️' },
+  { match: '雨', emoji: '🌧️' },
+  { match: '雾', emoji: '🌫️' },
+  { match: '阴', emoji: '☁️' },
+  { match: '多云', emoji: '⛅️' },
+  { match: '晴', emoji: '☀️' }
+]);
+
+const FALLBACK_WEATHER_EMOJI = '🌡️';
+
+function weatherEmoji(weather) {
+  const text = textValue(weather);
+  if (!text) return FALLBACK_WEATHER_EMOJI;
+  for (const entry of WEATHER_EMOJI) {
+    if (text.includes(entry.match)) return entry.emoji;
+  }
+  return FALLBACK_WEATHER_EMOJI;
+}
+
 function formatWeatherResult(input) {
   const source = input && typeof input === 'object' ? input : {};
   const temperature = finiteNumber(source.temperature);
@@ -255,6 +279,7 @@ function formatWeatherResult(input) {
     weather,
     temperature: Math.round(temperature),
     temperatureText,
+    emoji: weatherEmoji(weather),
     text: `${city} · ${weather} · ${temperatureText}`
   };
 }
@@ -504,6 +529,8 @@ module.exports = {
   CACHE_TTL_MS,
   REQUEST_TIMEOUT_MS,
   UNAVAILABLE_TEXT,
+  WEATHER_EMOJI,
+  FALLBACK_WEATHER_EMOJI,
   loadChinaCityCodes,
   matchChinaCity,
   matchChinaCityExact,
@@ -518,6 +545,7 @@ module.exports = {
   writeWeatherCity,
   resolveWeatherLocation,
   formatTemperature,
+  weatherEmoji,
   formatWeatherResult,
   buildItboyUrl,
   buildWttrUrl,

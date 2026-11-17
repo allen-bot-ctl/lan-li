@@ -36,17 +36,18 @@ ${M}月${D}日 ${HH}:${mm}:${ss}
 - 月、日不补零：`1月5日` 合法，`01月05日` 不合法。
 - 时、分、秒补零：`09:03:07`。
 - `electron/calendar.js` 的 `formatMenuTitle(date)` 保持「当前进程本地时区」语义（现有测试不变）。
-- 菜单栏实际显示用的时区由世界时钟的「设为当前」决定（见下文）。主进程每秒以及「设为当前」/删除回退后立即用 `electron/world-clocks.js` 的 `formatMenuTitleInZone(now, resolvedMenuBarTimeZone, localTimeZone)` 计算标题并 `tray.setTitle(..., { fontType: 'monospacedDigit' })`；结果仍只含日期时间，不含时区名。默认/未设置/无效时等同本地时区，因此 0.1.8 行为不变。
+- 菜单栏实际显示用的时区由世界时钟编辑面板的「设为菜单栏」决定（见下文）。主进程每秒以及「设为菜单栏」/删除回退后立即用 `electron/world-clocks.js` 的 `formatMenuTitleInZone(now, resolvedMenuBarTimeZone, localTimeZone)` 计算标题并 `tray.setTitle(..., { fontType: 'monospacedDigit' })`；结果仍只含日期时间，不含时区名。默认/未设置/无效时等同本地时区，因此 0.1.8 行为不变。
 - `isValidMenuTitle` 与 `MENU_TITLE_PATTERN`（`calendar.js` / `world-clocks.js`）供测试约束格式。
 
 **右侧「黄历」（`buildAlmanac`）**
 
-- 0.1.10 起，右栏顶部改为紧凑的「黄历」卡片；旧的「此刻」卡片（星期、公历日数字、干支年【生肖】、农历月日与本地 `HH:mm` 字段）已整体移除，`formatHourMinute` 一并删除。
-- `yearText`：`` `${lunar.getYearInGanZhi()}${lunar.getYearShengXiao()}年·${lunar.getMonthInChinese()}月` ``，如 `丙午马年·十月`；闰月由库返回的 `getMonthInChinese()`（如 `闰六`）自然带出。
+- 右栏顶部为紧凑的「黄历」卡片；卡内不再重复大字干支年。
+- `ganZhiText`：`` `${lunar.getYearInGanZhi()}${lunar.getYearShengXiao()}年` ``，如 `丙午马年`；`lunarMonthText` 为 `getMonthInChinese() + '月'`，闰月自然带出 `闰六月`。两者用于左侧顶栏的灰色小字「丙午马年 · 十月」。
+- `lunarDayText`：`` `${lunar.getMonthInChinese()}月${lunar.getDayInChinese()}` ``，如 `十月初九`，显示在黄历卡标题行右侧。
 - `yi` / `ji`：`lunar.getDayYi()` / `lunar.getDayJi()` 的完整数组；`yiText` / `jiText` 只取前 `ALMANAC_MAX_ITEMS`（6）项用空格连接，供单行显示（放不下由 CSS 省略号截断）；`yiTitle` / `jiTitle` 是完整列表，用作悬停 title。
 - 只由「现在」决定，不随翻月或焦点日变化；`calendar:onTick` 每秒重算，跨天（午夜）自动刷新。数据全部来自 lunar-javascript 离线计算，不接网络。
 
-**测试**：`tests/calendar.test.js`（节气、初七、2026-11-16 黄历「丙午马年·十月 / 纳采 / 上梁」、42 格与 lead、今日/周末/节日标记、菜单栏标题、禁用 `getOtherFestivals`）。
+**测试**：`tests/calendar.test.js`（节气、初七、2026-11-16 黄历「丙午马年 / 十月 / 十月初八 / 纳采 / 上梁」、42 格与 lead、今日/周末/节日标记、菜单栏标题、禁用 `getOtherFestivals`）。
 
 ## 2. 世界时钟（`electron/world-clocks.js`）
 
@@ -62,18 +63,17 @@ ${M}月${D}日 ${HH}:${mm}:${ss}
 **格式化（`formatClock(now, timeZone)`）**
 
 - 用 `Intl.DateTimeFormat(..., { timeZone, hourCycle: 'h23' })` 取该时区的年月日时分秒与星期，不依赖运行进程的本地时区。
-- `time`：`HH:mm:ss`，全部补零；`date`：`M月D日`，月日不补零；`weekday`：`星期一`…`星期日`。
-- 0.1.11 起，与本地时间对比的「昨天/明天」「同本地 / 快 X 小时」字段及其 `formatOffsetText`、偏移量计算已删除；卡片只显示时区自身的墙上时间。
+- `time`：`HH:mm:ss`，全部补零；`date`：`M月D日`，月日不补零；`weekday`：`星期一`…`星期日`。`formatClock` 仍用于菜单栏标题等需要秒的场景；右栏列表用 `formatClockTime(now, timeZone)` 输出 `HH:mm`。
+- `describeClockRelative(now, timeZone, localTimeZone)` 返回 `{ dayText, dayDelta, offsetMinutes, offsetText, text }`：按两个时区的日历年月日判断「今天/昨天/明天」，按同一时刻的 UTC 偏移差计算 `±N 小时`（整小时不带小数；`+5.5` 这类半小时时区保留一位小数；负号用 `−`）。同本地时区只显示「今天」，否则如「今天 · −13 小时」「昨天 · +9 小时」。`formatClockOffset` 单独可测。
 
 **列表操作**
 
 - 状态形状：`{ items: [{ id, label }], index }`。
 - `addClock` 拒绝无效 id 与重复 IANA id；成功时追加并把 `index` 指向新时钟。
-- `removeClock` 可按当前项、`{ id }` 或 `{ index }` 删除；删当前项时索引夹到 `length - 1`，删空时 `{ items: [], index: 0 }`，不会偷偷补回默认城市。
-- `nextClock` / `prevClock` 首尾绕回；少于两个时钟时什么都不做。`selectClock` 接受 `{ index }` 或 `{ direction: 'prev' | 'next' }`。
+- `removeClock` 可按当前项、`{ id }` 或 `{ index }` 删除；删当前项时索引夹到 `length - 1`，删空时 `{ items: [], index: 0 }`，不会偷偷补回默认城市。翻页与键盘左右切换已移除，`nextClock` / `prevClock` / `selectClock` 及对应 IPC 一并删除。
 - `normalizeWorldClocks(stored, supportedValuesOf)` 丢弃无效/重复 id、清洗 label、夹紧 index。**只有 `stored === undefined`（偏好文件里没有该键）才种入 `北京 / Asia/Shanghai`**；`items: []` 保持空。首次运行默认北京，因为这是中文日历应用，本地时区已由菜单栏显示，默认再显示「同本地」或纽约意义不大。
 
-**菜单栏显示时区（「设为当前」）**
+**菜单栏显示时区（「设为菜单栏」）**
 
 - 偏好键：`preferences.json` 顶层 `menuBarTimeZone`（IANA id 字符串）。省略或 `null` 表示跟随系统本地时区；不要把系统本地时区写死成字符串。
 - `resolveMenuBarTimeZone(storedZone, items, localTimeZone)`：`storedZone` 未设置/`null`/非法/未知，或对应时钟已不在 `items` 中时，解析为注入的 `localTimeZone`。`storedZone` 仍在列表中且有效时解析为该 id。
@@ -95,20 +95,19 @@ ${M}月${D}日 ${HH}:${mm}:${ss}
   }
   ```
   跟随系统本地时区时省略 `menuBarTimeZone`（或为 `null`，读取时清理为省略）。
-- 启动时 `loadWorldClocks()` 读取并 normalize；只有 `worldClocks` 键缺失时才种入默认北京。`menuBarTimeZone` 若未设置/非法/对应时钟已不在列表中则清除并不再持久化。每次成功 add / remove / select / setMenuBar 后都用既有 `writePreferences` 整体写回；写失败只 warn，不崩溃。
+- 启动时 `loadWorldClocks()` 读取并 normalize；只有 `worldClocks` 键缺失时才种入默认北京。`menuBarTimeZone` 若未设置/非法/对应时钟已不在列表中则清除并不再持久化。每次成功 add / remove / setMenuBar 后都用既有 `writePreferences` 整体写回；写失败只 warn，不崩溃。
 - 渲染层不碰文件、不用 `localStorage`。
 
 **IPC 与渲染层**
 
-- `calendar:getState` / `calendar:setView` / `calendar:goToday` 返回的 state 增加 `clocks: { items, index, menuBarTimeZone, current }`；`menuBarTimeZone` 为解析后的菜单栏显示时区（未设置时为系统本地）；`current` 是已格式化的当前时钟并包含 `isMenuBar`，空列表为 `null`。不下发完整 IANA 列表。
+- `calendar:getState` / `calendar:setView` / `calendar:goToday` 返回的 state 包含 `clocks: { items }`；每个 item 为 `{ id, label, time, relativeText, isMenuBar }`，`time` 是 `HH:mm`，`relativeText` 由主进程按本地时区算好，`isMenuBar` 按 IANA id 与别名比较。不下发完整 IANA 列表。
 - `calendar:onTick` 每秒发送 `{ almanac, clocks }`（窗口可见时），`clocks` 与菜单栏标题都按当前时刻重新计算。
-- 右栏「世界时钟」卡片只显示一个时区：城市、`HH:mm:ss`、`M月D日 星期X`，以及「设为当前 / 当前」按钮；`‹`/`›` 只切换浏览中的时钟并绕回（不自动改变菜单栏显示时区），少于两个时隐藏箭头。编辑键可增删；`+` 在右栏内部打开搜索浮层，不新建窗口、不调用系统对话框。
-- 「设为当前」点击后经 `clocks:setMenuBar` 持久化并立即刷新托盘标题；当前显示时区对应的卡片显示禁用态「当前」。比较按 IANA id 并用 `Intl` 视别名为等同。
-- 搜索浮层覆盖 `.now-pane`，列表在浮层内部滚动；已添加项禁用；点选后关闭浮层并显示新时钟。无网络、无定位。
-- 键盘 `←` / `→` 在焦点不在 `input` / `select` / `textarea` / contenteditable 时切换（点过箭头按钮后仍可继续用方向键）；卡片上的水平滚轮/触控板 `deltaX` 也切换，并有 350ms 节流。
-- 空列表显示「点击 + 添加时区」，隐藏箭头、圆点、`×` 与「设为当前」。`buildAlmanac` / `buildCells` / `isToday` 仍按系统本地时间，不受菜单栏显示时区影响。
+- 右栏「世界时钟」卡片常驻列出全部城市：城市名、相对时区小字、右侧 `HH:mm`；菜单栏显示中的城市带橙色「菜单栏」标签。`‹`/`›`、圆点、`+`/`×` 与滑动手势都已移除。
+- 标题右侧「编辑」打开编辑面板（覆盖整个面板的居中浮层）：上方搜索框沿用 `clocks:search`，下方列出已添加城市；每行「设为菜单栏」经 `clocks:setMenuBar` 持久化并立即刷新托盘标题，当前项禁用；「移除」经 `clocks:remove`，删除当前菜单栏时区时回退本地。
+- 编辑面板的搜索结果在面板内滚动，已添加项禁用；添加后不关闭面板，列表与搜索结果同步刷新。面板不新建窗口、不调用系统对话框、无网络、无定位。
+- 空列表显示「尚未添加城市」。`buildAlmanac` / `buildCells` / `isToday` 仍按系统本地时间，不受菜单栏显示时区影响。
 
-**测试**：`tests/world-clocks.test.js`（城市/别名/IANA 回退搜索、重复 id、共享时区标签、DST 冬夏墙上时间、半小时时区、UTC、列表增删/绕回/清洗、首次默认 vs 显式空列表）。
+**测试**：`tests/world-clocks.test.js`（城市/别名/IANA 回退搜索、重复 id、共享时区标签、DST 冬夏墙上时间、半小时时区、UTC、`HH:mm` 格式化、相对时差「今天/昨天/明天 · ±N 小时」、列表增删/清洗、首次默认 vs 显式空列表）。
 
 ## 3. 托盘与窗口（`electron/main.js`）
 
@@ -140,9 +139,18 @@ ${M}月${D}日 ${HH}:${mm}:${ss}
 - 水平：先让窗口右缘与托盘右缘对齐（`x = bounds.x + bounds.width - WINDOW_WIDTH`）；再钳到当前显示器 `workArea`：左不越界、右不越界。
 - `screen` 的 `display-metrics-changed` / `display-added` / `display-removed` 时，如果窗口可见则重新定位。
 
+**设置菜单（`electron/settings-menu.js` + `menu:openSettings`）**
+
+- 顶栏「⚙︎ 设置」把按钮右缘/下缘坐标经 preload `openSettings({ x, y })` → `menu:openSettings` 发给主进程；渲染层只负责高亮按钮。
+- 主进程用 `buildSettingsMenuTemplate({ version, openAtLogin }, actions)` 生成模板，再 `Menu.buildFromTemplate` + `menu.popup({ window, x, y })`。x 取按钮右缘减去约 250px 菜单宽度，菜单右对齐按钮下方；坐标缺失时退回光标位置。
+- 模板顺序固定：检查更新（`sublabel` 为 `formatVersionLabel(app.getVersion())`）、登录时打开（`type: 'checkbox'`，`checked` 来自 `getOpenAtLogin()`）、分隔线、编辑世界时钟…、更换天气城市…、分隔线、退出栏历（`accelerator: 'Cmd+Q'`）。
+- 检查更新直接调用 `performUpdateCheck()`（`updater.checkNow({ manual: true })`），不经过渲染层；结果仍走 `update:status`。
+- 「登录时打开」点击后用 Electron 回传的 `menuItem.checked` 调 `applyLoginItem()`，业务实现不变。
+- 面板动作经 `ui:openPanel`（`clocks` / `weather`）通知渲染层打开对应面板。菜单打开期间 `scheduleClose()` 暂停；选择面板/检查更新后窗口保持可见，其它方式关闭菜单且指针在窗口外时按原 200ms 逻辑收起。
+
 **退出**
 
-- 唯一入口是底栏「退出栏历」→ preload `quit()` → `app:quit` → `app.quit()`。
+- 唯一入口是「设置」菜单的「退出栏历」（`Cmd+Q`）→ 主进程 `app.quit()`；不再有底栏按钮或 `app:quit` IPC。
 - 单实例锁：拿不到锁直接退出；第二实例不弹窗（`second-instance` 为空处理）。
 
 **测试**：托盘/窗口行为目前靠 README 的 macOS 真机项验收，没有自动化 UI 测试。
@@ -198,16 +206,13 @@ main.setupUpdates()
 | `weather:get` | `getWeather` | 返回当前天气结果；有 `preferences.weatherCity` 时直接用其城市名与坐标，否则按 IP 定位；30 分钟缓存 |
 | `weather:searchCity` | `searchCity` | `query`；主进程请求 Open-Meteo 地理编码，返回最多 8 条 `{ name, admin1, country, latitude, longitude, label }`，`label` 为「城市名 · 省/州 · 国家」；空查询返回空数组 |
 | `weather:setCity` | `setCity` | `{ name, latitude, longitude, country?, admin1? }` 或 `null`；校验后写入/删除 `preferences.weatherCity` 并立即返回（不等待网络），后台强制刷新，结果经 `weather:update` 异步推送 |
-| `calendar:getState` | `getState` | 当前 `view`、`focus`、42 格、`almanac`、`clocks`（含 `menuBarTimeZone` 与 `current.isMenuBar`）、`openAtLogin` |
+| `calendar:getState` | `getState` | 当前 `view`、`focus`、42 格、`almanac`、`clocks: { items }`（每项含 `time`、`relativeText`、`isMenuBar`） |
 | `calendar:setView` | `setView` | 校验并切换浏览年月/焦点日，返回新状态 |
 | `calendar:goToday` | `goToday` | 浏览年月与焦点日回到今天，返回新状态 |
 | `clocks:add` | `addClock` | `{ id, label? }`；校验/去重后持久化，返回 `clocks` 快照 |
 | `clocks:remove` | `removeClock` | 删除当前时钟或 `{ id }`；若删掉菜单栏显示时区则回退本地并刷新托盘；持久化并返回快照 |
-| `clocks:select` | `selectClock` | `{ index }` 或 `{ direction: 'prev' \| 'next' }`；持久化并返回快照（不改变菜单栏显示时区） |
 | `clocks:setMenuBar` | `setMenuBarClock` | `{ id }`（省略时取当前显示时钟）；校验后将其设为菜单栏显示时区，持久化并刷新托盘标题，返回快照；无效/不在列表中为无操作 |
 | `clocks:search` | `searchClocks` | `{ query }`；返回目录 + IANA 回退结果，已添加项带 `added` |
-| `login:set` | `setLogin` | 先调用系统登录项 API；未签名包读回 false 时回退 LaunchAgent，返回最终真实状态 |
-| `update:check` | `checkForUpdate` | 立即检查；返回短状态对象 |
 
 **send（渲染 → 主）**
 
@@ -215,7 +220,7 @@ main.setupUpdates()
 | --- | --- | --- |
 | `pointer:enter` | `pointerEnter` | 取消关闭计时 |
 | `pointer:leave` | `pointerLeave` | 安排 200ms 关闭 |
-| `app:quit` | `quit` | 退出应用 |
+| `menu:openSettings` | `openSettings` | `{ x, y }` 为设置按钮右缘/下缘；主进程弹出原生设置菜单 |
 | `update:restart` | `restartToUpdate` | 就绪后重启更新（自更新） |
 | `update:openLatest` | `openLatestRelease` | 打开手动下载地址 |
 
@@ -223,12 +228,13 @@ main.setupUpdates()
 
 | 频道 | preload API | 说明 |
 | --- | --- | --- |
-| `calendar:onTick` | `onTick` | 每秒发送 `{ almanac, clocks }`；仅窗口可见时发送，`clocks.current` 按当前时刻重新格式化 |
-| `weather:update` | `onWeatherUpdate` | 后台或打开窗口刷新后的天气结果；失败同样下发 `{ ok: false, text: '天气暂不可用' }` |
+| `calendar:onTick` | `onTick` | 每秒发送 `{ almanac, clocks }`；仅窗口可见时发送，每个城市的 `time` 与 `relativeText` 按当前时刻重新计算 |
+| `weather:update` | `onWeatherUpdate` | 后台或打开窗口刷新后的天气结果；失败同样下发 `{ ok: false, text: '天气暂不可用', emoji: '🌡️' }` |
+| `ui:openPanel` | `onOpenPanel` | `'clocks'` 或 `'weather'`；由设置菜单触发，渲染层打开对应面板 |
 | `update:notice` | `onUpdateNotice` | `ready` / `manual` 横幅；打开窗口与加载完成时重发 |
 | `update:status` | `onUpdateStatus` | 短状态；**仅手动检查**时发送 |
 
-**preload API 全量（23 个）**：`getVersion`、`getState`、`setView`、`goToday`、`addClock`、`removeClock`、`selectClock`、`setMenuBarClock`、`searchClocks`、`getWeather`、`searchCity`、`setCity`、`onWeatherUpdate`、`onTick`、`pointerEnter`、`pointerLeave`、`setLogin`、`quit`、`onUpdateNotice`、`checkForUpdate`、`onUpdateStatus`、`restartToUpdate`、`openLatestRelease`。
+**preload API 全量（21 个）**：`getVersion`、`getState`、`setView`、`goToday`、`addClock`、`removeClock`、`setMenuBarClock`、`searchClocks`、`getWeather`、`searchCity`、`setCity`、`onWeatherUpdate`、`onTick`、`pointerEnter`、`pointerLeave`、`openSettings`、`onOpenPanel`、`onUpdateNotice`、`onUpdateStatus`、`restartToUpdate`、`openLatestRelease`。
 
 **状态文案（`electron/update-status.js`）**
 
@@ -242,15 +248,15 @@ main.setupUpdates()
 | `disabled` | 开发态不检查更新 | false | true |
 | `error` | 检查失败 | false | true |
 
-未知或空状态按 `error` 处理（fail closed）。`ready` 的横幅文案在渲染层：「新版本已就绪」「重启更新」；手动失败横幅：「无法自动更新，请手动下载」「下载新版」。`timed` 状态由渲染层约 2600ms 后恢复为「检查更新」。
+未知或空状态按 `error` 处理（fail closed）。`ready` 的横幅文案在渲染层：「新版本已就绪」「重启更新」；手动失败横幅：「无法自动更新，请手动下载」「下载新版」。`timed` 状态由渲染层约 2600ms 后隐藏状态横幅；更新就绪/手动下载横幅优先，不会被短状态覆盖。
 
 ## 7. 登录项与平台限制
 
 - 纯逻辑模块 `electron/login-item.js`：生成并管理本应用自己的 `~/Library/LaunchAgents/app.lanli.LanLi.plist`，`Label` 为 `app.lanli.LanLi`，`ProgramArguments` 为 `["/usr/bin/open", "-a", <当前 .app>]`，`RunAtLoad` 为 `true`。`.app` 从 `process.execPath` 逐级向上找到 `.app` 目录；非打包开发模式 `enable()` 返回 `{ ok: false, reason: 'not-packaged' }`，不写文件。
 - `createLoginItem({ fs, path, execPath, homeDir, plistPath, isPackaged, logger })` 的 `fs`、路径与 logger 都可注入，便于单测；`enable` / `disable` / `isEnabled` 只操作上述固定 plist，不碰其它 LaunchAgent。
 - 首次运行：`initializeLoginItem()` 读 `preferences.json`；若没有 `loginItemInitialized === true`，调用 `applyLoginItem(true)`，然后无论结果如何都写 `loginItemInitialized: true`。之后启动不再强制打开。
-- 开关：`login:set` → `applyLoginItem(desired)`。先调 `app.setLoginItemSettings({ openAtLogin: desired })`；打开时若系统读回 false，写 LaunchAgent plist；关闭时同时调用系统 API 设 false 并删除 plist。系统登录项正常生效时会顺手清理遗留 plist，避免登录时启动两次。
-- `getOpenAtLogin()` 返回 `系统读回 openAtLogin || plist 存在`；`buildState()` 与首次运行共用这一判断，渲染层用 `login:set` 的返回值覆盖勾选状态，因此复选框始终显示最终真实状态。
+- 开关：「设置」菜单元生的「登录时打开」checkbox → `applyLoginItem(menuItem.checked)`。先调 `app.setLoginItemSettings({ openAtLogin: desired })`；打开时若系统读回 false，写 LaunchAgent plist；关闭时同时调用系统 API 设 false 并删除 plist。系统登录项正常生效时会顺手清理遗留 plist，避免登录时启动两次。不再有 `login:set` IPC。
+- `getOpenAtLogin()` 返回 `系统读回 openAtLogin || plist 存在`；每次打开设置菜单时用它决定 checkbox 的 `checked`，首次运行也共用这一判断，因此勾选始终显示最终真实状态。
 - 系统 API 抛错、plist 写/删失败、最终状态与期望不一致都写入 `logger`（`~/Library/Logs/栏历/main.log`），不只 `console`。
 - 非 macOS：`dialog.showErrorBox('栏历', '栏历首发只支持 macOS。')` 后 `app.quit()`，不绘制仿菜单栏、不检查更新。
 
@@ -259,7 +265,7 @@ main.setupUpdates()
 ## 8. 版本号（`electron/app-version.js`）
 
 - `formatVersionLabel`：去首尾空白；已有 `v`/`V` 前缀去重；必须以数字开头且只含 `0-9A-Za-z.+-`；否则返回 `''`。
-- 0.1.10 起，渲染层 `loadVersion()` → `app:version`，显示在右栏（橙色区域）最底部，上方有一条细分割线；不再出现在底栏「检查更新」与「退出栏历」之间。底栏右侧现在是同结构的「检查更新」（下载图标）与「退出栏历」（电源图标）两个按钮；版本号不会被检查状态文案覆盖。
+- 渲染层 `loadVersion()` → `app:version`，在右栏底部居中显示为「栏历 vX.Y.Z」；`app:version` 仍返回 `formatVersionLabel()` 的 `vX.Y.Z`，渲染层只在前面加产品名。版本号不会被检查状态文案覆盖，也不会因设置菜单的 sublabel 重复占位。
 
 **测试**：`tests/app-version.test.js`。
 
@@ -275,15 +281,15 @@ main.setupUpdates()
   - 否则请求 `https://ipwho.is/`，用返回的 `latitude` / `longitude` / `city` 与 `country_code`（`=== 'CN'` 判定中国）；城市名直接使用 IP 返回结果，不做反向地理编码。
   - 取数前写 `天气位置=手动：<城市>` / `天气位置=IP：<城市>` 日志。
 - 手动选择城市：
-  - 点击天气行，渲染层打开复用 `.clock-picker` / `.picker-*` 样式的城市浮层；列表首项固定为「自动（按 IP）」，其余为「城市名 · 省/州 · 国家」。
+  - 点击天气卡片任意位置或标题右侧「更换城市 ›」，渲染层打开复用 `.picker-*` 样式的城市面板；列表首项固定为「自动（按 IP）」，其余为「城市名 · 省/州 · 国家」。
   - 输入框经 `weather:searchCity` 调 `https://geocoding-api.open-meteo.com/v1/search?name=<q>&count=8&language=zh&format=json`；网络请求只在主进程。
-  - 点击列表项后渲染层**立即关闭浮层**并把天气行显示为「<城市名> · 加载中…」，不等网络；`weather:setCity` 写入 `preferences.weatherCity = { name, latitude, longitude, country?, admin1? }`（选「自动」则删除该键）后立即返回，主进程清理缓存并异步强制刷新，结果经 `weather:update` 推送。
+  - 点击列表项后渲染层**立即关闭面板**并把天气卡片文字显示为「<城市名> · 加载中…」，不等网络；`weather:setCity` 写入 `preferences.weatherCity = { name, latitude, longitude, country?, admin1? }`（选「自动」则删除该键）后立即返回，主进程清理缓存并异步强制刷新，结果经 `weather:update` 推送。
 - `createWeatherService({ fetch, logger, now, setTimeout, clearTimeout, weatherCity })`：所有请求带 `User-Agent` 与 8 秒超时；结果缓存 30 分钟，失败也写入缓存时间，30 分钟内不重复请求；成功/失败分别写 info/warn 日志。`setCity` 会清空旧城市缓存并让进行中的旧请求失效。
 - 打开窗口时调用 `refreshWeather()`：缓存超过 30 分钟才重新请求；`setInterval` 每 30 分钟后台刷新一次，结果经 `weather:update` 推给渲染层。首次打开且无缓存时主进程会按 IP 或手动城市取一次。
-- 渲染层只显示一行；全部数据源失败统一显示「天气暂不可用」，不弹窗。CSP 仍为 `default-src 'self'`，不放开网络。
+- 结果带 `emoji`（`weatherEmoji()` 按「雷 → 雪 → 雨 → 雾 → 阴 → 多云 → 晴」优先匹配；未知用 `🌡️`），渲染层显示 emoji、`17°` 与「城市 · 天气」。加载中显示「天气加载中…」或「城市 · 加载中…」，全部数据源失败统一显示「天气暂不可用」，不弹窗。CSP 仍为 `default-src 'self'`，不放开网络。
 - 不再请求 macOS 定位授权：没有 `navigator.geolocation`、定位权限处理器、`NSLocation*` 用途说明或原生定位依赖。
 
-**测试**：`tests/weather.test.js`（城市码表匹配与 admin1 回退、itboy 与 wttr.in 解析、URL 构造、IP 失败、坐标校验、地理编码结果解析、`weatherCity` 含 `country`/`admin1` 的读写/清除、有无手动城市的取位逻辑、itboy 失败回退、非中国直走 wttr.in、定位与来源日志文案、注入假 fetch 的缓存/失败路径与手动/自动切换）。
+**测试**：`tests/weather.test.js`（城市码表匹配与 admin1 回退、itboy 与 wttr.in 解析、URL 构造、IP 失败、坐标校验、地理编码结果解析、天气文字→emoji 映射、`weatherCity` 含 `country`/`admin1` 的读写/清除、有无手动城市的取位逻辑、itboy 失败回退、非中国直走 wttr.in、定位与来源日志文案、注入假 fetch 的缓存/失败路径与手动/自动切换）。
 
 ## 相关文档
 

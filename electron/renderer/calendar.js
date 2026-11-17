@@ -5,40 +5,33 @@ const api = window.lanli;
 const MIN_YEAR = 1900;
 const MAX_YEAR = 2100;
 
+const monthTitle = document.getElementById('month-title');
 const yearSelect = document.getElementById('year-select');
-const focusLabel = document.getElementById('focus-label');
+const lunarSubtitle = document.getElementById('lunar-subtitle');
 const prevMonth = document.getElementById('prev-month');
 const nextMonth = document.getElementById('next-month');
 const todayButton = document.getElementById('today-button');
+const settingsButton = document.getElementById('settings-button');
 const grid = document.getElementById('grid');
-const loginToggle = document.getElementById('login-toggle');
-const quitButton = document.getElementById('quit-button');
-const almanacYear = document.getElementById('almanac-year');
+const almanacDate = document.getElementById('almanac-date');
 const almanacYi = document.getElementById('almanac-yi');
 const almanacJi = document.getElementById('almanac-ji');
-const clockCard = document.getElementById('clock-card');
-const clockRow = document.getElementById('clock-row');
-const clockCity = document.getElementById('clock-city');
-const clockTime = document.getElementById('clock-time');
-const clockDate = document.getElementById('clock-date');
-const clockDots = document.getElementById('clock-dots');
+const clockList = document.getElementById('clock-list');
 const clockEmpty = document.getElementById('clock-empty');
-const clockPrev = document.getElementById('clock-prev');
-const clockNext = document.getElementById('clock-next');
-const clockAdd = document.getElementById('clock-add');
-const clockRemove = document.getElementById('clock-remove');
-const clockSetCurrent = document.getElementById('clock-set-current');
+const clockEdit = document.getElementById('clock-edit');
 const clockPicker = document.getElementById('clock-picker');
 const clockSearch = document.getElementById('clock-search');
+const clockSearchResults = document.getElementById('clock-search-results');
 const clockPickerClose = document.getElementById('clock-picker-close');
-const clockList = document.getElementById('clock-list');
+const clockAddedList = document.getElementById('clock-added-list');
+const weatherCard = document.getElementById('weather-card');
+const weatherEmoji = document.getElementById('weather-emoji');
+const weatherTemp = document.getElementById('weather-temp');
+const weatherCity = document.getElementById('weather-city');
 const updateBanner = document.getElementById('update-banner');
 const updateMessage = document.getElementById('update-message');
 const updateAction = document.getElementById('update-action');
-const checkUpdateButton = document.getElementById('check-update-button');
-const checkUpdateLabel = document.getElementById('check-update-label');
 const appVersion = document.getElementById('app-version');
-const weatherText = document.getElementById('weather-text');
 const weatherPicker = document.getElementById('weather-picker');
 const weatherSearch = document.getElementById('weather-search');
 const weatherPickerClose = document.getElementById('weather-picker-close');
@@ -46,15 +39,15 @@ const weatherList = document.getElementById('weather-list');
 
 let state = null;
 let yearOptionsBuilt = false;
-let updateMode = null;
-let checkStatusTimer = null;
 let clocks = null;
 let searchToken = 0;
 let searchTimer = null;
-let wheelLockedAt = 0;
 let weatherToken = 0;
 let weatherSearchToken = 0;
 let weatherSearchTimer = null;
+let updateMode = null;
+let bannerMode = null;
+let checkStatusTimer = null;
 
 function daysInMonth(year, month) {
   return new Date(year, month, 0).getDate();
@@ -73,81 +66,145 @@ function buildYearOptions() {
 
 function renderAlmanac(almanac) {
   if (!almanac) return;
-  almanacYear.textContent = almanac.yearText;
+  lunarSubtitle.textContent = `${almanac.ganZhiText} · ${almanac.lunarMonthText}`;
+  almanacDate.textContent = almanac.lunarDayText;
   almanacYi.textContent = almanac.yiText;
   almanacYi.title = almanac.yiTitle;
   almanacJi.textContent = almanac.jiText;
   almanacJi.title = almanac.jiTitle;
 }
 
-function renderClockDots(items, index) {
-  clockDots.replaceChildren();
-  clockDots.hidden = items.length === 0;
-  for (let position = 0; position < items.length; position += 1) {
-    const dot = document.createElement('span');
-    dot.className = position === index ? 'clock-dot is-current' : 'clock-dot';
-    clockDots.append(dot);
-  }
-}
-
-function renderClocks(snapshot) {
+function renderClockList(snapshot) {
   if (!snapshot) return;
   clocks = snapshot;
 
   const items = Array.isArray(snapshot.items) ? snapshot.items : [];
-  const current = snapshot.current || null;
-  const empty = !current;
-  const canSwitch = items.length > 1;
+  clockEmpty.hidden = items.length > 0;
+  clockList.replaceChildren();
 
-  clockRow.hidden = empty;
-  clockEmpty.hidden = !empty;
-  clockRemove.hidden = empty;
-  clockSetCurrent.hidden = empty;
-  clockPrev.hidden = !canSwitch;
-  clockNext.hidden = !canSwitch;
-  renderClockDots(items, snapshot.index);
+  for (const item of items) {
+    const row = document.createElement('div');
+    row.className = 'clock-entry';
 
-  if (empty) {
-    clockSetCurrent.disabled = false;
-    clockSetCurrent.textContent = '设为当前';
-    clockSetCurrent.removeAttribute('aria-pressed');
-    clockCard.removeAttribute('aria-label');
+    const main = document.createElement('div');
+    main.className = 'clock-entry-main';
+
+    const name = document.createElement('div');
+    name.className = 'clock-entry-name';
+
+    const label = document.createElement('span');
+    label.className = 'clock-entry-label';
+    label.textContent = item.label;
+    label.title = `${item.label}（${item.id}）`;
+    name.append(label);
+
+    if (item.isMenuBar) {
+      const tag = document.createElement('span');
+      tag.className = 'menu-bar-tag';
+      tag.textContent = '菜单栏';
+      name.append(tag);
+    }
+
+    const sub = document.createElement('span');
+    sub.className = 'clock-entry-sub';
+    sub.textContent = item.relativeText || '';
+
+    const time = document.createElement('span');
+    time.className = 'clock-entry-time';
+    time.textContent = item.time || '--:--';
+
+    main.append(name, sub);
+    row.append(main, time);
+    clockList.append(row);
+  }
+}
+
+function renderClockEditor(snapshot) {
+  const source = snapshot || clocks;
+  const items = source && Array.isArray(source.items) ? source.items : [];
+  clockAddedList.replaceChildren();
+
+  if (items.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'picker-empty';
+    empty.textContent = '还没有添加城市';
+    clockAddedList.append(empty);
     return;
   }
 
-  clockCity.textContent = current.label;
-  clockCity.title = `${current.label}（${current.id}）`;
-  clockTime.textContent = current.time;
-  clockDate.textContent = `${current.date} ${current.weekday}`;
-  const isMenuBar = Boolean(current.isMenuBar);
-  clockSetCurrent.disabled = isMenuBar;
-  clockSetCurrent.textContent = isMenuBar ? '当前' : '设为当前';
-  clockSetCurrent.setAttribute('aria-pressed', isMenuBar ? 'true' : 'false');
-  clockCard.setAttribute(
-    'aria-label',
-    `${current.label} ${current.time} ${current.date} ${current.weekday}`
-  );
+  for (const item of items) {
+    const row = document.createElement('div');
+    row.className = 'clock-edit-row';
+
+    const main = document.createElement('div');
+    main.className = 'clock-edit-main';
+
+    const name = document.createElement('span');
+    name.className = 'clock-edit-name';
+    name.textContent = item.label;
+    main.append(name);
+
+    if (item.isMenuBar) {
+      const tag = document.createElement('span');
+      tag.className = 'menu-bar-tag';
+      tag.textContent = '菜单栏';
+      main.append(tag);
+    }
+
+    const actions = document.createElement('div');
+    actions.className = 'clock-edit-actions';
+
+    const pin = document.createElement('button');
+    pin.type = 'button';
+    pin.className = 'clock-edit-action';
+    pin.textContent = '设为菜单栏';
+    pin.disabled = Boolean(item.isMenuBar);
+    pin.addEventListener('click', () => {
+      if (pin.disabled) return;
+      api.setMenuBarClock({ id: item.id }).then(handleClockSnapshot).catch(() => {
+        refreshState();
+      });
+    });
+
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'clock-edit-action';
+    remove.textContent = '移除';
+    remove.addEventListener('click', () => {
+      api.removeClock({ id: item.id }).then(handleClockSnapshot).catch(() => {
+        refreshState();
+      });
+    });
+
+    actions.append(pin, remove);
+    row.append(main, actions);
+    clockAddedList.append(row);
+  }
 }
 
-function requestClockSelect(payload) {
-  return api.selectClock(payload).then(renderClocks).catch(() => {
-    refreshState();
-  });
+function handleClockSnapshot(snapshot) {
+  renderClockList(snapshot);
+  if (!clockPicker.hidden) {
+    renderClockEditor(snapshot);
+    runClockSearchNow();
+  }
 }
 
-function selectClockRelative(direction) {
-  if (!clocks || !Array.isArray(clocks.items) || clocks.items.length < 2) return;
-  requestClockSelect({ direction });
+function clearSearchTimer() {
+  if (searchTimer) {
+    clearTimeout(searchTimer);
+    searchTimer = null;
+  }
 }
 
-function renderPicker(rows) {
-  clockList.replaceChildren();
+function renderSearchResults(rows) {
+  clockSearchResults.replaceChildren();
 
   if (!Array.isArray(rows) || rows.length === 0) {
     const empty = document.createElement('div');
     empty.className = 'picker-empty';
     empty.textContent = '没有匹配的时区';
-    clockList.append(empty);
+    clockSearchResults.append(empty);
     return;
   }
 
@@ -175,50 +232,50 @@ function renderPicker(rows) {
     button.append(name, meta);
     button.addEventListener('click', () => {
       if (button.disabled) return;
-      api.addClock({ id: row.id, label: row.label }).then((snapshot) => {
-        renderClocks(snapshot);
-        closeClockPicker();
-      }).catch(() => {
+      api.addClock({ id: row.id, label: row.label }).then(handleClockSnapshot).catch(() => {
         refreshState();
       });
     });
-    clockList.append(button);
+    clockSearchResults.append(button);
   }
+}
+
+function runClockSearchNow() {
+  if (clockPicker.hidden) return;
+  const token = searchToken + 1;
+  searchToken = token;
+  api.searchClocks({ query: clockSearch.value }).then((rows) => {
+    if (token === searchToken) renderSearchResults(rows);
+  }).catch(() => {
+    if (token === searchToken) renderSearchResults([]);
+  });
 }
 
 function runClockSearch() {
-  if (searchTimer) {
-    clearTimeout(searchTimer);
-    searchTimer = null;
-  }
+  clearSearchTimer();
   searchTimer = setTimeout(() => {
     searchTimer = null;
-    const token = searchToken + 1;
-    searchToken = token;
-    api.searchClocks({ query: clockSearch.value }).then((rows) => {
-      if (token === searchToken) renderPicker(rows);
-    }).catch(() => {
-      if (token === searchToken) renderPicker([]);
-    });
+    runClockSearchNow();
   }, 60);
 }
 
-function openClockPicker() {
+function openClockEditor() {
+  closeWeatherPicker();
+  clearSettingsHighlight();
   clockPicker.hidden = false;
   clockSearch.value = '';
-  clockList.replaceChildren();
-  runClockSearch();
+  clockSearchResults.replaceChildren();
+  renderClockEditor(clocks);
+  runClockSearchNow();
   clockSearch.focus();
 }
 
-function closeClockPicker() {
+function closeClockEditor() {
   clockPicker.hidden = true;
-  if (searchTimer) {
-    clearTimeout(searchTimer);
-    searchTimer = null;
-  }
+  clearSearchTimer();
   searchToken += 1;
-  clockList.replaceChildren();
+  clockSearchResults.replaceChildren();
+  clockAddedList.replaceChildren();
 }
 
 function renderCells(next) {
@@ -274,12 +331,12 @@ function applyState(next) {
 
   buildYearOptions();
   yearSelect.value = String(next.view.year);
-  focusLabel.textContent = `${next.focus.month}-${next.focus.day}`;
+  monthTitle.textContent = `${next.view.year}年${next.view.month}月`;
 
   renderCells(next);
   renderAlmanac(next.almanac);
-  renderClocks(next.clocks);
-  loginToggle.checked = Boolean(next.openAtLogin);
+  renderClockList(next.clocks);
+  if (!clockPicker.hidden) renderClockEditor(next.clocks);
 }
 
 function refreshState() {
@@ -331,40 +388,53 @@ yearSelect.addEventListener('change', () => {
   requestView({ year, month, focusY: year, focusM: month, focusD: day });
 });
 
-loginToggle.addEventListener('change', () => {
-  const desired = loginToggle.checked;
-  api.setLogin(desired).then((actual) => {
-    loginToggle.checked = Boolean(actual);
-  }).catch(() => {
-    refreshState();
+function clearSettingsHighlight() {
+  settingsButton.classList.remove('is-open');
+  settingsButton.setAttribute('aria-expanded', 'false');
+}
+
+settingsButton.addEventListener('click', () => {
+  const rect = settingsButton.getBoundingClientRect();
+  settingsButton.classList.add('is-open');
+  settingsButton.setAttribute('aria-expanded', 'true');
+  api.openSettings({
+    x: Math.round(rect.right),
+    y: Math.round(rect.bottom)
   });
 });
 
-quitButton.addEventListener('click', () => {
-  api.quit();
-});
-
 function renderVersion(label) {
-  if (!appVersion) return;
   const text = typeof label === 'string' ? label : '';
-  appVersion.textContent = text;
+  appVersion.textContent = text ? `栏历 ${text}` : '栏历';
   appVersion.setAttribute('aria-label', text ? `当前版本 ${text}` : '当前版本');
 }
 
 function loadVersion() {
-  if (!appVersion) return;
   api.getVersion().then(renderVersion).catch(() => {
     renderVersion('');
   });
 }
 
 function renderWeather(result) {
-  if (!weatherText) return;
+  const ok = result && result.ok === true &&
+    Number.isFinite(result.temperature) &&
+    typeof result.city === 'string' && typeof result.weather === 'string';
+
+  if (ok) {
+    weatherEmoji.textContent = result.emoji || '🌡️';
+    weatherTemp.textContent = `${Math.round(result.temperature)}°`;
+    weatherCity.textContent = `${result.city} · ${result.weather}`;
+    weatherCard.title = weatherCity.textContent;
+    return;
+  }
+
   const text = result && typeof result.text === 'string' && result.text.trim()
     ? result.text.trim()
     : '天气暂不可用';
-  weatherText.textContent = text;
-  weatherText.title = text;
+  weatherEmoji.textContent = result && result.emoji ? result.emoji : '🌡️';
+  weatherTemp.textContent = '—';
+  weatherCity.textContent = text;
+  weatherCard.title = text;
 }
 
 function requestWeather() {
@@ -410,7 +480,7 @@ function weatherRowButton(row) {
     // the city and pushes the refreshed result via weather:update, so this
     // never waits on the network.
     closeWeatherPicker();
-    renderWeather({ text: `${label} · 加载中…` });
+    renderWeather({ ok: false, text: `${label} · 加载中…` });
     api.setCity(city).catch(() => {
       refreshWeather();
     });
@@ -446,6 +516,8 @@ function runWeatherSearch() {
 }
 
 function openWeatherPicker() {
+  closeClockEditor();
+  clearSettingsHighlight();
   weatherPicker.hidden = false;
   weatherSearch.value = '';
   renderWeatherPicker([]);
@@ -463,9 +535,27 @@ function closeWeatherPicker() {
   weatherList.replaceChildren();
 }
 
+function clearCheckStatusTimer() {
+  if (checkStatusTimer) {
+    clearTimeout(checkStatusTimer);
+    checkStatusTimer = null;
+  }
+}
+
+function hideStatusBanner() {
+  if (bannerMode !== 'status') return;
+  bannerMode = null;
+  updateMode = null;
+  updateBanner.hidden = true;
+  updateMessage.textContent = '';
+}
+
 function showUpdateNotice(notice) {
   if (!notice || !updateBanner) return;
 
+  clearCheckStatusTimer();
+  clearSettingsHighlight();
+  bannerMode = 'notice';
   updateMode = notice.mode === 'ready' ? 'ready' : 'manual';
   if (updateMode === 'ready') {
     updateMessage.textContent = '新版本已就绪';
@@ -474,63 +564,36 @@ function showUpdateNotice(notice) {
     updateMessage.textContent = '无法自动更新，请手动下载';
     updateAction.textContent = '下载新版';
   }
+  updateAction.hidden = false;
   updateBanner.hidden = false;
 }
 
-function resetCheckButton() {
-  checkUpdateLabel.textContent = '检查更新';
-  checkUpdateButton.disabled = false;
-  checkUpdateButton.setAttribute('aria-busy', 'false');
-}
-
+// Manual check results use the same banner area as update notices. Notices win
+// so a pending download/restart prompt is never replaced by a status line.
 function applyCheckStatus(status) {
   if (!status) return;
-  if (checkStatusTimer) {
-    clearTimeout(checkStatusTimer);
-    checkStatusTimer = null;
-  }
+  clearCheckStatusTimer();
 
   const label = typeof status.label === 'string' ? status.label : '';
   if (!label) {
-    resetCheckButton();
+    if (bannerMode === 'status') hideStatusBanner();
     return;
   }
+  if (bannerMode === 'notice') return;
 
-  checkUpdateLabel.textContent = label;
-  checkUpdateButton.disabled = true;
-  checkUpdateButton.setAttribute('aria-busy', status.busy ? 'true' : 'false');
+  bannerMode = 'status';
+  updateMode = null;
+  updateMessage.textContent = label;
+  updateAction.hidden = true;
+  updateBanner.hidden = false;
 
   if (status.timed) {
     checkStatusTimer = setTimeout(() => {
       checkStatusTimer = null;
-      resetCheckButton();
+      hideStatusBanner();
     }, 2600);
   }
 }
-
-checkUpdateButton.addEventListener('click', () => {
-  if (checkUpdateButton.disabled) return;
-
-  applyCheckStatus({
-    state: 'checking',
-    label: '正在检查…',
-    busy: true,
-    timed: false
-  });
-
-  api.checkForUpdate().then((status) => {
-    if (status && status.state !== 'checking') applyCheckStatus(status);
-  }).catch(() => {
-    applyCheckStatus({
-      state: 'error',
-      label: '检查失败',
-      busy: false,
-      timed: true
-    });
-  });
-});
-
-api.onUpdateStatus(applyCheckStatus);
 
 updateAction.addEventListener('click', () => {
   if (updateMode === 'ready') {
@@ -541,44 +604,22 @@ updateAction.addEventListener('click', () => {
 });
 
 api.onUpdateNotice(showUpdateNotice);
+api.onUpdateStatus(applyCheckStatus);
 api.onWeatherUpdate(renderWeather);
 
-clockPrev.addEventListener('click', () => {
-  selectClockRelative('prev');
-});
-
-clockNext.addEventListener('click', () => {
-  selectClockRelative('next');
-});
-
-clockAdd.addEventListener('click', () => {
-  openClockPicker();
-});
-
-clockRemove.addEventListener('click', () => {
-  api.removeClock().then(renderClocks).catch(() => {
-    refreshState();
-  });
-});
-
-clockSetCurrent.addEventListener('click', () => {
-  if (clockSetCurrent.disabled) return;
-  api.setMenuBarClock({ id: clocks && clocks.current ? clocks.current.id : undefined })
-    .then(renderClocks)
-    .catch(() => {
-      refreshState();
-    });
+clockEdit.addEventListener('click', () => {
+  openClockEditor();
 });
 
 clockPickerClose.addEventListener('click', () => {
-  closeClockPicker();
+  closeClockEditor();
 });
 
 clockSearch.addEventListener('input', () => {
   runClockSearch();
 });
 
-weatherText.addEventListener('click', () => {
+weatherCard.addEventListener('click', () => {
   openWeatherPicker();
 });
 
@@ -590,38 +631,17 @@ weatherSearch.addEventListener('input', () => {
   runWeatherSearch();
 });
 
-// Horizontal trackpad swipe (or shift-wheel) switches clocks. Lock briefly so
-// one gesture does not skip several zones.
-clockCard.addEventListener('wheel', (event) => {
-  if (Math.abs(event.deltaX) <= Math.abs(event.deltaY)) return;
-  if (Math.abs(event.deltaX) < 8) return;
-  event.preventDefault();
-
-  const now = Date.now();
-  if (now - wheelLockedAt < 350) return;
-  wheelLockedAt = now;
-  selectClockRelative(event.deltaX > 0 ? 'next' : 'prev');
-}, { passive: false });
-
-// Left/right switch clocks unless focus is on a text entry control, so the
-// year dropdown and the search field keep their own key handling. After a
-// click the focus usually rests on a button; arrow keys must keep switching.
-document.addEventListener('keydown', (event) => {
-  if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
-  if (!clockPicker.hidden) return;
-
-  const target = event.target;
-  const tag = target && target.tagName ? target.tagName : '';
-  if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA' ||
-      (target && target.isContentEditable)) {
-    return;
-  }
-
-  event.preventDefault();
-  selectClockRelative(event.key === 'ArrowLeft' ? 'prev' : 'next');
+api.onOpenPanel((panel) => {
+  clearSettingsHighlight();
+  if (panel === 'clocks') openClockEditor();
+  if (panel === 'weather') openWeatherPicker();
 });
 
+document.addEventListener('pointerdown', clearSettingsHighlight, true);
+window.addEventListener('blur', clearSettingsHighlight);
+
 document.documentElement.addEventListener('mouseenter', () => {
+  clearSettingsHighlight();
   api.pointerEnter();
   refreshState();
 });
@@ -640,13 +660,14 @@ document.addEventListener('visibilitychange', () => {
 });
 
 window.addEventListener('focus', () => {
+  clearSettingsHighlight();
   refreshState();
 });
 
 api.onTick((payload) => {
   if (!payload) return;
   renderAlmanac(payload.almanac);
-  renderClocks(payload.clocks);
+  renderClockList(payload.clocks);
 });
 
 loadVersion();

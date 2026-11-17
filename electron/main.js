@@ -37,7 +37,8 @@ const {
   supportedTimeZoneList,
   defaultLocalTimeZone,
   sameTimeZone,
-  formatClock,
+  formatClockTime,
+  describeClockRelative,
   formatMenuTitleInZone,
   resolveMenuBarTimeZone,
   normalizeMenuBarTimeZone,
@@ -45,9 +46,9 @@ const {
   normalizeWorldClocks,
   addClock,
   removeClock,
-  selectClock,
   searchCatalog
 } = require('./world-clocks');
+const { buildSettingsMenuTemplate } = require('./settings-menu');
 const {
   RELEASES_LATEST_URL,
   HOMEPAGE_URL
@@ -64,11 +65,15 @@ const { createLoginItem } = require('./login-item');
 
 const WINDOW_WIDTH = 580;
 const WINDOW_HEIGHT = 400;
+// Native menu width used only to right-align the popup with the settings
+// button; Electron's popup takes the menu's left edge.
+const SETTINGS_MENU_WIDTH = 250;
 
 let tray = null;
 let calendarWindow = null;
 let clockTimer = null;
 let closeTimer = null;
+let settingsMenuOpen = false;
 let updater = null;
 let selfUpdater = null;
 let updateSetupError = null;
@@ -182,8 +187,7 @@ function buildState() {
     focus: { year: focus.year, month: focus.month, day: focus.day },
     cells: buildCells(view.year, view.month, now),
     almanac: buildAlmanac(now),
-    clocks: currentClockSnapshot(now),
-    openAtLogin: getOpenAtLogin()
+    clocks: currentClockSnapshot(now)
   };
 }
 
@@ -251,7 +255,7 @@ function loadWorldClocks() {
   }
 }
 
-function persistWorldClockPreferences() {
+function persistWorldClocks() {
   const preferences = readPreferences();
   const next = { ...preferences, worldClocks };
   if (menuBarTimeZone) {
@@ -262,31 +266,24 @@ function persistWorldClockPreferences() {
   writePreferences(next);
 }
 
-function persistWorldClocks() {
-  persistWorldClockPreferences();
-}
-
 function currentClockSnapshot(now = new Date()) {
-  const item = worldClocks.items[worldClocks.index] || null;
   const resolvedZone = resolvedMenuBarTimeZone();
-  const formatted = item ? formatClock(now, item.id) : null;
+  const localZone = defaultLocalTimeZone();
 
   return {
-    items: worldClocks.items.map((clock) => ({ id: clock.id, label: clock.label })),
-    index: worldClocks.index,
-    // Resolved IANA id actually used for the tray title (falls back to the
-    // system local zone when unset/invalid or the selected clock was removed).
-    menuBarTimeZone: resolvedZone,
-    current: item && formatted
-      ? {
-          id: item.id,
-          label: item.label,
-          time: formatted.time,
-          date: formatted.date,
-          weekday: formatted.weekday,
-          isMenuBar: sameTimeZone(item.id, resolvedZone)
-        }
-      : null
+    // Every saved city is listed at once; the renderer never pages between
+    // zones. Relative labels and wall-clock times are computed here so the
+    // renderer does not touch Intl/time zones.
+    items: worldClocks.items.map((clock) => {
+      const relative = describeClockRelative(now, clock.id, localZone);
+      return {
+        id: clock.id,
+        label: clock.label,
+        time: formatClockTime(now, clock.id),
+        relativeText: relative ? relative.text : '',
+        isMenuBar: sameTimeZone(clock.id, resolvedZone)
+      };
+    })
   };
 }
 
@@ -435,10 +432,104 @@ function refreshWeather(force = false) {
 }
 
 function handleUpdateStatus(status) {
-  // Automatic startup and 6-hour checks stay silent; only a click on the
-  // always-visible entry gets the short state feedback.
+  // Automatic startup and 6-hour checks stay silent; only a manual menu click
+  // gets the short state feedback (shown in the update banner area).
   if (!status || status.manual !== true) return;
   sendUpdateStatus(describeStatus(status));
+}
+
+function performUpdateCheck() {
+  if (!updater) {
+    const reason = updateSetupError || 'updater not initialized';
+    logger.warn('update check but updater unavailable: ' + reason);
+    return describeStatus({ state: 'error' });
+  }
+  return describeStatus(updater.checkNow({ manual: true }));
+}
+
+// The settings menu runs the existing update check without a renderer round
+// trip. Updater statuses are pushed through onStatus; only the unavailable
+// path needs an explicit message.
+function requestUpdateCheck() {
+  const status = performUpdateCheck();
+  if (!updater) sendUpdateStatus(status);
+}
+
+function sendPanel(panel) {
+  if (!calendarWindow || calendarWindow.isDestroyed()) return;
+  calendarWindow.webContents.send('ui:openPanel', panel);
+}
+
+function pointerInsideWindow() {
+  if (!calendarWindow || calendarWindow.isDestroyed()) return false;
+  const point = screen.getCursorScreenPoint();
+  const bounds = calendarWindow.getBounds();
+  return point.x >= bounds.x && point.x < bounds.x + bounds.width &&
+    point.y >= bounds.y && point.y < bounds.y + bounds.height;
+}
+
+// The renderer sends the settings button's right/bottom edge. Electron's
+// popup takes the menu's left edge, so right-align the ~250px menu under it.
+function settingsMenuAnchor(position) {
+  const x = Number(position && position.x);
+  const y = Number(position && position.y);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  return {
+    x: Math.max(0, Math.round(x - SETTINGS_MENU_WIDTH)),
+    y: Math.round(y)
+  };
+}
+
+function openSettingsMenu(event, position) {
+  if (!calendarWindow || calendarWindow.isDestroyed()) return;
+  const target = BrowserWindow.fromWebContents(event.sender);
+  if (!target || target.isDestroyed()) return;
+
+  cancelClose();
+  settingsMenuOpen = true;
+
+  // Actions that open a panel or show update feedback keep the panel visible
+  // after the native menu closes. Dismissing the menu without one of those
+  // falls back to the normal pointer-outside close.
+  let keepWindowOpen = false;
+
+  const template = buildSettingsMenuTemplate(
+    {
+      version: formatVersionLabel(app.getVersion()),
+      openAtLogin: getOpenAtLogin()
+    },
+    {
+      checkUpdate: () => {
+        keepWindowOpen = true;
+        requestUpdateCheck();
+      },
+      setOpenAtLogin: (value) => {
+        applyLoginItem(Boolean(value));
+      },
+      openClocks: () => {
+        keepWindowOpen = true;
+        sendPanel('clocks');
+      },
+      openWeather: () => {
+        keepWindowOpen = true;
+        sendPanel('weather');
+      },
+      quit: () => app.quit()
+    }
+  );
+
+  const menu = Menu.buildFromTemplate(template);
+  const anchor = settingsMenuAnchor(position);
+  const options = { window: target };
+  if (anchor) {
+    options.x = anchor.x;
+    options.y = anchor.y;
+  }
+  options.callback = () => {
+    settingsMenuOpen = false;
+    if (!keepWindowOpen && !pointerInsideWindow()) scheduleClose();
+  };
+  menu.popup(options);
 }
 
 function isAllowedUpdateUrl(value) {
@@ -530,6 +621,9 @@ function cancelClose() {
 
 function scheduleClose() {
   cancelClose();
+  // A native settings menu floats above the window; pointer-leave would
+  // otherwise hide the calendar while the user is still choosing an item.
+  if (settingsMenuOpen) return;
   closeTimer = setTimeout(hideCalendar, 200);
 }
 
@@ -714,7 +808,7 @@ function registerIpc() {
       worldClocks.items,
       defaultLocalTimeZone()
     );
-    persistWorldClockPreferences();
+    persistWorldClocks();
     updateClock();
     return currentClockSnapshot();
   });
@@ -734,13 +828,9 @@ function registerIpc() {
       defaultLocalTimeZone(),
       supportedTimeZones()
     );
-    persistWorldClockPreferences();
+    persistWorldClocks();
     updateClock();
     return currentClockSnapshot();
-  });
-
-  ipcMain.handle('clocks:select', (_event, payload) => {
-    return commitWorldClocks(selectClock(worldClocks, payload));
   });
 
   ipcMain.handle('clocks:search', (_event, payload) => {
@@ -759,21 +849,8 @@ function registerIpc() {
     scheduleClose();
   });
 
-  ipcMain.handle('login:set', (_event, openAtLogin) => {
-    return applyLoginItem(Boolean(openAtLogin));
-  });
-
-  ipcMain.on('app:quit', () => {
-    app.quit();
-  });
-
-  ipcMain.handle('update:check', () => {
-    if (!updater) {
-      const reason = updateSetupError || 'updater not initialized';
-      logger.warn('update:check but updater unavailable: ' + reason);
-      return describeStatus({ state: 'error' });
-    }
-    return describeStatus(updater.checkNow({ manual: true }));
+  ipcMain.on('menu:openSettings', (event, position) => {
+    openSettingsMenu(event, position);
   });
 
   ipcMain.on('update:restart', () => {

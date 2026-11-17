@@ -22,6 +22,7 @@ const {
   matchChinaCity,
   matchChinaCityExact,
   formatTemperature,
+  weatherEmoji,
   formatWeatherResult,
   buildItboyUrl,
   buildWttrUrl,
@@ -316,6 +317,7 @@ test('weather result formats as 城市 · 天气 · 温度°C', () => {
       weather: '多云',
       temperature: 8,
       temperatureText: '8°C',
+      emoji: '⛅️',
       text: '纽约 · 多云 · 8°C'
     }
   );
@@ -326,11 +328,25 @@ test('weather result formats as 城市 · 天气 · 温度°C', () => {
   const noWeather = formatWeatherResult({ city: '纽约', temperature: 8 });
   assert.equal(noWeather.weather, '未知');
   assert.equal(noWeather.text, '纽约 · 未知 · 8°C');
+  assert.equal(noWeather.emoji, '🌡️');
 
   assert.deepEqual(
     formatWeatherResult({ city: '纽约', weather: '多云' }),
-    { ok: false, text: UNAVAILABLE_TEXT }
+    { ok: false, text: UNAVAILABLE_TEXT, emoji: '🌡️' }
   );
+});
+
+test('weather text maps to a card emoji with 雷/雪/雨 precedence', () => {
+  assert.equal(weatherEmoji('晴'), '☀️');
+  assert.equal(weatherEmoji('多云'), '⛅️');
+  assert.equal(weatherEmoji('阴'), '☁️');
+  assert.equal(weatherEmoji('小雨'), '🌧️');
+  assert.equal(weatherEmoji('雷阵雨'), '⛈️');
+  assert.equal(weatherEmoji('小雪'), '❄️');
+  assert.equal(weatherEmoji('雾'), '🌫️');
+  assert.equal(weatherEmoji('浮尘'), '🌡️');
+  assert.equal(weatherEmoji(''), '🌡️');
+  assert.equal(weatherEmoji(null), '🌡️');
 });
 
 test('china city weather uses itboy with the matched table code', async () => {
@@ -563,10 +579,18 @@ test('weather service caches results and failures for 30 minutes', async () => {
     logger: { warn: (message) => logs.push('warn:' + message) }
   });
 
-  assert.deepEqual(await failing.get(), { ok: false, text: UNAVAILABLE_TEXT });
+  assert.deepEqual(await failing.get(), {
+    ok: false,
+    text: UNAVAILABLE_TEXT,
+    emoji: '🌡️'
+  });
   assert.ok(logs.some((line) => line === 'warn:更新失败：offline'));
 
-  assert.deepEqual(await failing.get(), { ok: false, text: UNAVAILABLE_TEXT });
+  assert.deepEqual(await failing.get(), {
+    ok: false,
+    text: UNAVAILABLE_TEXT,
+    emoji: '🌡️'
+  });
   assert.equal(calls.length, 2);
 
   clock += CACHE_TTL_MS;

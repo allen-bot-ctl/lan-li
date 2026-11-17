@@ -8,89 +8,57 @@
   <link rel="stylesheet" href="calendar.css">
 </head>
 <body>
-  <div class="app" id="app">
+  <div class="app">
     <main class="calendar-pane">
       <header class="toolbar">
-        <select class="year-select" id="year-select" aria-label="选择公历年份"></select>
-        <div class="focus-nav">
-          <button class="nav-button" id="prev-month" type="button" aria-label="上一月">‹</button>
-          <span class="focus-label" id="focus-label">1-1</span>
-          <button class="nav-button" id="next-month" type="button" aria-label="下一月">›</button>
+        <div class="title-group">
+          <label class="month-title">
+            <span class="month-title-text" id="month-title">—</span>
+            <select class="year-select" id="year-select" aria-label="选择公历年份"></select>
+          </label>
+          <span class="lunar-subtitle" id="lunar-subtitle">—</span>
         </div>
-        <button class="today-button" id="today-button" type="button">返回今天</button>
+        <nav class="month-nav" aria-label="月份导航">
+          <button class="nav-circle" id="prev-month" type="button" aria-label="上一月">‹</button>
+          <button class="nav-pill" id="today-button" type="button">今天</button>
+          <button class="nav-circle" id="next-month" type="button" aria-label="下一月">›</button>
+          <button
+            class="nav-pill settings-button"
+            id="settings-button"
+            type="button"
+            aria-haspopup="menu"
+            aria-expanded="false"
+          >
+            <span class="settings-gear" aria-hidden="true">⚙︎</span>
+            <span>设置</span>
+          </button>
+        </nav>
       </header>
 
       <div class="weekdays" aria-hidden="true">
-        <span class="weekday">周一</span>
-        <span class="weekday">周二</span>
-        <span class="weekday">周三</span>
-        <span class="weekday">周四</span>
-        <span class="weekday">周五</span>
-        <span class="weekday weekday-weekend">周六</span>
-        <span class="weekday weekday-weekend">周日</span>
+        <span>一</span>
+        <span>二</span>
+        <span>三</span>
+        <span>四</span>
+        <span>五</span>
+        <span class="weekday-weekend">六</span>
+        <span class="weekday-weekend">日</span>
       </div>
 
       <div class="grid" id="grid" role="grid" aria-label="月历"></div>
 
       <div class="update-banner" id="update-banner" hidden>
-        <span class="update-message" id="update-message">新版本已就绪</span>
+        <span class="update-message" id="update-message"></span>
         <button class="update-action" id="update-action" type="button">重启更新</button>
       </div>
-
-      <footer class="footer">
-        <label class="login-label" for="login-toggle">
-          <input class="login-checkbox" id="login-toggle" type="checkbox">
-          <span>登录时打开</span>
-        </label>
-        <div class="footer-actions">
-          <button
-            class="check-update-button"
-            id="check-update-button"
-            type="button"
-            aria-label="检查更新"
-          >
-            <svg
-              class="check-update-icon"
-              viewBox="0 0 16 16"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
-              focusable="false"
-            >
-              <path d="M4.4 8.2a2.3 2.3 0 0 1 .5-4.5 3 3 0 0 1 5.7.4 2.1 2.1 0 0 1 .1 4.1" />
-              <path d="M8 8.6v4.2" />
-              <path d="M6.4 11.2 8 12.8l1.6-1.6" />
-            </svg>
-            <span class="check-update-label" id="check-update-label">检查更新</span>
-          </button>
-          <button class="quit-button" id="quit-button" type="button" aria-label="退出栏历">
-            <svg
-              class="quit-icon"
-              viewBox="0 0 16 16"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
-              focusable="false"
-            >
-              <path d="M8 2v5" />
-              <path d="M11.2 3.9a4.6 4.6 0 1 1-6.4 0" />
-            </svg>
-            <span>退出栏历</span>
-          </button>
-        </div>
-      </footer>
     </main>
 
-    <aside class="now-pane" aria-label="黄历与世界时钟">
-      <section class="almanac-card" aria-label="黄历">
-        <div class="pane-label">黄历</div>
-        <div class="almanac-year" id="almanac-year">—</div>
+    <aside class="now-pane" aria-label="黄历、世界时钟与天气">
+      <section class="card almanac-card" aria-label="黄历">
+        <div class="card-head">
+          <span class="card-title">黄历</span>
+          <span class="almanac-date" id="almanac-date">—</span>
+        </div>
         <div class="almanac-row">
           <span class="almanac-tag almanac-tag-yi">宜</span>
           <span class="almanac-items" id="almanac-yi">—</span>
@@ -101,72 +69,71 @@
         </div>
       </section>
 
-      <section class="world-clock" aria-label="世界时钟">
-        <div class="pane-label world-head">
-          <span>世界时钟</span>
-          <span class="world-tools">
-            <button class="clock-tool" id="clock-add" type="button" aria-label="添加时区">+</button>
-            <button class="clock-tool" id="clock-remove" type="button" aria-label="移除当前时区">×</button>
+      <section class="card world-clock-card" aria-label="世界时钟">
+        <div class="card-head">
+          <span class="card-title">世界时钟</span>
+          <button class="card-link" id="clock-edit" type="button">编辑</button>
+        </div>
+        <div class="clock-list" id="clock-list"></div>
+        <div class="clock-empty" id="clock-empty" hidden>尚未添加城市</div>
+      </section>
+
+      <button class="card weather-card" id="weather-card" type="button" aria-label="更换天气城市">
+        <span class="card-head">
+          <span class="card-title">天气</span>
+          <span class="card-link">更换城市 ›</span>
+        </span>
+        <span class="weather-body">
+          <span class="weather-emoji" id="weather-emoji">🌡️</span>
+          <span class="weather-info">
+            <span class="weather-temp" id="weather-temp">—</span>
+            <span class="weather-city" id="weather-city">天气加载中…</span>
           </span>
-        </div>
-
-        <div class="clock-card" id="clock-card">
-          <div class="clock-row" id="clock-row">
-            <button class="clock-arrow" id="clock-prev" type="button" aria-label="上一个时区">‹</button>
-            <div class="clock-body">
-              <div class="clock-city-row">
-                <span class="clock-city" id="clock-city">北京</span>
-              </div>
-              <div class="clock-time" id="clock-time">00:00:00</div>
-              <div class="clock-date" id="clock-date">1月1日 星期一</div>
-              <button class="clock-set-current" id="clock-set-current" type="button">设为当前</button>
-            </div>
-            <button class="clock-arrow" id="clock-next" type="button" aria-label="下一个时区">›</button>
-          </div>
-          <div class="clock-dots" id="clock-dots" aria-hidden="true"></div>
-          <div class="clock-empty" id="clock-empty" hidden>点击 + 添加时区</div>
-        </div>
-      </section>
-
-      <section class="weather-card" aria-label="天气">
-        <div class="pane-label">天气</div>
-        <button class="weather-line" id="weather-text" type="button" aria-label="选择天气城市">天气加载中…</button>
-      </section>
+        </span>
+      </button>
 
       <div class="pane-footer">
         <span class="app-version" id="app-version" aria-label="当前版本"></span>
       </div>
+    </aside>
 
-      <div class="clock-picker" id="clock-picker" hidden>
+    <div class="picker-overlay" id="clock-picker" hidden>
+      <section class="picker-sheet" role="dialog" aria-modal="true" aria-label="编辑世界时钟">
         <div class="picker-head">
-          <input
-            class="clock-search"
-            id="clock-search"
-            type="search"
-            placeholder="搜索城市或时区"
-            autocomplete="off"
-            spellcheck="false"
-          >
+          <span class="picker-title">编辑世界时钟</span>
           <button class="picker-close" id="clock-picker-close" type="button">完成</button>
         </div>
-        <div class="picker-list" id="clock-list" role="listbox" aria-label="选择时区"></div>
-      </div>
+        <input
+          class="clock-search"
+          id="clock-search"
+          type="search"
+          placeholder="搜索城市或时区"
+          autocomplete="off"
+          spellcheck="false"
+        >
+        <div class="picker-list picker-results" id="clock-search-results" role="listbox" aria-label="搜索时区"></div>
+        <div class="picker-section-label">已添加城市</div>
+        <div class="picker-added-list" id="clock-added-list"></div>
+      </section>
+    </div>
 
-      <div class="clock-picker" id="weather-picker" hidden>
+    <div class="picker-overlay" id="weather-picker" hidden>
+      <section class="picker-sheet" role="dialog" aria-modal="true" aria-label="选择天气城市">
         <div class="picker-head">
-          <input
-            class="clock-search"
-            id="weather-search"
-            type="search"
-            placeholder="搜索城市"
-            autocomplete="off"
-            spellcheck="false"
-          >
+          <span class="picker-title">天气城市</span>
           <button class="picker-close" id="weather-picker-close" type="button">完成</button>
         </div>
+        <input
+          class="clock-search"
+          id="weather-search"
+          type="search"
+          placeholder="搜索城市"
+          autocomplete="off"
+          spellcheck="false"
+        >
         <div class="picker-list" id="weather-list" role="listbox" aria-label="选择天气城市"></div>
-      </div>
-    </aside>
+      </section>
+    </div>
   </div>
 
   <script src="calendar.js"></script>

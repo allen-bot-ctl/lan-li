@@ -9,7 +9,6 @@ contextBridge.exposeInMainWorld('lanli', {
   goToday: () => ipcRenderer.invoke('calendar:goToday'),
   addClock: (payload) => ipcRenderer.invoke('clocks:add', payload),
   removeClock: (payload) => ipcRenderer.invoke('clocks:remove', payload),
-  selectClock: (payload) => ipcRenderer.invoke('clocks:select', payload),
   setMenuBarClock: (payload) => ipcRenderer.invoke('clocks:setMenuBar', payload),
   searchClocks: (payload) => ipcRenderer.invoke('clocks:search', payload),
   getWeather: () => ipcRenderer.invoke('weather:get'),
@@ -23,12 +22,13 @@ contextBridge.exposeInMainWorld('lanli', {
   },
   pointerEnter: () => ipcRenderer.send('pointer:enter'),
   pointerLeave: () => ipcRenderer.send('pointer:leave'),
-  setLogin: (openAtLogin) => ipcRenderer.invoke('login:set', openAtLogin),
-  quit: () => ipcRenderer.send('app:quit'),
+  openSettings: (position) => ipcRenderer.send('menu:openSettings', position),
+  onOpenPanel: (callback) => {
+    ipcRenderer.on('ui:openPanel', (_event, panel) => callback(panel));
+  },
   onUpdateNotice: (callback) => {
     ipcRenderer.on('update:notice', (_event, payload) => callback(payload));
   },
-  checkForUpdate: () => ipcRenderer.invoke('update:check'),
   onUpdateStatus: (callback) => {
     ipcRenderer.on('update:status', (_event, payload) => callback(payload));
   },
