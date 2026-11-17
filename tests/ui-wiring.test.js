@@ -19,9 +19,43 @@ test('settings menu anchors to the button left edge four pixels below', () => {
   assert.match(main, /x:\s*Math\.max\(0,\s*Math\.round\(x\)\)/);
 });
 
-test('weather card stretches its header so 更换城市 sits on the right', () => {
+test('weather card is a single row ending with 更换 ›', () => {
   const css = source('electron/renderer/calendar.css');
-  assert.match(css, /\.weather-card\s*\{[^}]*align-items:\s*stretch;/s);
+  const html = source('electron/renderer/calendar.html');
+
+  assert.match(css, /\.weather-card\s*\{[^}]*align-items:\s*center;/s);
+  assert.match(css, /\.weather-card\s*\{[^}]*gap:\s*5px;/s);
+  assert.equal(/\.weather-body|\.weather-info/.test(css), false);
+
+  const card = html.match(/<button class="card weather-card"[\s\S]*?<\/button>/);
+  assert.ok(card, 'weather card should exist');
+  assert.equal(/card-head/.test(card[0]), false);
+  assert.match(card[0], /id="weather-emoji"/);
+  assert.match(card[0], /id="weather-temp"/);
+  assert.match(card[0], /id="weather-city"/);
+  assert.match(card[0], /<span class="[^"]*\bcard-link\b[^"]*\bweather-change\b[^"]*">更换 ›<\/span>/);
+  assert.equal(/<button[^>]*>[^<]*<button/.test(card[0]), false);
+});
+
+test('almanac focus card and detail panel replace the six-item lists', () => {
+  const html = source('electron/renderer/calendar.html');
+  const renderer = source('electron/renderer/calendar.js');
+
+  for (const id of [
+    'almanac-focus-yi',
+    'almanac-focus-ji',
+    'almanac-quote',
+    'almanac-meta',
+    'almanac-detail',
+    'almanac-detail-close'
+  ]) {
+    assert.match(html, new RegExp(`id="${id}"`), id);
+  }
+  assert.match(html, /class="[^"]*\bweather-change\b[^"]*"/);
+  assert.equal(/id="almanac-yi"/.test(html), false);
+  assert.equal(/id="almanac-ji"/.test(html), false);
+  assert.equal(/almanac-items/.test(html), false);
+  assert.equal(/almanacYi|almanacJi/.test(renderer), false);
 });
 
 test('clock candidates drop added zones and only report no match for a query', () => {

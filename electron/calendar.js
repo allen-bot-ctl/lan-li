@@ -3,8 +3,10 @@
 const { Solar } = require('lunar-javascript');
 const {
   createStyleCatalog,
+  mapTerm,
   mapAlmanacTerms
 } = require('./almanac-styles');
+const { loadAlmanacFocus, pickFocus } = require('./almanac-focus');
 
 const MIN_YEAR = 1900;
 const MAX_YEAR = 2100;
@@ -128,11 +130,10 @@ function buildCells(year, month, today) {
 
 // 黄历卡片：干支生肖纪年与农历月用于左侧顶栏，农历月日用于卡片标题行；
 // 当日宜忌全部来自 lunar-javascript 离线计算，再按所选风格逐词映射。
-// 可见文本只取前若干项（单行放不下由渲染层 CSS 省略号截断），
-// title 用完整列表；只由「现在」与 styleId 决定，不随翻月或焦点日变化。
-const ALMANAC_MAX_ITEMS = 6;
-
+// 卡片只显示 1 宜 + 1 忌（按百年稀有度选最罕见的原词）、一句建除签语与
+// 一行干支冲煞；完整列表进「今日黄历」面板。只由「现在」与 styleId 决定。
 let styleCatalog = null;
+let focusData = null;
 
 // The main process calls this once during startup so style-file warnings go to
 // the file logger. Tests (and accidental early calls) lazily load the same
@@ -151,6 +152,33 @@ function getStyleCatalog() {
   return styleCatalog;
 }
 
+// Startup loads the packaged rarity table and quotes once beside the style
+// files. Tests may point at a temporary file and reset with no options.
+function configureAlmanacFocus(options = {}) {
+  focusData = loadAlmanacFocus(options);
+  return focusData;
+}
+
+function getFocusData() {
+  if (!focusData) {
+    focusData = loadAlmanacFocus({
+      logger: { warn: (message) => console.warn(message) }
+    });
+  }
+  return focusData;
+}
+
+function focusEntry(term, list, style) {
+  const isLunar = style.definition.id === 'lunar';
+  const text = isLunar ? term : mapTerm(term, style.map);
+  return {
+    term,
+    text,
+    title: isLunar ? term : `${text}（${term}）`,
+    hint: getFocusData().hint(list, term)
+  };
+}
+
 function buildAlmanac(date, styleId = 'lunar') {
   const solar = Solar.fromYmd(date.getFullYear(), date.getMonth() + 1, date.getDate());
   const lunar = solar.getLunar();
@@ -164,6 +192,19 @@ function buildAlmanac(date, styleId = 'lunar') {
   const ji = mappedJi.items;
   const ganZhiText = `${lunar.getYearInGanZhi()}${lunar.getYearShengXiao()}年`;
   const lunarMonthText = `${lunar.getMonthInChinese()}月`;
+
+  const data = getFocusData();
+  const focusYiTerm = pickFocus(rawYi, 'yi', (term) => data.score('yi', term));
+  const focusJiTerm = pickFocus(rawJi, 'ji', (term) => data.score('ji', term));
+
+  const zhiXing = lunar.getZhiXing();
+  const chongShengXiao = lunar.getDayChongShengXiao();
+  const sha = lunar.getDaySha();
+  const jieQi = lunar.getJieQi();
+  const metaText = `${lunar.getDayInGanZhi()}日 ` +
+    `${jieQi || `${zhiXing}日`} 冲${chongShengXiao}煞${sha}`;
+  const chongText = `冲${chongShengXiao}（${lunar.getDayChongGan()}${lunar.getDayChong()}）煞${sha}`;
+
   return {
     styleId: style.definition.id,
     styleName: style.definition.name,
@@ -176,10 +217,19 @@ function buildAlmanac(date, styleId = 'lunar') {
     lunarDayText: `${lunar.getMonthInChinese()}月${lunar.getDayInChinese()}`,
     yi,
     ji,
-    yiText: yi.slice(0, ALMANAC_MAX_ITEMS).join(' '),
-    jiText: ji.slice(0, ALMANAC_MAX_ITEMS).join(' '),
-    yiTitle: isLunar ? rawYi.join(' ') : mappedYi.title,
-    jiTitle: isLunar ? rawJi.join(' ') : mappedJi.title
+    focusYi: focusEntry(focusYiTerm, 'yi', style),
+    focusJi: focusEntry(focusJiTerm, 'ji', style),
+    quote: data.quote(style.definition.id, zhiXing),
+    metaText,
+    detail: {
+      yiItems: isLunar ? rawYi.slice() : mappedYi.labels.slice(),
+      jiItems: isLunar ? rawJi.slice() : mappedJi.labels.slice(),
+      zhiXing,
+      tianShen: lunar.getDayTianShen(),
+      tianShenLuck: lunar.getDayTianShenLuck(),
+      chongText,
+      pengZu: [lunar.getPengZuGan(), lunar.getPengZuZhi()]
+    }
   };
 }
 
@@ -187,7 +237,6 @@ module.exports = {
   MIN_YEAR,
   MAX_YEAR,
   MENU_TITLE_PATTERN,
-  ALMANAC_MAX_ITEMS,
   pad2,
   formatMenuTitle,
   isValidMenuTitle,
@@ -195,6 +244,7 @@ module.exports = {
   buildCell,
   buildCells,
   configureAlmanacStyles,
+  configureAlmanacFocus,
   mapAlmanacTerms,
   buildAlmanac
 };

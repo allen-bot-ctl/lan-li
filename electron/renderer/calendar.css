@@ -431,6 +431,7 @@ select {
 
 .almanac-card {
   padding-bottom: 9px;
+  cursor: pointer;
 }
 
 .almanac-style-name {
@@ -447,22 +448,25 @@ select {
   }
 }
 
-.almanac-row {
+.almanac-focus-row {
   display: flex;
-  align-items: flex-start;
-  gap: 4px;
+  align-items: center;
+  gap: 5px;
   min-width: 0;
-  margin-top: 5px;
+}
+
+.almanac-focus-row + .almanac-focus-row {
+  margin-top: 4px;
 }
 
 .almanac-tag {
   flex: 0 0 auto;
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   border-radius: 4px;
   color: #fff;
-  font-size: 9px;
-  line-height: 14px;
+  font-size: 10px;
+  line-height: 16px;
   text-align: center;
 }
 
@@ -474,14 +478,28 @@ select {
   background: var(--red);
 }
 
-.almanac-items {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
+.almanac-focus-text {
   color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.almanac-quote {
+  min-height: 15px;
+  margin-top: 7px;
+  color: var(--text);
+  font-size: 11px;
+  line-height: 15px;
+  white-space: nowrap;
+}
+
+.almanac-meta {
+  margin-top: 3px;
+  color: var(--muted);
   font-size: 10px;
-  line-height: 1.5;
-  text-overflow: ellipsis;
+  line-height: 13px;
   white-space: nowrap;
 }
 
@@ -578,10 +596,8 @@ select {
 .weather-card {
   display: flex;
   width: 100%;
-  flex-direction: column;
-  /* Buttons default to align-items:flex-start, which would shrink the header
-     and keep 「更换城市 ›」next to the title. Stretch it like a normal card. */
-  align-items: stretch;
+  align-items: center;
+  gap: 5px;
   color: var(--text);
   font-family: inherit;
   text-align: left;
@@ -593,41 +609,34 @@ select {
   background: var(--chip);
 }
 
-.weather-body {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 4px;
-  min-width: 0;
-}
-
 .weather-emoji {
   flex: 0 0 auto;
-  font-size: 28px;
-  line-height: 1;
-}
-
-.weather-info {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 1px;
+  font-size: 16px;
+  line-height: 18px;
 }
 
 .weather-temp {
+  flex: 0 0 auto;
   color: var(--text);
-  font-size: 23px;
+  font-size: 14px;
   font-weight: 600;
-  line-height: 1.05;
+  line-height: 18px;
 }
 
 .weather-city {
+  flex: 1 1 auto;
+  min-width: 0;
   overflow: hidden;
   color: var(--muted);
   font-size: 10.5px;
-  line-height: 1.25;
+  line-height: 18px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.weather-change {
+  flex: 0 0 auto;
+  font-size: 10.5px;
 }
 
 .pane-footer {
@@ -860,6 +869,34 @@ select {
   margin: 8px 0 2px;
   color: var(--muted);
   font-size: 10.5px;
+}
+
+.almanac-detail-body {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.almanac-detail-heading {
+  margin-top: 9px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.almanac-detail-heading:first-child {
+  margin-top: 0;
+}
+
+.almanac-detail-text {
+  margin-top: 2px;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: normal;
+}
+
+.almanac-detail-line + .almanac-detail-line {
+  margin-top: 1px;
 }
 
 .picker-added-list {

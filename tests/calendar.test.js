@@ -8,7 +8,6 @@ const {
   buildCell,
   buildCells,
   buildAlmanac,
-  ALMANAC_MAX_ITEMS,
   formatMenuTitle,
   isValidMenuTitle
 } = require('../electron/calendar');
@@ -76,11 +75,13 @@ test('2026-11-16 almanac is 丙午马年 / 十月 / 十月初八 with 纳采 / �
   assert.equal(almanac.yi[0], '纳采');
   assert.equal(almanac.ji[0], '上梁');
 
-  assert.ok(almanac.yiText.startsWith('纳采 '));
-  assert.ok(almanac.jiText.startsWith('上梁'));
-  assert.equal(almanac.yiText.split(' ').length, ALMANAC_MAX_ITEMS);
-  assert.equal(almanac.yiTitle, almanac.yi.join(' '));
-  assert.equal(almanac.jiTitle, almanac.ji.join(' '));
+  // The card shows one rare original term per column; full lists live in detail.
+  assert.equal(almanac.focusYi.term, '雕刻');
+  assert.equal(almanac.focusJi.term, '出货财');
+  assert.equal(almanac.yi.length, 23);
+  assert.equal(almanac.ji.length, 5);
+  assert.equal(almanac.detail.yiItems.length, 23);
+  assert.equal(almanac.detail.jiItems.length, 5);
 });
 
 test('almanac is built only from the local calendar day', () => {

@@ -133,26 +133,33 @@ function createStyleCatalog(options = {}) {
   };
 }
 
+// Resolves one term through a style map. Missing keys and non-string/empty
+// values fall back to the original term.
+function mapTerm(term, map) {
+  const table = map && typeof map === 'object' ? map : {};
+  const mapped = Object.prototype.hasOwnProperty.call(table, term) ? table[term] : undefined;
+  return typeof mapped === 'string' && mapped.length > 0 ? mapped : term;
+}
+
 // Maps each term, then de-duplicates by mapped text, keeping first occurrence.
-// Missing keys and non-string/empty values fall back to the original term.
-// The title always includes the original term next to the displayed text.
+// `labels` pairs every kept display text with its original term, while `title`
+// joins those pairs for the legacy full-list tooltip. `items` holds display
+// text only for the card's compact fields.
 function mapAlmanacTerms(terms, map) {
   const source = Array.isArray(terms) ? terms : [];
-  const table = map && typeof map === 'object' ? map : {};
   const seen = new Set();
   const items = [];
-  const titleParts = [];
+  const labels = [];
 
   for (const term of source) {
-    const mapped = Object.prototype.hasOwnProperty.call(table, term) ? table[term] : undefined;
-    const text = typeof mapped === 'string' && mapped.length > 0 ? mapped : term;
+    const text = mapTerm(term, map);
     if (seen.has(text)) continue;
     seen.add(text);
     items.push(text);
-    titleParts.push(`${text}（${term}）`);
+    labels.push(`${text}（${term}）`);
   }
 
-  return { items, title: titleParts.join(' ') };
+  return { items, labels, title: labels.join(' ') };
 }
 
 module.exports = {
@@ -166,5 +173,6 @@ module.exports = {
   readAlmanacStyle,
   styleDefinition,
   createStyleCatalog,
+  mapTerm,
   mapAlmanacTerms
 };

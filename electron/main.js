@@ -27,6 +27,7 @@ const {
   daysInMonth,
   buildCells,
   configureAlmanacStyles,
+  configureAlmanacFocus,
   buildAlmanac
 } = require('./calendar');
 const {
@@ -265,6 +266,7 @@ function loadWorldClocks() {
 
 function initializeAlmanacStyle() {
   almanacStyleCatalog = configureAlmanacStyles({ logger });
+  configureAlmanacFocus({ logger });
   almanacStyle = readAlmanacStyle(readPreferences());
 }
 

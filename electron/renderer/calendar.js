@@ -16,8 +16,10 @@ const grid = document.getElementById('grid');
 const almanacCard = document.getElementById('almanac-card');
 const almanacStyleName = document.getElementById('almanac-style-name');
 const almanacCustomize = document.getElementById('almanac-customize');
-const almanacYi = document.getElementById('almanac-yi');
-const almanacJi = document.getElementById('almanac-ji');
+const almanacFocusYi = document.getElementById('almanac-focus-yi');
+const almanacFocusJi = document.getElementById('almanac-focus-ji');
+const almanacQuote = document.getElementById('almanac-quote');
+const almanacMeta = document.getElementById('almanac-meta');
 const clockList = document.getElementById('clock-list');
 const clockEmpty = document.getElementById('clock-empty');
 const clockEdit = document.getElementById('clock-edit');
@@ -42,8 +44,14 @@ const weatherList = document.getElementById('weather-list');
 const almanacPicker = document.getElementById('almanac-picker');
 const almanacPickerClose = document.getElementById('almanac-picker-close');
 const almanacStyleList = document.getElementById('almanac-style-list');
+const almanacDetail = document.getElementById('almanac-detail');
+const almanacDetailTitle = document.getElementById('almanac-detail-title');
+const almanacDetailBody = document.getElementById('almanac-detail-body');
+const almanacDetailClose = document.getElementById('almanac-detail-close');
 
 let state = null;
+let lastAlmanac = null;
+let detailDay = null;
 let yearOptionsBuilt = false;
 let clocks = null;
 let searchToken = 0;
@@ -75,6 +83,7 @@ function buildYearOptions() {
 
 function renderAlmanac(almanac) {
   if (!almanac) return;
+  lastAlmanac = almanac;
   lunarSubtitle.textContent = `${almanac.ganZhiText} · ${almanac.lunarMonthText}`;
   almanacStyleName.textContent = almanac.styleName;
   almanacStyleName.title = `农历${almanac.lunarDayText}`;
@@ -89,10 +98,77 @@ function renderAlmanac(almanac) {
     almanacCard.style.setProperty('--almanac-accent-dark', almanac.accentDark);
   }
 
-  almanacYi.textContent = almanac.yiText;
-  almanacYi.title = almanac.yiTitle;
-  almanacJi.textContent = almanac.jiText;
-  almanacJi.title = almanac.jiTitle;
+  almanacFocusYi.textContent = almanac.focusYi.text;
+  almanacFocusYi.title = almanac.focusYi.title;
+  almanacFocusJi.textContent = almanac.focusJi.text;
+  almanacFocusJi.title = almanac.focusJi.title;
+  almanacQuote.textContent = almanac.quote;
+  almanacMeta.textContent = almanac.metaText;
+
+  // The detail panel always shows the latest received almanac; only a date
+  // change (a midnight tick) needs a redraw while it is open.
+  if (!almanacDetail.hidden && almanac.lunarDayText !== detailDay) {
+    renderAlmanacDetail(almanac);
+  }
+}
+
+function detailSection(parent, heading, lines) {
+  const title = document.createElement('div');
+  title.className = 'almanac-detail-heading';
+  title.textContent = heading;
+
+  const text = document.createElement('div');
+  text.className = 'almanac-detail-text';
+  for (const line of lines) {
+    const row = document.createElement('div');
+    row.className = 'almanac-detail-line';
+    row.textContent = line;
+    text.append(row);
+  }
+
+  parent.append(title, text);
+}
+
+function focusLine(label, focus) {
+  const hint = focus.hint ? ` · ${focus.hint}` : '';
+  return `${label} ${focus.title}${hint}`;
+}
+
+function renderAlmanacDetail(almanac = lastAlmanac) {
+  if (!almanac) return;
+  almanacDetailTitle.textContent = `今日黄历 · ${almanac.lunarDayText}`;
+  almanacDetailBody.replaceChildren();
+
+  const detail = almanac.detail;
+  detailSection(almanacDetailBody, '今日焦点', [
+    focusLine('宜', almanac.focusYi),
+    focusLine('忌', almanac.focusJi)
+  ]);
+  detailSection(
+    almanacDetailBody,
+    `宜（${detail.yiItems.length}）`,
+    [detail.yiItems.join(' ')]
+  );
+  detailSection(
+    almanacDetailBody,
+    `忌（${detail.jiItems.length}）`,
+    [detail.jiItems.join(' ')]
+  );
+  if (almanac.quote) {
+    detailSection(almanacDetailBody, '签语', [almanac.quote]);
+  }
+  detailSection(
+    almanacDetailBody,
+    '建除 · 值神 · 冲煞',
+    [`${detail.zhiXing}日 · ${detail.tianShen}（${detail.tianShenLuck}） · ${detail.chongText}`]
+  );
+  detailSection(
+    almanacDetailBody,
+    '彭祖百忌',
+    [`${detail.pengZu[0]}；${detail.pengZu[1]}`]
+  );
+
+  detailDay = almanac.lunarDayText;
 }
 
 function renderClockList(snapshot) {
@@ -277,9 +353,24 @@ function runClockSearch() {
   }, 60);
 }
 
+function openAlmanacDetail() {
+  closeClockEditor();
+  closeWeatherPicker();
+  closeAlmanacPicker();
+  clearSettingsHighlight();
+  almanacDetail.hidden = false;
+  renderAlmanacDetail();
+}
+
+function closeAlmanacDetail() {
+  almanacDetail.hidden = true;
+  almanacDetailBody.replaceChildren();
+}
+
 function openClockEditor() {
   closeWeatherPicker();
   closeAlmanacPicker();
+  closeAlmanacDetail();
   clearSettingsHighlight();
   clockPicker.hidden = false;
   clockSearch.value = '';
@@ -448,8 +539,8 @@ function renderWeather(result) {
   if (ok) {
     weatherEmoji.textContent = result.emoji || '🌡️';
     weatherTemp.textContent = `${Math.round(result.temperature)}°`;
-    weatherCity.textContent = `${result.city} · ${result.weather}`;
-    weatherCard.title = weatherCity.textContent;
+    weatherCity.textContent = result.city;
+    weatherCard.title = `${result.city} · ${result.weather}`;
     return;
   }
 
@@ -590,6 +681,7 @@ function runWeatherSearch() {
 function openWeatherPicker() {
   closeClockEditor();
   closeAlmanacPicker();
+  closeAlmanacDetail();
   clearSettingsHighlight();
   weatherPicker.hidden = false;
   weatherSearch.value = '';
@@ -683,6 +775,7 @@ function selectAlmanacStyle(row) {
 function openAlmanacPicker() {
   closeClockEditor();
   closeWeatherPicker();
+  closeAlmanacDetail();
   clearSettingsHighlight();
   almanacPicker.hidden = false;
   almanacStyleList.replaceChildren();
@@ -791,12 +884,21 @@ weatherSearch.addEventListener('input', () => {
   runWeatherSearch();
 });
 
+almanacCard.addEventListener('click', (event) => {
+  if (event.target.closest('#almanac-customize')) return;
+  openAlmanacDetail();
+});
+
 almanacCustomize.addEventListener('click', () => {
   openAlmanacPicker();
 });
 
 almanacPickerClose.addEventListener('click', () => {
   closeAlmanacPicker();
+});
+
+almanacDetailClose.addEventListener('click', () => {
+  closeAlmanacDetail();
 });
 
 api.onOpenPanel((panel) => {

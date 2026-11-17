@@ -41,15 +41,40 @@ ${M}月${D}日 ${HH}:${mm}:${ss}
 
 **右侧「黄历」（`buildAlmanac`）**
 
-- 右栏顶部为紧凑的黄历卡片；卡内不再重复大字干支年。
+- 右栏顶部为黄历卡片，高度 118px（内容四行）；卡内不再重复大字干支年。
 - `ganZhiText`：`` `${lunar.getYearInGanZhi()}${lunar.getYearShengXiao()}年` ``，如 `丙午马年`；`lunarMonthText` 为 `getMonthInChinese() + '月'`，闰月自然带出 `闰六月`。两者用于左侧顶栏的灰色小字「丙午马年 · 十月」。
-- `lunarDayText`：`` `${lunar.getMonthInChinese()}月${lunar.getDayInChinese()}` ``，如 `十月初九`，作为卡片标题行风格名的悬停 title（前缀「农历」）。
-- `rawYi` / `rawJi` 保存 `lunar.getDayYi()` / `getDayJi()` 的完整原词数组。`yi` / `ji` 是逐词映射并按映射后文案去重后的完整列表；`yiText` / `jiText` 只取前 `ALMANAC_MAX_ITEMS`（6）项用空格连接，供单行显示（放不下由 CSS 省略号截断）；`yiTitle` / `jiTitle` 是完整列表，用作悬停 title。农历风格原样显示原词，`title` 与 0.1.19 相同；其它风格的 title 为「文案（原词）」。
+- `lunarDayText`：`` `${lunar.getMonthInChinese()}月${lunar.getDayInChinese()}` ``，如 `十月初九`，作为卡片标题行风格名的悬停 title（前缀「农历」）与「今日黄历」面板标题。
+- `rawYi` / `rawJi` 保存 `lunar.getDayYi()` / `getDayJi()` 的完整原词数组（`.map(String)`，不传 `sect`）。`yi` / `ji` 是逐词映射并按映射后文案去重后的完整列表，规则与 0.1.20 相同。
+- 焦点词 `focusYi` / `focusJi`：各为 `{ term, text, title, hint }`。`term` 是按百年稀有度选出的原词（只对原词计算，与风格无关，算法见下文「焦点数据」）；`text` 为风格文案（`lunar` 即原词）；`title` 为 `lunar` 的原词，其它风格为「文案（原词）」；`hint` 为面板用稀有度提示（特殊词或数据不可用时为空串）。
+- `quote`：按 `getZhiXing()` 从随包签语表取当前风格的一句；`metaText`：`` `${getDayInGanZhi()}日 ${节气或值星} 冲${getDayChongShengXiao()}煞${getDaySha()}` ``，所有风格相同。
+- `detail`：`{ yiItems, jiItems, zhiXing, tianShen, tianShenLuck, chongText, pengZu }`。「今日黄历」面板用：`yiItems` / `jiItems` 在 `lunar` 下为原词列表，其它风格为映射去重后的「文案（原词）」数组；`chongText` 为 `` `冲${生肖}（${干支}）煞${sha}` ``；`pengZu` 为 `[getPengZuGan(), getPengZuZhi()]`。
+- 已删除：`yiText`、`jiText`、`yiTitle`、`jiTitle` 与常量 `ALMANAC_MAX_ITEMS`（0.1.20 的「前 6 项 + 悬停全文」规则撤除）。
 - `styleId` / `styleName` / `accentLight` / `accentDark` 随结果下发，供卡片标题、主题色与风格面板使用。只由「现在」与 `styleId` 决定，不随翻月或焦点日变化；`calendar:onTick` 每秒重算，跨天（午夜）自动刷新。数据全部来自 lunar-javascript 离线计算，不接网络。
 - 风格表由 `electron/almanac-styles.js` 在主进程启动时同步读取 `electron/data/almanac-styles/{coder,worker,student,fitness}.json` 并缓存；`lunar` 是主进程常量与恒等映射。文件读取失败、`schemaVersion !== 1` 或 `id` 与文件名不符时，该风格仍使用常量表中的名称、徽标与颜色，但映射退化为原词，并写一条 logger 警告。
+- 焦点数据 `electron/data/almanac-focus.json` 由 `electron/almanac-focus.js` 在同一处启动流程同步读取一次并缓存，结构见第 5 节。任何读取/结构问题都只写一条 logger 警告，全部词按 `36525` 计分、签语与提示为空，不影响卡片其它内容。
 - 偏好键 `preferences.json` 顶层 `almanacStyle`：只接受 5 个风格 id；缺失、类型不对或未知值一律按 `lunar` 处理，且不回写。仅在用户选中非当前风格时写入，保留其它键。
+- 渲染层「黄历」卡片显示四行：宜行 / 忌行（`#almanac-focus-yi`、`#almanac-focus-ji`，14px 加粗、单行、不设 `text-overflow`）、签语行 `#almanac-quote`、底注行 `#almanac-meta`。点击整张卡片（`#almanac-customize` 除外）打开「今日黄历」面板；「去定制 ›」仍打开黄历风格面板。
 
-**测试**：`tests/calendar.test.js`（节气、初七、2026-11-16 黄历「丙午马年 / 十月 / 十月初八 / 纳采 / 上梁」、42 格与 lead、今日/周末/节日标记、菜单栏标题、禁用 `getOtherFestivals`）；`tests/almanac-styles.test.js`（114 词表与四份映射完全相等、文件 schema、兜底、去重、确定性、默认兼容、偏好清洗、4 个日期 × 5 种风格的固定输出）。
+**测试**：`tests/calendar.test.js`（节气、初七、2026-11-16 黄历「丙午马年 / 十月 / 十月初八 / 纳采 / 上梁」、42 格与 lead、今日/周末/节日标记、菜单栏标题、禁用 `getOtherFestivals`）；`tests/almanac-styles.test.js`（114 词表与四份映射完全相等、文件 schema、兜底、去重、确定性、默认兼容、偏好清洗、4 个日期 × 5 种风格选词一致）；`tests/almanac-focus.test.js`（数据 sha256/结构、36525 天稀有度复算、60 条签语、7 个固定日期、确定性、2026 相邻不重复、特殊词与平局、降级、不联网、不截断）。
+
+**焦点数据（`electron/data/almanac-focus.json`，`electron/almanac-focus.js`）**
+
+```json
+{
+  "schemaVersion": 1,
+  "source": { "library": "lunar-javascript", "version": "1.7.8", "range": "2000-01-01..2099-12-31", "days": 36525 },
+  "rarity": { "yi": { "雇佣": 49, "祭祀": 23312, "…": "共 110 键" }, "ji": { "取渔": 48, "安葬": 13792, "…": "共 86 键" } },
+  "zhiXingOrder": ["建","除","满","平","定","执","破","危","成","收","开","闭"],
+  "quotes": { "lunar": { "建": "万物始生 宜开新局", "…": "共 12 键" }, "coder": { "…": "共 12 键" }, "worker": { "…": "共 12 键" }, "student": { "…": "共 12 键" }, "fitness": { "…": "共 12 键" } }
+}
+```
+
+- `rarity.yi[term]` / `rarity.ji[term]`：2000-01-01 至 2099-12-31（含两端，本地日历日，36525 天）中该词出现在当日宜/忌列表里的天数；宜 110 键、忌 86 键。数据由策划离线产出，实现仓库逐字节复制，不修改任何字节。
+- `zhiXingOrder`：`建除满平定执破危成收开闭`。`quotes[styleId][值星]`：5 个风格 × 12 条原创签语，宽度 ≤20。
+- 加载：`loadAlmanacFocus({ file, logger })` 在启动时用 `fs.readFileSync` + `JSON.parse` 同步读取一次并缓存在主进程内存，之后不读盘、不现算。解析成功、`schemaVersion === 1` 且 `rarity.yi` / `rarity.ji` / `quotes` 都是普通对象才算可用；否则视为不可用并写一条 `logger.warn`。
+- 选词（`pickFocus(raw, list, score)`）：`score(list, term)` 取稀有度表中该词的天数，键缺失或不是正整数时按 `36525`。忌列表含「诸事不宜」时直接返回它；否则在非特殊词（`无`、`诸事不宜`、`馀事勿取`）中取分数最小者，平局取库返回顺序靠前者，候选为空取 `raw[0]`。不过滤任何其它词（含丧葬类）。
+- 稀有度提示：焦点原词属于特殊词时为空；否则 `n = Math.floor(score / 100 + 0.5)`，`n === 0` 时为「不到一年一次」，否则「年约n次」；数据不可用时一律为空。
+- 签语：`quotes[styleId][getZhiXing()]` 不是非空字符串时回退 `quotes.lunar[值星]`，仍无效则为空串（卡片保留签语行高度）。
 
 ## 2. 世界时钟（`electron/world-clocks.js`）
 
@@ -288,13 +313,13 @@ main.setupUpdates()
   - 取数前写 `天气位置=手动：<城市>` / `天气位置=IP：<城市>` 日志。
 - 快捷城市：`electron/quick-cities.js` 读取打包的 `electron/data/quick-cities.json`（按 ISO 国家代码分组，城市含 `name`/`latitude`/`longitude`/`country`，中国城市另含 `admin1`）；`findQuickCities` 同时接受 Open-Meteo 的中文国家名与 ipwho.is 的英文国家名 / `country_code`。当前国家取手动城市的 `weatherCity.country`，自动模式取最近一次 IP 定位的 `country_code`（优先）或国家名；拿不到国家时不显示快捷城市。`sameCity` 用于把当前手动城市标成「已选」。
 - 手动选择城市：
-  - 点击天气卡片任意位置或标题右侧「更换城市 ›」，渲染层打开复用 `.picker-*` 样式的城市面板；列表首项固定为「自动（按 IP）」。
+  - 点击天气卡片（单行任意位置，含行尾「更换 ›」），渲染层打开复用 `.picker-*` 样式的城市面板；列表首项固定为「自动（按 IP）」。
   - 搜索框为空时，在「自动（按 IP）」下方显示小标题「常用城市」与该国快捷城市；当前手动城市标为「已选」并禁用。点击快捷城市与搜索结果走同一套 `weather:setCity` 逻辑：面板立即关闭、卡片显示「城市名 · 加载中…」，天气后台刷新。
   - 输入内容后经 `weather:searchCity` 调 `https://geocoding-api.open-meteo.com/v1/search?name=<q>&count=8&language=zh&format=json`，显示「城市名 · 省/州 · 国家」；网络请求只在主进程。
   - 点击列表项后渲染层**立即关闭面板**并把天气卡片文字显示为「<城市名> · 加载中…」，不等网络；`weather:setCity` 写入 `preferences.weatherCity = { name, latitude, longitude, country?, admin1? }`（选「自动」则删除该键）后立即返回，主进程清理缓存并异步强制刷新，结果经 `weather:update` 推送。
 - `createWeatherService({ fetch, logger, now, setTimeout, clearTimeout, weatherCity })`：所有请求带 `User-Agent` 与 8 秒超时；结果缓存 30 分钟，失败也写入缓存时间，30 分钟内不重复请求；成功/失败分别写 info/warn 日志。`setCity` 会清空旧城市缓存并让进行中的旧请求失效。
 - 打开窗口时调用 `refreshWeather()`：缓存超过 30 分钟才重新请求；`setInterval` 每 30 分钟后台刷新一次，结果经 `weather:update` 推给渲染层。首次打开且无缓存时主进程会按 IP 或手动城市取一次。
-- 结果带 `emoji`（`weatherEmoji()` 按「雷 → 雪 → 雨 → 雾 → 阴 → 多云 → 晴」优先匹配；未知用 `🌡️`），渲染层显示 emoji、`17°` 与「城市 · 天气」。加载中显示「天气加载中…」或「城市 · 加载中…」，全部数据源失败统一显示「天气暂不可用」，不弹窗。CSP 仍为 `default-src 'self'`，不放开网络。
+- 结果带 `emoji`（`weatherEmoji()` 按「雷 → 雪 → 雨 → 雾 → 阴 → 多云 → 晴」优先匹配；未知用 `🌡️`），渲染层在 40px 单行里显示 emoji、`17°`、城市名与行尾「更换 ›」（`#weather-city` 只写城市名，即 `result.city`）；悬停 title 为「城市 · 天气」。加载中显示「天气加载中…」或「城市名 · 加载中…」，全部数据源失败统一显示「天气暂不可用」，不弹窗。CSP 仍为 `default-src 'self'`，不放开网络。
 - 不再请求 macOS 定位授权：没有 `navigator.geolocation`、定位权限处理器、`NSLocation*` 用途说明或原生定位依赖。
 
 **测试**：`tests/weather.test.js`（城市码表匹配与 admin1 回退、itboy 与 wttr.in 解析、URL 构造、IP 失败、坐标校验、地理编码结果解析、天气文字→emoji 映射、`weatherCity` 含 `country`/`admin1` 的读写/清除、有无手动城市的取位逻辑、手动/IP 国家来源、itboy 失败回退、非中国直走 wttr.in、定位与来源日志文案、注入假 fetch 的缓存/失败路径与手动/自动切换）；`tests/quick-cities.test.js`（清单结构、国家代码/中英文国家名匹配、已选城市判定）；`tests/ui-wiring.test.js`（空搜索时显示「常用城市」并走 `weather:quickCities`）。
