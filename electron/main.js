@@ -881,6 +881,12 @@ function registerIpc() {
     openSettingsMenu(event, position);
   });
 
+  // Footer 「检查更新」 reuses the settings menu path and the same
+  // update:status feedback, so there is only one update-check implementation.
+  ipcMain.on('update:check', () => {
+    requestUpdateCheck();
+  });
+
   ipcMain.on('update:restart', () => {
     if (!updateNotice || updateNotice.mode !== 'ready') return;
 

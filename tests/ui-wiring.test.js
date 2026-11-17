@@ -44,3 +44,26 @@ test('weather picker lists quick cities when the search box is empty', () => {
   assert.match(preload, /getQuickCities:\s*\(\)\s*=>\s*ipcRenderer\.invoke\('weather:quickCities'\)/);
   assert.match(main, /ipcMain\.handle\('weather:quickCities'/);
 });
+
+test('footer 检查更新 sits beside the version and calls the update check IPC', () => {
+  const html = source('electron/renderer/calendar.html');
+  const renderer = source('electron/renderer/calendar.js');
+  const preload = source('electron/preload.js');
+
+  assert.match(
+    html,
+    /<div class="pane-footer">[\s\S]*id="app-version"[\s\S]*>·<\/span>[\s\S]*<button class="[^"]*\bcard-link\b[^"]*" id="check-update" type="button">检查更新<\/button>/
+  );
+  assert.match(renderer, /checkUpdate\.addEventListener\('click',\s*\(\)\s*=>\s*\{\s*api\.checkUpdate\(\);\s*\}\);/);
+  assert.match(preload, /checkUpdate:\s*\(\)\s*=>\s*ipcRenderer\.send\('update:check'\)/);
+});
+
+test('main reuses requestUpdateCheck for the footer update entry', () => {
+  const main = source('electron/main.js');
+
+  const handler = main.match(/ipcMain\.on\('update:check',[\s\S]*?\n  \}\);/);
+  assert.ok(handler, 'update:check handler should be registered');
+  assert.match(handler[0], /requestUpdateCheck\(\)/);
+  assert.equal(/autoUpdater|updater\.checkNow/.test(handler[0]), false);
+  assert.ok((main.match(/requestUpdateCheck\(\)/g) || []).length >= 2);
+});

@@ -623,6 +623,10 @@ select {
 }
 
 .pane-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
   margin-top: auto;
   padding-top: 2px;
   text-align: center;
@@ -634,6 +638,12 @@ select {
   line-height: 1;
   white-space: nowrap;
   cursor: default;
+}
+
+.pane-footer-sep {
+  color: var(--faint);
+  font-size: 10px;
+  line-height: 1;
 }
 
 /* Panels */

@@ -87,7 +87,7 @@ site/               GitHub Pages 静态主页（不是应用运行时的一部�
 - 窗口：无边框、不可缩放、`alwaysOnTop`、默认隐藏；按托盘 bounds 与 `workArea` 定位；`mouse-enter` / `mouse-leave` / `click` / Esc 的开关逻辑。
 - 状态与偏好：当前浏览年月、焦点日、首次登录项初始化、更新提醒去重、世界时钟列表与当前索引。
 - 天气编排：创建带注入 `net.fetch` 的天气服务（启动时读入 `weatherCity`），打开窗口/后台定时刷新并推送 `weather:update`；IP 与手动城市的取位、地理编码搜索、`weatherCity` 读写都在主进程完成，并写 `天气位置=手动：<城市>` / `天气位置=IP：<城市>` 日志（不写坐标）。
-- 更新编排：创建 `mac-self-update` 实例、调用 `setupAutoUpdate`、把 `onReady` / `onManual` / `onStatus` 转成 IPC；设置菜单的「检查更新」复用同一 `checkNow({ manual: true })`。
+- 更新编排：创建 `mac-self-update` 实例、调用 `setupAutoUpdate`、把 `onReady` / `onManual` / `onStatus` 转成 IPC；设置菜单的「检查更新」与右栏底部的「检查更新」（`update:check`）复用同一 `requestUpdateCheck()` → `checkNow({ manual: true })`。
 - 原生设置菜单：`menu:openSettings` → `settings-menu.buildSettingsMenuTemplate()` → `Menu.buildFromTemplate` + `menu.popup({ window, x, y })`，面板动作经 `ui:openPanel` 通知渲染层。
 - 日志：`createLogger()` 写文件并在控制台输出。
 

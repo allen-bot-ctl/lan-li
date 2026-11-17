@@ -32,6 +32,7 @@ const updateBanner = document.getElementById('update-banner');
 const updateMessage = document.getElementById('update-message');
 const updateAction = document.getElementById('update-action');
 const appVersion = document.getElementById('app-version');
+const checkUpdate = document.getElementById('check-update');
 const weatherPicker = document.getElementById('weather-picker');
 const weatherSearch = document.getElementById('weather-search');
 const weatherPickerClose = document.getElementById('weather-picker-close');
@@ -413,6 +414,12 @@ function loadVersion() {
     renderVersion('');
   });
 }
+
+// The footer button is a second entry to the same main-process check as the
+// settings menu; feedback still arrives through update:status.
+checkUpdate.addEventListener('click', () => {
+  api.checkUpdate();
+});
 
 function renderWeather(result) {
   const ok = result && result.ok === true &&
