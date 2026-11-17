@@ -54,17 +54,17 @@ site/               GitHub Pages 静态主页（不是应用运行时的一部�
   → 返回 clocks 快照 → 渲染层只展示
 
 天气（打开窗口/后台刷新）
-  → 有 preferences.weatherCity 时直接用保存的城市名与坐标；否则主进程请求 ipwho.is 按 IP 取坐标与城市
-  → IP 城市名缺失时请求 BigDataCloud 反向地理编码（city → locality → principalSubdivision）
-  → 主进程 weather 服务请求 Open-Meteo，并写一行 `天气位置=手动：<城市>` / `天气位置=IP：<城市>` 日志
+  → 有 preferences.weatherCity 时直接用保存的城市名与坐标（含可选 country/admin1）；否则主进程请求 ipwho.is 按 IP 取坐标、城市与 country_code
+  → 主进程 weather 服务按数据源取数：中国城市（手动城市 country === 'CN' 或码表精确匹配，IP 定位 country_code === 'CN' 且城市名在码表中）优先 itboy（打包的城市码表换算城市代码），失败回退 wttr.in；非中国城市直接走 wttr.in
+  → 写 `天气位置=手动：<城市>` / `天气位置=IP：<城市>` 与 `天气来源=itboy（<城市> <代码>）` / `天气来源=wttr.in` 日志
   → 30 分钟缓存 → 返回/推送 weather:update → 渲染层显示一行天气
-  → 点击天气行 → weather:searchCity 调 Open-Meteo 地理编码，weather:setCity 保存/清除 weatherCity 并立即刷新
+  → 点击天气行 → weather:searchCity 调 Open-Meteo 地理编码，weather:setCity 保存/清除 weatherCity 后立即返回；渲染层立即关闭浮层并显示「城市 · 加载中…」，新结果经 weather:update 异步推送
 ```
 
 - 农历计算只发生在主进程的 `electron/calendar.js`，底层是 `lunar-javascript@1.7.8` 的 `Solar.fromYmd`。完全离线。
 - 时区格式化只发生在主进程的 `electron/world-clocks.js`，使用 `Intl.DateTimeFormat` 与注入的本地时区；渲染层不推导时差。
-- 偏好文件：`app.getPath('userData')/preferences.json`，保存 `loginItemInitialized`、`updateNotifications`（每个版本的一次性手动下载提醒）、`worldClocks`（`{ items: [{ id, label }], index }`）、顶层 `menuBarTimeZone`（IANA id；省略或 `null` 表示跟随系统本地时区，不把系统本地时区写死成字符串；非法或对应时钟不在时钟列表中则清除）与可选的 `weatherCity`（`{ name, latitude, longitude }`；省略表示按 IP 定位）。天气结果只缓存在主进程内存，不写偏好文件。
-- 网络只在主进程发生：天气（`ipwho.is`、BigDataCloud 反向地理编码、Open-Meteo 天气与地理编码，均为 HTTPS）与打包后的 `update.electronjs.org` feed 探测、GitHub Release 资产下载。渲染层 CSP 不放开网络，开发态不检查更新。
+- 偏好文件：`app.getPath('userData')/preferences.json`，保存 `loginItemInitialized`、`updateNotifications`（每个版本的一次性手动下载提醒）、`worldClocks`（`{ items: [{ id, label }], index }`）、顶层 `menuBarTimeZone`（IANA id；省略或 `null` 表示跟随系统本地时区，不把系统本地时区写死成字符串；非法或对应时钟不在时钟列表中则清除）与可选的 `weatherCity`（`{ name, latitude, longitude, country?, admin1? }`；省略表示按 IP 定位）。天气结果只缓存在主进程内存，不写偏好文件；城市码表打包在 `electron/data/china-city-codes.json`。
+- 网络只在主进程发生：天气（`ipwho.is`、`t.weather.itboy.net`、`wttr.in`、Open-Meteo 地理编码）与打包后的 `update.electronjs.org` feed 探测、GitHub Release 资产下载。渲染层 CSP 不放开网络，开发态不检查更新。
 - 详细实现见 [implementation.md](implementation.md)；更新细节见 [updater.md](updater.md)。
 
 ## 分层职责与边界

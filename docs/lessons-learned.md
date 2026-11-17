@@ -104,6 +104,16 @@
 
 **教训**：系统授权能力要在真机、目标签名方式下先验证再投入；如果平台 API 不能可靠工作，优先选可预测、可降级的方案，而不是叠加原生补丁。定位来源要写进日志，避免只靠天气请求失败反推。
 
+## 12. Open-Meteo forecast 在部分网络下不可达，选城市交互不能等网络
+
+**现象**：0.1.14（`5944d0c`）用户真机日志显示 `api.open-meteo.com` 连续 10–20 秒无响应（`net::ERR_TIMED_OUT` / aborted），天气一直显示「天气暂不可用」；同一网络下 `t.weather.itboy.net` 0.06–0.46s 返回 200、`wttr.in` 约 1.2s 返回 200，Open-Meteo 地理编码（`geocoding-api.open-meteo.com`）却可用。另外点击城市后浮层要等 `weather:setCity` 的天气刷新结束才关闭，超时表现为「点了没反应」。
+
+**根因**：Open-Meteo forecast 域名在部分用户网络下不可达，而地理编码域名可达——同一个服务不同子域可达性不同，不能假设整个厂商一致；UI 交互链路上把保存城市和网络刷新串成了同一次 invoke。
+
+**处理**：0.1.15 把天气数据源改为国内 itboy 接口（中国城市，用打包的城市码表 `electron/data/china-city-codes.json` 换算城市代码）+ wttr.in（非中国城市与 itboy 失败时回退），去掉 Open-Meteo forecast 与 BigDataCloud 反查，城市搜索仍用 Open-Meteo 地理编码；单源超时 8 秒，主源失败自动回退另一源。`weather:setCity` 保存后立即返回，刷新改为后台执行并经 `weather:update` 推送；渲染层点击列表项立即关闭浮层并显示「城市名 · 加载中…」。日志新增 `天气来源=itboy（上海 101020100）` / `天气来源=wttr.in`。
+
+**教训**：选第三方数据源前先确认目标用户网络下各域名的可达性，只选一条通路时要有可达的回退；任何 UI 点击的反馈都不能排在网络请求之后——先给本地反馈，网络结果异步推送。
+
 ## 相关文档
 
 - 当前更新实现：[updater.md](updater.md)

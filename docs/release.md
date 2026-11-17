@@ -90,7 +90,7 @@ git push origin v0.1.13
 
 ## 天气定位
 
-天气默认按 IP 定位，点击天气行可搜索并保存手动城市（Open-Meteo 地理编码，写入 `preferences.json` 的 `weatherCity`）。应用不申请 macOS 定位授权，也不依赖 `node-mac-permissions` 等原生定位模块，因此首次打开不会出现「栏历想要使用您的位置」弹窗。
+天气默认按 IP 定位，点击天气行可搜索并保存手动城市（Open-Meteo 地理编码，写入 `preferences.json` 的 `weatherCity`，含可选 `country` 与 `admin1`）。天气数据来自国内 itboy 接口与海外 wttr.in，城市码表打包在 `electron/data/china-city-codes.json`。应用不申请 macOS 定位授权，也不依赖 `node-mac-permissions` 等原生定位模块，因此首次打开不会出现「栏历想要使用您的位置」弹窗。
 
 ## 何时算发布完成
 

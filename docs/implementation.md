@@ -197,7 +197,7 @@ main.setupUpdates()
 | `app:version` | `getVersion` | 返回 `formatVersionLabel(app.getVersion())`，如 `v0.1.13` |
 | `weather:get` | `getWeather` | 返回当前天气结果；有 `preferences.weatherCity` 时直接用其城市名与坐标，否则按 IP 定位；30 分钟缓存 |
 | `weather:searchCity` | `searchCity` | `query`；主进程请求 Open-Meteo 地理编码，返回最多 8 条 `{ name, admin1, country, latitude, longitude, label }`，`label` 为「城市名 · 省/州 · 国家」；空查询返回空数组 |
-| `weather:setCity` | `setCity` | `{ name, latitude, longitude }` 或 `null`；校验后写入/删除 `preferences.weatherCity`，立即刷新并返回当前天气结果 |
+| `weather:setCity` | `setCity` | `{ name, latitude, longitude, country?, admin1? }` 或 `null`；校验后写入/删除 `preferences.weatherCity` 并立即返回（不等待网络），后台强制刷新，结果经 `weather:update` 异步推送 |
 | `calendar:getState` | `getState` | 当前 `view`、`focus`、42 格、`almanac`、`clocks`（含 `menuBarTimeZone` 与 `current.isMenuBar`）、`openAtLogin` |
 | `calendar:setView` | `setView` | 校验并切换浏览年月/焦点日，返回新状态 |
 | `calendar:goToday` | `goToday` | 浏览年月与焦点日回到今天，返回新状态 |
@@ -265,21 +265,25 @@ main.setupUpdates()
 
 ## 9. 天气（`electron/weather.js`）
 
-- 纯函数：`describeWeatherCode`（WMO → 晴/多云/阴/雾/毛毛雨/雨/雪/阵雨/阵雪/雷暴等）、`pickCityName`（`city` → `locality` → `principalSubdivision`）、`pickIpCity`、`normalizeCoordinates`、`parseIpLocation`、`normalizeWeatherCity`（`{ name, latitude, longitude }` 校验）、`readWeatherCity` / `writeWeatherCity`（从偏好读取、写入或删除 `weatherCity`）、`resolveWeatherLocation`（手动城市优先，否则用 IP 数据）、`parseGeocodingResults`（Open-Meteo 地理编码结果 → 列表行）、`formatWeatherResult`（`城市 · 天气 · X°C`）、`describeWeatherLocation`（`天气位置=手动：<城市>` / `天气位置=IP：<城市>`）以及反向地理编码、地理编码与天气 URL 构造器。测试直接 require，不联网。
+- 纯函数：`matchChinaCity` / `matchChinaCityExact`（城市码表匹配：先精确，再加「市」「区」「县」后缀，再去掉这些后缀；`matchChinaCity` 匹配不到时用 `admin1` 再试；`matchChinaCityExact` 只做精确匹配，供无 `country` 的旧数据使用）、`resolveChinaCode`（手动城市按 `country === 'CN'` 走完整匹配、无 `country` 只做精确匹配，IP 定位按 `isChina`）、`pickIpCity`、`normalizeCoordinates`、`parseIpLocation`（含 `country_code === 'CN'` 得出的 `isChina`）、`normalizeWeatherCity`（`{ name, latitude, longitude, country?, admin1? }` 校验）、`readWeatherCity` / `writeWeatherCity`（从偏好读取、写入或删除 `weatherCity`）、`resolveWeatherLocation`（手动城市优先，否则用 IP 数据）、`parseGeocodingResults`（Open-Meteo 地理编码结果 → 列表行）、`parseItboyWeather`（`data.wendu` + `data.forecast[0].type`）、`parseWttrWeather`（`current_condition[0].temp_C` + `lang_zh[0].value`，缺失时 `weatherDesc[0].value`）、`formatWeatherResult`（`城市 · 天气 · X°C`）、`describeWeatherLocation`（`天气位置=手动：<城市>` / `天气位置=IP：<城市>`）以及地理编码、itboy 与 wttr.in URL 构造器。测试直接 require，不联网。
+- 数据源（主进程请求，单源超时 8 秒，主源失败自动回退另一源，全部失败才「天气暂不可用」）：
+  - 中国城市：`http://t.weather.itboy.net/api/weather/city/<city_code>`；`city_code` 来自打包的城市码表 `electron/data/china-city-codes.json`（`{name: code}`，由城市码全表精简而来）。
+  - 非中国城市或码表匹配不到：`https://wttr.in/<lat>,<lon>?format=j1&lang=zh`。
+  - 成功时写日志 `天气来源=itboy（<城市> <代码>）` 或 `天气来源=wttr.in`。
 - 位置来源：
-  - `preferences.weatherCity` 存在时，直接用保存的 `name`、`latitude`、`longitude`，**不请求 `ipwho.is`，也不做反向地理编码**。启动时由主进程读入天气服务。
-  - 否则请求 `https://ipwho.is/`，用返回的 `latitude` / `longitude` / `city`；城市名缺失时再请求 BigDataCloud 反向地理编码（`localityLanguage=zh`），失败只记 warn，天气仍按「当前位置」显示。
-  - 最后请求 Open-Meteo `current=temperature_2m,weather_code&timezone=auto`，并写 `天气位置=手动：<城市>` / `天气位置=IP：<城市>` 日志。
+  - `preferences.weatherCity` 存在时，直接用保存的 `name`、`latitude`、`longitude`（可选 `country`、`admin1`），**不请求 `ipwho.is`**。启动时由主进程读入天气服务。
+  - 否则请求 `https://ipwho.is/`，用返回的 `latitude` / `longitude` / `city` 与 `country_code`（`=== 'CN'` 判定中国）；城市名直接使用 IP 返回结果，不做反向地理编码。
+  - 取数前写 `天气位置=手动：<城市>` / `天气位置=IP：<城市>` 日志。
 - 手动选择城市：
   - 点击天气行，渲染层打开复用 `.clock-picker` / `.picker-*` 样式的城市浮层；列表首项固定为「自动（按 IP）」，其余为「城市名 · 省/州 · 国家」。
   - 输入框经 `weather:searchCity` 调 `https://geocoding-api.open-meteo.com/v1/search?name=<q>&count=8&language=zh&format=json`；网络请求只在主进程。
-  - 选中城市经 `weather:setCity` 写入 `preferences.weatherCity = { name, latitude, longitude }`，选「自动」则删除该键；主进程立即清理缓存并强制刷新，结果经 IPC 返回并推送 `weather:update`。
+  - 点击列表项后渲染层**立即关闭浮层**并把天气行显示为「<城市名> · 加载中…」，不等网络；`weather:setCity` 写入 `preferences.weatherCity = { name, latitude, longitude, country?, admin1? }`（选「自动」则删除该键）后立即返回，主进程清理缓存并异步强制刷新，结果经 `weather:update` 推送。
 - `createWeatherService({ fetch, logger, now, setTimeout, clearTimeout, weatherCity })`：所有请求带 `User-Agent` 与 8 秒超时；结果缓存 30 分钟，失败也写入缓存时间，30 分钟内不重复请求；成功/失败分别写 info/warn 日志。`setCity` 会清空旧城市缓存并让进行中的旧请求失效。
 - 打开窗口时调用 `refreshWeather()`：缓存超过 30 分钟才重新请求；`setInterval` 每 30 分钟后台刷新一次，结果经 `weather:update` 推给渲染层。首次打开且无缓存时主进程会按 IP 或手动城市取一次。
-- 渲染层只显示一行；失败统一显示「天气暂不可用」，不弹窗。CSP 仍为 `default-src 'self'`，不放开网络。
+- 渲染层只显示一行；全部数据源失败统一显示「天气暂不可用」，不弹窗。CSP 仍为 `default-src 'self'`，不放开网络。
 - 不再请求 macOS 定位授权：没有 `navigator.geolocation`、定位权限处理器、`NSLocation*` 用途说明或原生定位依赖。
 
-**测试**：`tests/weather.test.js`（WMO 映射、城市名优先级、IP 失败、坐标校验、URL、地理编码结果解析、`weatherCity` 读写/清除、有无手动城市的取位逻辑、定位来源日志文案、注入假 fetch 的缓存/失败路径与手动/自动切换）。
+**测试**：`tests/weather.test.js`（城市码表匹配与 admin1 回退、itboy 与 wttr.in 解析、URL 构造、IP 失败、坐标校验、地理编码结果解析、`weatherCity` 含 `country`/`admin1` 的读写/清除、有无手动城市的取位逻辑、itboy 失败回退、非中国直走 wttr.in、定位与来源日志文案、注入假 fetch 的缓存/失败路径与手动/自动切换）。
 
 ## 相关文档
 

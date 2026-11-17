@@ -398,11 +398,20 @@ function weatherRowButton(row) {
   button.addEventListener('click', () => {
     const city = row.auto
       ? null
-      : { name: row.name, latitude: row.latitude, longitude: row.longitude };
-    api.setCity(city).then((result) => {
-      renderWeather(result);
-      closeWeatherPicker();
-    }).catch(() => {
+      : {
+          name: row.name,
+          latitude: row.latitude,
+          longitude: row.longitude,
+          country: row.country,
+          admin1: row.admin1
+        };
+    const label = row.auto ? '当前位置' : row.name;
+    // Close the panel and show progress immediately; the main process saves
+    // the city and pushes the refreshed result via weather:update, so this
+    // never waits on the network.
+    closeWeatherPicker();
+    renderWeather({ text: `${label} · 加载中…` });
+    api.setCity(city).catch(() => {
       refreshWeather();
     });
   });

@@ -662,12 +662,16 @@ function registerIpc() {
     }
   });
 
-  ipcMain.handle('weather:setCity', async (_event, city) => {
+  // Save first and return immediately; the refresh runs in the background and
+  // pushes the new result to the renderer via weather:update, so the panel
+  // never waits on the network after a city click.
+  ipcMain.handle('weather:setCity', (_event, city) => {
     const normalized = normalizeWeatherCity(city);
     writePreferences(writeWeatherCity(readPreferences(), normalized));
     if (!weatherService) return unavailableWeather();
     weatherService.setCity(normalized);
-    return refreshWeather(true);
+    refreshWeather(true);
+    return normalized || null;
   });
 
   ipcMain.handle('calendar:getState', () => buildState());

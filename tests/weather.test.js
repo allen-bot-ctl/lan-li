@@ -5,14 +5,12 @@ const assert = require('node:assert/strict');
 
 const {
   IP_LOCATION_URL,
-  REVERSE_GEOCODE_ENDPOINT,
-  FORECAST_ENDPOINT,
+  ITBOY_ENDPOINT,
+  WTTR_ENDPOINT,
   GEOCODING_ENDPOINT,
   CACHE_TTL_MS,
   UNAVAILABLE_TEXT,
-  describeWeatherCode,
   describeWeatherLocation,
-  pickCityName,
   pickIpCity,
   normalizeCoordinates,
   parseIpLocation,
@@ -20,12 +18,17 @@ const {
   readWeatherCity,
   writeWeatherCity,
   resolveWeatherLocation,
+  resolveChinaCode,
+  matchChinaCity,
+  matchChinaCityExact,
   formatTemperature,
   formatWeatherResult,
-  buildReverseGeocodeUrl,
-  buildForecastUrl,
+  buildItboyUrl,
+  buildWttrUrl,
   buildGeocodingUrl,
   parseGeocodingResults,
+  parseItboyWeather,
+  parseWttrWeather,
   createWeatherService
 } = require('../electron/weather');
 
@@ -37,29 +40,24 @@ function response(body) {
   };
 }
 
-test('WMO weather codes map to short Chinese text', () => {
-  assert.equal(describeWeatherCode(0), '晴');
-  assert.equal(describeWeatherCode(2), '多云');
-  assert.equal(describeWeatherCode(3), '阴');
-  assert.equal(describeWeatherCode(45), '雾');
-  assert.equal(describeWeatherCode(51), '毛毛雨');
-  assert.equal(describeWeatherCode(63), '中雨');
-  assert.equal(describeWeatherCode(73), '中雪');
-  assert.equal(describeWeatherCode(80), '阵雨');
-  assert.equal(describeWeatherCode(85), '阵雪');
-  assert.equal(describeWeatherCode(95), '雷暴');
-  assert.equal(describeWeatherCode(999), '未知');
-  assert.equal(describeWeatherCode(null), '未知');
-  assert.equal(describeWeatherCode('nope'), '未知');
-});
+function itboyBody(wendu, type) {
+  return {
+    time: '2026-11-17 10:00',
+    cityInfo: { city: '上海', cityId: '101020100' },
+    data: { wendu, forecast: [{ type, notice: '注意保暖' }] }
+  };
+}
 
-test('city selection falls back city → locality → principalSubdivision', () => {
-  assert.equal(pickCityName({ city: '纽约', locality: '曼哈顿', principalSubdivision: '纽约州' }), '纽约');
-  assert.equal(pickCityName({ city: '  ', locality: '曼哈顿', principalSubdivision: '纽约州' }), '曼哈顿');
-  assert.equal(pickCityName({ principalSubdivision: '纽约州' }), '纽约州');
-  assert.equal(pickCityName({ city: 42 }), '');
-  assert.equal(pickCityName(null), '');
-});
+function wttrBody(tempC, zhValue, descValue) {
+  const current = { temp_C: tempC };
+  if (zhValue !== undefined) {
+    current.lang_zh = [{ value: zhValue }];
+  }
+  if (descValue !== undefined) {
+    current.weatherDesc = [{ value: descValue }];
+  }
+  return { current_condition: [current] };
+}
 
 test('IP city selection is ignored when ipwho.is reports failure', () => {
   assert.equal(pickIpCity({ success: true, city: '纽约' }), '纽约');
@@ -83,18 +81,32 @@ test('coordinates are validated before any request is built', () => {
   assert.equal(normalizeCoordinates(null), null);
 
   assert.deepEqual(
-    parseIpLocation({ success: true, city: '纽约', latitude: 40.7, longitude: -74 }),
-    { coordinates: { latitude: 40.7, longitude: -74 }, city: '纽约' }
+    parseIpLocation({
+      success: true,
+      city: '上海',
+      country_code: 'CN',
+      latitude: 31.23,
+      longitude: 121.47
+    }),
+    {
+      coordinates: { latitude: 31.23, longitude: 121.47 },
+      city: '上海',
+      isChina: true
+    }
   );
   assert.equal(parseIpLocation({ success: false, latitude: 40.7, longitude: -74 }), null);
 });
 
-test('reverse geocode, geocoding and forecast URLs carry their inputs', () => {
-  const reverse = buildReverseGeocodeUrl(40.71, -74.01);
-  assert.ok(reverse.startsWith(REVERSE_GEOCODE_ENDPOINT + '?'));
-  assert.ok(reverse.includes('latitude=40.71'));
-  assert.ok(reverse.includes('longitude=-74.01'));
-  assert.ok(reverse.includes('localityLanguage=zh'));
+test('itboy and wttr.in URLs carry their inputs', () => {
+  assert.equal(buildItboyUrl('101020100'), ITBOY_ENDPOINT + '101020100');
+  assert.equal(buildItboyUrl('  '), '');
+
+  const wttr = buildWttrUrl(40.71, -74.01);
+  assert.ok(wttr.startsWith(WTTR_ENDPOINT));
+  assert.ok(wttr.includes('40.71,-74.01'));
+  assert.ok(wttr.includes('format=j1'));
+  assert.ok(wttr.includes('lang=zh'));
+  assert.equal(buildWttrUrl(100, 0), '');
 
   const geocoding = buildGeocodingUrl(' 东京 ');
   assert.ok(geocoding.startsWith(GEOCODING_ENDPOINT + '?'));
@@ -103,79 +115,125 @@ test('reverse geocode, geocoding and forecast URLs carry their inputs', () => {
   assert.ok(geocoding.includes('language=zh'));
   assert.ok(geocoding.includes('format=json'));
   assert.equal(buildGeocodingUrl('   '), '');
-
-  const forecast = buildForecastUrl(40.71, -74.01);
-  assert.ok(forecast.startsWith(FORECAST_ENDPOINT + '?'));
-  assert.ok(forecast.includes('latitude=40.71'));
-  assert.ok(forecast.includes('longitude=-74.01'));
-  assert.ok(forecast.includes('current=temperature_2m,weather_code'));
-  assert.ok(forecast.includes('timezone=auto'));
-
-  assert.equal(buildForecastUrl(100, 0), '');
 });
 
-test('geocoding results become 城市名 · 省/州 · 国家 rows', () => {
-  assert.deepEqual(parseGeocodingResults({
-    results: [
-      {
-        name: '东京',
-        admin1: '东京都',
-        country: '日本',
-        latitude: 35.68,
-        longitude: 139.69
-      },
-      {
-        name: '东京',
-        admin1: '',
-        country: '日本',
-        latitude: '35.7',
-        longitude: '139.7'
-      },
-      { name: '', admin1: '东京都', country: '日本', latitude: 35.68, longitude: 139.69 },
-      { name: '越界', admin1: '', country: '日本', latitude: 100, longitude: 139.69 },
-      null
-    ]
-  }), [
-    {
-      name: '东京',
-      admin1: '东京都',
-      country: '日本',
-      latitude: 35.68,
-      longitude: 139.69,
-      label: '东京 · 东京都 · 日本'
-    },
-    {
-      name: '东京',
-      admin1: '',
-      country: '日本',
-      latitude: 35.7,
-      longitude: 139.7,
-      label: '东京 · 日本'
-    }
-  ]);
-
-  assert.deepEqual(parseGeocodingResults({}), []);
-  assert.deepEqual(parseGeocodingResults(null), []);
+test('itboy response is parsed from data.wendu and forecast[0].type', () => {
+  assert.deepEqual(parseItboyWeather(itboyBody('8', '多云')), {
+    temperature: 8,
+    weather: '多云'
+  });
+  assert.deepEqual(parseItboyWeather(itboyBody('-3.4', '小雪')), {
+    temperature: -3.4,
+    weather: '小雪'
+  });
+  assert.equal(parseItboyWeather({ data: { forecast: [{ type: '晴' }] } }), null);
+  assert.equal(parseItboyWeather({ data: { wendu: '' } }), null);
+  assert.equal(parseItboyWeather({}), null);
+  assert.equal(parseItboyWeather(null), null);
 });
 
-test('weatherCity is normalized on read, write and clear', () => {
+test('wttr.in response prefers lang_zh and falls back to weatherDesc', () => {
+  assert.deepEqual(parseWttrWeather(wttrBody('8', '多云')), {
+    temperature: 8,
+    weather: '多云'
+  });
+  assert.deepEqual(parseWttrWeather(wttrBody('9', '', 'Cloudy')), {
+    temperature: 9,
+    weather: 'Cloudy'
+  });
+  assert.deepEqual(parseWttrWeather(wttrBody('7', undefined, 'Sunny')), {
+    temperature: 7,
+    weather: 'Sunny'
+  });
+  assert.equal(parseWttrWeather({ current_condition: [] }), null);
+  assert.equal(parseWttrWeather({ current_condition: [{}] }), null);
+  assert.equal(parseWttrWeather({}), null);
+  assert.equal(parseWttrWeather(null), null);
+});
+
+test('china city codes match exact, suffixed, stripped and admin1 names', () => {
+  assert.deepEqual(matchChinaCity('上海'), { city: '上海', code: '101020100' });
+  assert.deepEqual(matchChinaCity('上饶'), { city: '上饶市', code: '101240301' });
+  assert.deepEqual(matchChinaCity('闵行区'), { city: '闵行区', code: '101020200' });
+  assert.deepEqual(matchChinaCity('上海市'), { city: '上海', code: '101020100' });
+  // Neither 浦东 nor its suffixed/stripped forms exist; admin1 上海 does.
+  assert.deepEqual(matchChinaCity('浦东', '上海'), { city: '上海', code: '101020100' });
+  assert.equal(matchChinaCity('东京'), null);
+  assert.equal(matchChinaCity('亚特兰大'), null);
+  assert.equal(matchChinaCity(''), null);
+});
+
+test('legacy weatherCity without country only matches the table exactly', () => {
+  assert.deepEqual(matchChinaCityExact('上海'), { city: '上海', code: '101020100' });
+  assert.equal(matchChinaCityExact('上饶'), null);
+  assert.equal(matchChinaCityExact(''), null);
+
+  assert.deepEqual(
+    resolveChinaCode({ source: 'manual', city: '上海', country: '', admin1: '' }),
+    { city: '上海', code: '101020100' }
+  );
+  assert.equal(
+    resolveChinaCode({ source: 'manual', city: '上饶', country: '', admin1: '' }),
+    null
+  );
+  assert.deepEqual(
+    resolveChinaCode({ source: 'manual', city: '上饶', country: 'CN', admin1: '江西省' }),
+    { city: '上饶市', code: '101240301' }
+  );
+  assert.equal(
+    resolveChinaCode({ source: 'manual', city: '上海', country: 'JP', admin1: '' }),
+    null
+  );
+  assert.deepEqual(
+    resolveChinaCode({ source: 'ip', city: '上海', isChina: true }),
+    { city: '上海', code: '101020100' }
+  );
+  assert.equal(
+    resolveChinaCode({ source: 'ip', city: 'Los Angeles', isChina: false }),
+    null
+  );
+});
+
+test('weatherCity keeps optional country and admin1 on write and read', () => {
   const original = { loginItemInitialized: true };
   const saved = writeWeatherCity(original, {
-    name: ' 东京 ',
-    latitude: '35.68',
-    longitude: 139.69
+    name: ' 上海市 ',
+    latitude: '31.23',
+    longitude: 121.47,
+    country: 'CN',
+    admin1: '上海'
   });
 
   assert.deepEqual(original, { loginItemInitialized: true });
   assert.deepEqual(saved, {
     loginItemInitialized: true,
-    weatherCity: { name: '东京', latitude: 35.68, longitude: 139.69 }
+    weatherCity: {
+      name: '上海市',
+      latitude: 31.23,
+      longitude: 121.47,
+      country: 'CN',
+      admin1: '上海'
+    }
   });
   assert.deepEqual(readWeatherCity(saved), {
+    name: '上海市',
+    latitude: 31.23,
+    longitude: 121.47,
+    country: 'CN',
+    admin1: '上海'
+  });
+
+  // Writing without country/admin1 drops them again.
+  const plain = writeWeatherCity(saved, { name: '东京', latitude: 35.68, longitude: 139.69 });
+  assert.deepEqual(plain.weatherCity, {
     name: '东京',
     latitude: 35.68,
     longitude: 139.69
   });
+  // Legacy stored data without the new fields still reads back fine.
+  assert.deepEqual(readWeatherCity({
+    weatherCity: { name: '东京', latitude: 35.68, longitude: 139.69 }
+  }), { name: '东京', latitude: 35.68, longitude: 139.69 });
 
   const cleared = writeWeatherCity(saved, null);
   assert.deepEqual(cleared, { loginItemInitialized: true });
@@ -189,23 +247,39 @@ test('weatherCity is normalized on read, write and clear', () => {
 });
 
 test('manual city wins over IP data and falls back to IP when absent', () => {
-  const manual = { name: '东京', latitude: 35.68, longitude: 139.69 };
-  const ipData = { success: true, city: '洛杉矶', latitude: 34.05, longitude: -118.24 };
+  const manual = {
+    name: '上海',
+    latitude: 31.23,
+    longitude: 121.47,
+    country: 'CN',
+    admin1: '上海'
+  };
+  const ipData = {
+    success: true,
+    city: 'Los Angeles',
+    country_code: 'US',
+    latitude: 34.05,
+    longitude: -118.24
+  };
 
   assert.deepEqual(resolveWeatherLocation(manual, ipData), {
     source: 'manual',
-    coordinates: { latitude: 35.68, longitude: 139.69 },
-    city: '东京'
+    coordinates: { latitude: 31.23, longitude: 121.47 },
+    city: '上海',
+    country: 'CN',
+    admin1: '上海'
   });
   assert.deepEqual(resolveWeatherLocation(null, ipData), {
     source: 'ip',
     coordinates: { latitude: 34.05, longitude: -118.24 },
-    city: '洛杉矶'
+    city: 'Los Angeles',
+    isChina: false
   });
   assert.deepEqual(resolveWeatherLocation({ name: '东京' }, ipData), {
     source: 'ip',
     coordinates: { latitude: 34.05, longitude: -118.24 },
-    city: '洛杉矶'
+    city: 'Los Angeles',
+    isChina: false
   });
   assert.equal(resolveWeatherLocation(null, { success: false }), null);
 });
@@ -235,7 +309,7 @@ test('weather result formats as 城市 · 天气 · 温度°C', () => {
   assert.equal(formatTemperature(null), '');
 
   assert.deepEqual(
-    formatWeatherResult({ city: '纽约', temperature: 8.2, weatherCode: 2 }),
+    formatWeatherResult({ city: '纽约', temperature: 8.2, weather: '多云' }),
     {
       ok: true,
       city: '纽约',
@@ -246,113 +320,34 @@ test('weather result formats as 城市 · 天气 · 温度°C', () => {
     }
   );
 
-  const noCity = formatWeatherResult({ temperature: 0, weatherCode: 0 });
+  const noCity = formatWeatherResult({ temperature: 0, weather: '晴' });
   assert.equal(noCity.text, '当前位置 · 晴 · 0°C');
 
+  const noWeather = formatWeatherResult({ city: '纽约', temperature: 8 });
+  assert.equal(noWeather.weather, '未知');
+  assert.equal(noWeather.text, '纽约 · 未知 · 8°C');
+
   assert.deepEqual(
-    formatWeatherResult({ city: '纽约', weatherCode: 2 }),
+    formatWeatherResult({ city: '纽约', weather: '多云' }),
     { ok: false, text: UNAVAILABLE_TEXT }
   );
 });
 
-test('weather service uses a manual city without IP or reverse geocoding', async () => {
-  let clock = 1000;
+test('china city weather uses itboy with the matched table code', async () => {
   const calls = [];
   const logs = [];
-  function fakeFetch(url) {
-    calls.push(url);
-    if (url.startsWith(IP_LOCATION_URL)) {
-      return Promise.resolve(response({
-        success: true,
-        city: '洛杉矶',
-        latitude: 34.05,
-        longitude: -118.24
-      }));
-    }
-    if (url.startsWith(REVERSE_GEOCODE_ENDPOINT)) {
-      return Promise.reject(new Error('reverse geocode should not be needed'));
-    }
-    if (url.startsWith(FORECAST_ENDPOINT)) {
-      return Promise.resolve(response({
-        current: { temperature_2m: 8.2, weather_code: 2 }
-      }));
-    }
-    return Promise.reject(new Error('unexpected URL ' + url));
-  }
-
   const service = createWeatherService({
-    fetch: fakeFetch,
-    weatherCity: { name: '东京', latitude: 35.68, longitude: 139.69 },
-    now: () => clock,
-    logger: {
-      info: (message) => logs.push('info:' + message),
-      warn: (message) => logs.push('warn:' + message)
-    }
-  });
-
-  const first = await service.get();
-  assert.equal(first.text, '东京 · 多云 · 8°C');
-  assert.equal(calls.length, 1);
-  assert.ok(calls[0].startsWith(FORECAST_ENDPOINT));
-  assert.ok(calls[0].includes('latitude=35.68'));
-  assert.ok(calls[0].includes('longitude=139.69'));
-  assert.ok(logs.includes('info:天气位置=手动：东京'));
-
-  const cached = await service.get();
-  assert.equal(cached.text, first.text);
-  assert.equal(calls.length, 1);
-
-  clock += CACHE_TTL_MS;
-  await service.refresh();
-  assert.equal(calls.length, 2);
-
-  // Choosing 自动 clears the manual city and goes back to IP.
-  service.setCity(null);
-  assert.equal(service.getCached(), null);
-  const automatic = await service.get();
-  assert.equal(automatic.text, '洛杉矶 · 多云 · 8°C');
-  assert.equal(calls.length, 4);
-  assert.ok(calls[2].startsWith(IP_LOCATION_URL));
-  assert.ok(logs.includes('info:天气位置=IP：洛杉矶'));
-
-  // A new manual city clears the IP cache and skips ipwho.is again.
-  service.setCity({ name: '巴黎', latitude: 48.86, longitude: 2.35 });
-  const paris = await service.get();
-  assert.equal(paris.text, '巴黎 · 多云 · 8°C');
-  assert.equal(calls.length, 5);
-  assert.ok(calls[4].startsWith(FORECAST_ENDPOINT));
-  assert.ok(logs.includes('info:天气位置=手动：巴黎'));
-});
-
-test('IP weather without a city falls back to reverse geocoding', async () => {
-  const calls = [];
-  const logs = [];
-  function fakeFetch(url) {
-    calls.push(url);
-    if (url.startsWith(IP_LOCATION_URL)) {
-      return Promise.resolve(response({
-        success: true,
-        latitude: 40.71,
-        longitude: -74.01
-      }));
-    }
-    if (url.startsWith(REVERSE_GEOCODE_ENDPOINT)) {
-      return Promise.resolve(response({
-        city: '',
-        locality: '曼哈顿',
-        principalSubdivision: '纽约州'
-      }));
-    }
-    if (url.startsWith(FORECAST_ENDPOINT)) {
-      return Promise.resolve(response({
-        current: { temperature_2m: 8.2, weather_code: 2 }
-      }));
-    }
-    return Promise.reject(new Error('unexpected URL ' + url));
-  }
-
-  const service = createWeatherService({
-    fetch: fakeFetch,
+    fetch: async (url) => {
+      calls.push(url);
+      return response(itboyBody('8', '多云'));
+    },
+    weatherCity: {
+      name: '上海',
+      latitude: 31.23,
+      longitude: 121.47,
+      country: 'CN',
+      admin1: '上海'
+    },
     logger: {
       info: (message) => logs.push('info:' + message),
       warn: (message) => logs.push('warn:' + message)
@@ -360,13 +355,158 @@ test('IP weather without a city falls back to reverse geocoding', async () => {
   });
 
   const result = await service.get();
-  assert.equal(result.text, '曼哈顿 · 多云 · 8°C');
-  assert.equal(calls.length, 3);
+  assert.equal(result.text, '上海 · 多云 · 8°C');
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0], ITBOY_ENDPOINT + '101020100');
+  assert.ok(logs.includes('info:天气位置=手动：上海'));
+  assert.ok(logs.includes('info:天气来源=itboy（上海 101020100）'));
+});
+
+test('a failed itboy request falls back to wttr.in', async () => {
+  const calls = [];
+  const logs = [];
+  const service = createWeatherService({
+    fetch: async (url) => {
+      calls.push(url);
+      if (url.startsWith(ITBOY_ENDPOINT)) throw new Error('aborted');
+      return response(wttrBody('9', undefined, 'Sunny'));
+    },
+    weatherCity: {
+      name: '上海',
+      latitude: 31.23,
+      longitude: 121.47,
+      country: 'CN',
+      admin1: '上海'
+    },
+    logger: {
+      info: (message) => logs.push('info:' + message),
+      warn: (message) => logs.push('warn:' + message)
+    }
+  });
+
+  const result = await service.get();
+  assert.equal(result.text, '上海 · Sunny · 9°C');
+  assert.equal(calls.length, 2);
+  assert.ok(calls[0].startsWith(ITBOY_ENDPOINT));
+  assert.ok(calls[1].startsWith(WTTR_ENDPOINT));
+  assert.ok(calls[1].includes('31.23,121.47'));
+  assert.ok(logs.includes('warn:itboy 请求失败：aborted'));
+  assert.ok(logs.includes('info:天气来源=wttr.in'));
+});
+
+test('non-china cities go straight to wttr.in', async () => {
+  const calls = [];
+  const service = createWeatherService({
+    fetch: async (url) => {
+      calls.push(url);
+      if (url.startsWith(ITBOY_ENDPOINT)) throw new Error('itboy should not be called');
+      return response(wttrBody('12', '晴'));
+    },
+    weatherCity: {
+      name: '东京',
+      latitude: 35.68,
+      longitude: 139.69,
+      country: '日本',
+      admin1: '东京都'
+    },
+    logger: {}
+  });
+
+  const result = await service.get();
+  assert.equal(result.text, '东京 · 晴 · 12°C');
+  assert.equal(calls.length, 1);
+  assert.ok(calls[0].startsWith(WTTR_ENDPOINT));
+});
+
+test('legacy weatherCity without country uses itboy only on an exact hit', async () => {
+  const exact = createWeatherService({
+    fetch: async (url) => {
+      assert.ok(url.startsWith(ITBOY_ENDPOINT));
+      return response(itboyBody('8', '多云'));
+    },
+    weatherCity: { name: '上海', latitude: 31.23, longitude: 121.47 },
+    logger: {}
+  });
+  assert.equal((await exact.get()).text, '上海 · 多云 · 8°C');
+
+  const misses = createWeatherService({
+    fetch: async (url) => {
+      assert.ok(url.startsWith(WTTR_ENDPOINT));
+      return response(wttrBody('10', '阴'));
+    },
+    weatherCity: { name: '上饶', latitude: 28.45, longitude: 117.94 },
+    logger: {}
+  });
+  assert.equal((await misses.get()).text, '上饶 · 阴 · 10°C');
+});
+
+test('IP weather uses ipwho.is city directly and picks the source by country', async () => {
+  const calls = [];
+  const logs = [];
+  const service = createWeatherService({
+    fetch: async (url) => {
+      calls.push(url);
+      if (url.startsWith(IP_LOCATION_URL)) {
+        return response({
+          success: true,
+          city: '上海',
+          country_code: 'CN',
+          latitude: 31.23,
+          longitude: 121.47
+        });
+      }
+      return response(itboyBody('8', '多云'));
+    },
+    logger: {
+      info: (message) => logs.push('info:' + message),
+      warn: (message) => logs.push('warn:' + message)
+    }
+  });
+
+  const result = await service.get();
+  assert.equal(result.text, '上海 · 多云 · 8°C');
+  assert.equal(calls.length, 2);
   assert.ok(calls[0].startsWith(IP_LOCATION_URL));
-  assert.ok(calls[1].startsWith(REVERSE_GEOCODE_ENDPOINT));
-  assert.ok(calls[2].startsWith(FORECAST_ENDPOINT));
-  assert.ok(logs.includes('info:天气位置=IP：曼哈顿'));
-  assert.ok(!logs.some((line) => line.includes('40.71')));
+  assert.ok(calls[1].startsWith(ITBOY_ENDPOINT));
+  assert.ok(logs.includes('info:天气位置=IP：上海'));
+  assert.ok(logs.includes('info:天气来源=itboy（上海 101020100）'));
+
+  // Choosing 自动 clears the manual city and goes back to IP.
+  service.setCity({ name: '巴黎', latitude: 48.86, longitude: 2.35 });
+  service.setCity(null);
+  assert.equal(service.getCached(), null);
+});
+
+test('IP weather outside China uses wttr.in', async () => {
+  const calls = [];
+  const logs = [];
+  const service = createWeatherService({
+    fetch: async (url) => {
+      calls.push(url);
+      if (url.startsWith(IP_LOCATION_URL)) {
+        return response({
+          success: true,
+          city: 'Los Angeles',
+          country_code: 'US',
+          latitude: 34.05,
+          longitude: -118.24
+        });
+      }
+      return response(wttrBody('18', undefined, 'Clear'));
+    },
+    logger: {
+      info: (message) => logs.push('info:' + message),
+      warn: (message) => logs.push('warn:' + message)
+    }
+  });
+
+  const result = await service.get();
+  assert.equal(result.text, 'Los Angeles · Clear · 18°C');
+  assert.equal(calls.length, 2);
+  assert.ok(calls[1].startsWith(WTTR_ENDPOINT));
+  assert.ok(calls[1].includes('34.05,-118.24'));
+  assert.ok(logs.includes('info:天气位置=IP：Los Angeles'));
+  assert.ok(logs.includes('info:天气来源=wttr.in'));
 });
 
 test('city search uses the geocoding endpoint and returns parsed rows', async () => {
@@ -402,26 +542,51 @@ test('city search uses the geocoding endpoint and returns parsed rows', async ()
   assert.equal(calls.length, 1);
 });
 
-test('weather service caches failures for 30 minutes and logs the reason', async () => {
+test('weather service caches results and failures for 30 minutes', async () => {
   let clock = 1000;
   const calls = [];
   const logs = [];
-  const service = createWeatherService({
+  const failing = createWeatherService({
     fetch: async (url) => {
       calls.push(url);
+      if (url.startsWith(ITBOY_ENDPOINT)) throw new Error('aborted');
       throw new Error('offline');
+    },
+    weatherCity: {
+      name: '上海',
+      latitude: 31.23,
+      longitude: 121.47,
+      country: 'CN',
+      admin1: '上海'
     },
     now: () => clock,
     logger: { warn: (message) => logs.push('warn:' + message) }
   });
 
-  assert.deepEqual(await service.get(), { ok: false, text: UNAVAILABLE_TEXT });
+  assert.deepEqual(await failing.get(), { ok: false, text: UNAVAILABLE_TEXT });
   assert.ok(logs.some((line) => line === 'warn:更新失败：offline'));
 
-  assert.deepEqual(await service.get(), { ok: false, text: UNAVAILABLE_TEXT });
-  assert.equal(calls.length, 1);
+  assert.deepEqual(await failing.get(), { ok: false, text: UNAVAILABLE_TEXT });
+  assert.equal(calls.length, 2);
 
   clock += CACHE_TTL_MS;
-  await service.get();
-  assert.equal(calls.length, 2);
+  await failing.get();
+  assert.equal(calls.length, 4);
+
+  const succeeding = createWeatherService({
+    fetch: async () => response(itboyBody('8', '多云')),
+    weatherCity: {
+      name: '上海',
+      latitude: 31.23,
+      longitude: 121.47,
+      country: 'CN',
+      admin1: '上海'
+    },
+    now: () => clock,
+    logger: {}
+  });
+  const first = await succeeding.get();
+  const cached = await succeeding.get();
+  assert.equal(cached.text, first.text);
+  assert.deepEqual(await succeeding.refresh(), first);
 });

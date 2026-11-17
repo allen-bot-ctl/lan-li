@@ -1,73 +1,100 @@
 'use strict';
 
-// Weather helpers and the main-process service. The pure helpers (WMO code
-// mapping, city selection, coordinate validation and result formatting) can be
-// required directly by `node --test`. All network access goes through an
-// injected `fetch`; tests never touch the real network.
+// Weather helpers and the main-process service. The pure helpers (city-code
+// table matching, source parsing, city selection, coordinate validation and
+// result formatting) can be required directly by `node --test`. All network
+// access goes through an injected `fetch`; tests never touch the real network.
+//
+// Data sources: China cities use the free itboy city API (matched against the
+// packaged code table in electron/data/china-city-codes.json); everything else
+// (and any itboy failure) falls back to wttr.in. City search still uses the
+// Open-Meteo geocoding endpoint, which is reachable where its forecast API is
+// not.
+
+const fs = require('node:fs');
+const path = require('node:path');
 
 const IP_LOCATION_URL = 'https://ipwho.is/';
-const REVERSE_GEOCODE_ENDPOINT =
-  'https://api.bigdatacloud.net/data/reverse-geocode-client';
-const FORECAST_ENDPOINT = 'https://api.open-meteo.com/v1/forecast';
+const ITBOY_ENDPOINT = 'http://t.weather.itboy.net/api/weather/city/';
+const WTTR_ENDPOINT = 'https://wttr.in/';
 const GEOCODING_ENDPOINT = 'https://geocoding-api.open-meteo.com/v1/search';
+const CITY_CODES_PATH = path.join(__dirname, 'data', 'china-city-codes.json');
 
 const USER_AGENT = 'LanLi (+https://allen-bot-ctl.github.io/lan-li/)';
 const CACHE_TTL_MS = 30 * 60 * 1000;
 const REQUEST_TIMEOUT_MS = 8000;
 const UNAVAILABLE_TEXT = '天气暂不可用';
-
-// WMO weather interpretation codes used by Open-Meteo.
-const WEATHER_CODE_TEXT = Object.freeze({
-  0: '晴',
-  1: '晴间多云',
-  2: '多云',
-  3: '阴',
-  45: '雾',
-  48: '雾',
-  51: '毛毛雨',
-  53: '毛毛雨',
-  55: '毛毛雨',
-  56: '冻毛毛雨',
-  57: '冻毛毛雨',
-  61: '小雨',
-  63: '中雨',
-  65: '大雨',
-  66: '冻雨',
-  67: '冻雨',
-  71: '小雪',
-  73: '中雪',
-  75: '大雪',
-  77: '雪',
-  80: '阵雨',
-  81: '阵雨',
-  82: '强阵雨',
-  85: '阵雪',
-  86: '阵雪',
-  95: '雷暴',
-  96: '雷暴冰雹',
-  99: '雷暴冰雹'
-});
+const CITY_SUFFIXES = ['市', '区', '县'];
 
 function unavailableWeather() {
   return { ok: false, text: UNAVAILABLE_TEXT };
-}
-
-function describeWeatherCode(code) {
-  if (code === null || code === undefined || code === '') return '未知';
-  const value = Number(code);
-  if (!Number.isInteger(value)) return '未知';
-  return WEATHER_CODE_TEXT[value] || '未知';
 }
 
 function textValue(value) {
   return typeof value === 'string' ? value.trim() : '';
 }
 
-function pickCityName(data) {
-  if (!data || typeof data !== 'object') return '';
-  return textValue(data.city) ||
-    textValue(data.locality) ||
-    textValue(data.principalSubdivision);
+function loadChinaCityCodes() {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(CITY_CODES_PATH, 'utf8'));
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? parsed
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+const CHINA_CITY_CODES = loadChinaCityCodes();
+
+// Order: exact name → name plus 市/区/县 → name minus those suffixes.
+function matchCityCodeInTable(codes, name) {
+  const base = textValue(name);
+  if (!base) return null;
+  if (codes[base]) return { city: base, code: codes[base] };
+  for (const suffix of CITY_SUFFIXES) {
+    const withSuffix = base + suffix;
+    if (codes[withSuffix]) return { city: withSuffix, code: codes[withSuffix] };
+  }
+  for (const suffix of CITY_SUFFIXES) {
+    if (!base.endsWith(suffix)) continue;
+    const stripped = base.slice(0, -suffix.length);
+    if (stripped && codes[stripped]) {
+      return { city: stripped, code: codes[stripped] };
+    }
+    break;
+  }
+  return null;
+}
+
+function matchChinaCity(name, admin1) {
+  return matchCityCodeInTable(CHINA_CITY_CODES, name) ||
+    matchCityCodeInTable(CHINA_CITY_CODES, admin1) ||
+    null;
+}
+
+// Legacy weatherCity entries carry no country; only an exact table hit may
+// route them to itboy.
+function matchChinaCityExact(name) {
+  const base = textValue(name);
+  return base && CHINA_CITY_CODES[base]
+    ? { city: base, code: CHINA_CITY_CODES[base] }
+    : null;
+}
+
+function resolveChinaCode(location) {
+  if (!location || typeof location !== 'object') return null;
+  if (location.source === 'ip') {
+    if (!location.isChina) return null;
+    return matchChinaCity(location.city, '');
+  }
+  if (location.country === 'CN' || location.country === '中国') {
+    return matchChinaCity(location.city, location.admin1);
+  }
+  if (!textValue(location.country)) {
+    return matchChinaCityExact(location.city);
+  }
+  return null;
 }
 
 function pickIpCity(data) {
@@ -100,7 +127,11 @@ function parseIpLocation(data) {
   if (!data || typeof data !== 'object' || data.success === false) return null;
   const coordinates = normalizeCoordinates(data);
   if (!coordinates) return null;
-  return { coordinates, city: pickIpCity(data) };
+  return {
+    coordinates,
+    city: pickIpCity(data),
+    isChina: data.country_code === 'CN'
+  };
 }
 
 function normalizeWeatherCity(value) {
@@ -108,11 +139,16 @@ function normalizeWeatherCity(value) {
   const name = textValue(value.name);
   const coordinates = normalizeCoordinates(value);
   if (!name || !coordinates) return null;
-  return {
+  const normalized = {
     name,
     latitude: coordinates.latitude,
     longitude: coordinates.longitude
   };
+  const country = textValue(value.country);
+  const admin1 = textValue(value.admin1);
+  if (country) normalized.country = country;
+  if (admin1) normalized.admin1 = admin1;
+  return normalized;
 }
 
 function readWeatherCity(preferences) {
@@ -134,7 +170,7 @@ function writeWeatherCity(preferences, city) {
 }
 
 // A saved city always wins over IP data, so a manual choice never triggers an
-// ipwho.is request or a reverse-geocode lookup.
+// ipwho.is request.
 function resolveWeatherLocation(manualCity, ipData) {
   const manual = normalizeWeatherCity(manualCity);
   if (manual) {
@@ -144,13 +180,15 @@ function resolveWeatherLocation(manualCity, ipData) {
         latitude: manual.latitude,
         longitude: manual.longitude
       },
-      city: manual.name
+      city: manual.name,
+      country: manual.country || '',
+      admin1: manual.admin1 || ''
     };
   }
 
   const ip = parseIpLocation(ipData);
   if (!ip) return null;
-  return { source: 'ip', coordinates: ip.coordinates, city: ip.city };
+  return { source: 'ip', coordinates: ip.coordinates, city: ip.city, isChina: ip.isChina };
 }
 
 function describeWeatherLocation(location) {
@@ -204,14 +242,10 @@ function formatTemperature(value) {
 
 function formatWeatherResult(input) {
   const source = input && typeof input === 'object' ? input : {};
-  const temperature = finiteNumber(
-    source.temperature !== undefined ? source.temperature : source.temperature_2m
-  );
+  const temperature = finiteNumber(source.temperature);
   if (temperature === null) return unavailableWeather();
 
-  const weatherCode =
-    source.weatherCode !== undefined ? source.weatherCode : source.weather_code;
-  const weather = describeWeatherCode(weatherCode);
+  const weather = textValue(source.weather) || '未知';
   const city = textValue(source.city) || '当前位置';
   const temperatureText = `${Math.round(temperature)}°C`;
 
@@ -225,22 +259,51 @@ function formatWeatherResult(input) {
   };
 }
 
-function buildReverseGeocodeUrl(latitude, longitude) {
-  const coordinates = normalizeCoordinates({ latitude, longitude });
-  if (!coordinates) return '';
-  return `${REVERSE_GEOCODE_ENDPOINT}` +
-    `?latitude=${encodeURIComponent(coordinates.latitude)}` +
-    `&longitude=${encodeURIComponent(coordinates.longitude)}` +
-    '&localityLanguage=zh';
+function buildItboyUrl(code) {
+  const trimmed = textValue(code);
+  if (!trimmed) return '';
+  return `${ITBOY_ENDPOINT}${encodeURIComponent(trimmed)}`;
 }
 
-function buildForecastUrl(latitude, longitude) {
+function buildWttrUrl(latitude, longitude) {
   const coordinates = normalizeCoordinates({ latitude, longitude });
   if (!coordinates) return '';
-  return `${FORECAST_ENDPOINT}` +
-    `?latitude=${encodeURIComponent(coordinates.latitude)}` +
-    `&longitude=${encodeURIComponent(coordinates.longitude)}` +
-    '&current=temperature_2m,weather_code&timezone=auto';
+  return `${WTTR_ENDPOINT}` +
+    `${coordinates.latitude},${coordinates.longitude}?format=j1&lang=zh`;
+}
+
+// itboy: data.wendu is the current temperature, data.forecast[0].type is the
+// Chinese weather text such as 多云.
+function parseItboyWeather(data) {
+  if (!data || typeof data !== 'object') return null;
+  const payload = data.data && typeof data.data === 'object' ? data.data : null;
+  if (!payload) return null;
+  const temperature = finiteNumber(payload.wendu);
+  if (temperature === null) return null;
+  const forecast = Array.isArray(payload.forecast) ? payload.forecast : [];
+  const weather = forecast[0] && typeof forecast[0] === 'object'
+    ? textValue(forecast[0].type)
+    : '';
+  return { temperature, weather: weather || '未知' };
+}
+
+// wttr.in j1: current_condition[0].temp_C plus lang_zh[0].value, falling back
+// to weatherDesc[0].value when the localized list is absent.
+function parseWttrWeather(data) {
+  if (!data || typeof data !== 'object' || !Array.isArray(data.current_condition)) {
+    return null;
+  }
+  const current = data.current_condition[0];
+  if (!current || typeof current !== 'object') return null;
+  const temperature = finiteNumber(current.temp_C);
+  if (temperature === null) return null;
+  const localized = Array.isArray(current.lang_zh) && current.lang_zh[0]
+    ? textValue(current.lang_zh[0].value)
+    : '';
+  const described = Array.isArray(current.weatherDesc) && current.weatherDesc[0]
+    ? textValue(current.weatherDesc[0].value)
+    : '';
+  return { temperature, weather: localized || described || '未知' };
 }
 
 function createWeatherService(options = {}) {
@@ -305,11 +368,27 @@ function createWeatherService(options = {}) {
     return location;
   }
 
-  async function lookupCity(coordinates) {
-    const url = buildReverseGeocodeUrl(coordinates.latitude, coordinates.longitude);
-    if (!url) return '';
-    const data = await fetchJson(url);
-    return pickCityName(data);
+  // Build the ordered source list for one location: itboy first for China
+  // cities found in the code table, wttr.in otherwise; a failed primary falls
+  // back to wttr.in when a location can use both.
+  function weatherAttempts(location) {
+    const chinaCode = resolveChinaCode(location);
+    const attempts = [];
+    if (chinaCode) {
+      attempts.push({
+        name: 'itboy',
+        url: buildItboyUrl(chinaCode.code),
+        parse: parseItboyWeather,
+        describe: `天气来源=itboy（${chinaCode.city} ${chinaCode.code}）`
+      });
+    }
+    attempts.push({
+      name: 'wttr.in',
+      url: buildWttrUrl(location.coordinates.latitude, location.coordinates.longitude),
+      parse: parseWttrWeather,
+      describe: '天气来源=wttr.in'
+    });
+    return attempts;
   }
 
   async function load() {
@@ -317,32 +396,28 @@ function createWeatherService(options = {}) {
     const location = await locate();
     if (requestGeneration !== generation) return null;
 
-    let city = location.city;
-    if (!city && location.source === 'ip') {
+    const city = textValue(location.city);
+    log('info', describeWeatherLocation(location));
+
+    let lastError = null;
+    for (const attempt of weatherAttempts(location)) {
+      if (!attempt.url) continue;
       try {
-        city = await lookupCity(location.coordinates);
+        const data = await fetchJson(attempt.url);
+        if (requestGeneration !== generation) return null;
+        const parsed = attempt.parse(data);
+        if (!parsed) throw new Error('天气数据不完整');
+        log('info', attempt.describe);
+        const result = formatWeatherResult({ city, ...parsed });
+        if (!result.ok) throw new Error('天气数据不完整');
+        return result;
       } catch (error) {
-        log('warn', '城市名获取失败：' + describeError(error));
+        lastError = error;
+        if (requestGeneration !== generation) return null;
+        log('warn', attempt.name + ' 请求失败：' + describeError(error));
       }
-      if (requestGeneration !== generation) return null;
     }
-
-    log('info', describeWeatherLocation({ source: location.source, city }));
-
-    const data = await fetchJson(
-      buildForecastUrl(location.coordinates.latitude, location.coordinates.longitude)
-    );
-    if (requestGeneration !== generation) return null;
-    const current = data && data.current && typeof data.current === 'object'
-      ? data.current
-      : {};
-    const result = formatWeatherResult({
-      city,
-      temperature: current.temperature_2m,
-      weatherCode: current.weather_code
-    });
-    if (!result.ok) throw new Error('天气数据不完整');
-    return result;
+    throw lastError || new Error('天气数据不可用');
   }
 
   function store(result) {
@@ -421,18 +496,20 @@ function describeError(error) {
 
 module.exports = {
   IP_LOCATION_URL,
-  REVERSE_GEOCODE_ENDPOINT,
-  FORECAST_ENDPOINT,
+  ITBOY_ENDPOINT,
+  WTTR_ENDPOINT,
   GEOCODING_ENDPOINT,
+  CITY_CODES_PATH,
   USER_AGENT,
   CACHE_TTL_MS,
   REQUEST_TIMEOUT_MS,
   UNAVAILABLE_TEXT,
-  WEATHER_CODE_TEXT,
+  loadChinaCityCodes,
+  matchChinaCity,
+  matchChinaCityExact,
+  resolveChinaCode,
   unavailableWeather,
-  describeWeatherCode,
   describeWeatherLocation,
-  pickCityName,
   pickIpCity,
   normalizeCoordinates,
   parseIpLocation,
@@ -442,9 +519,11 @@ module.exports = {
   resolveWeatherLocation,
   formatTemperature,
   formatWeatherResult,
-  buildReverseGeocodeUrl,
-  buildForecastUrl,
+  buildItboyUrl,
+  buildWttrUrl,
   buildGeocodingUrl,
   parseGeocodingResults,
+  parseItboyWeather,
+  parseWttrWeather,
   createWeatherService
 };
