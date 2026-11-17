@@ -26,8 +26,13 @@ const {
   formatMenuTitle,
   daysInMonth,
   buildCells,
+  configureAlmanacStyles,
   buildAlmanac
 } = require('./calendar');
+const {
+  isStyleId,
+  readAlmanacStyle
+} = require('./almanac-styles');
 const { setupAutoUpdate } = require('./updater');
 const { createMacSelfUpdater } = require('./mac-self-update');
 const { createLogger } = require('./logger');
@@ -82,6 +87,8 @@ let updateNotice = null;
 let weatherService = null;
 let weatherTimer = null;
 let loginItem = null;
+let almanacStyleCatalog = null;
+let almanacStyle = 'lunar';
 
 const logger = createLogger();
 
@@ -187,7 +194,7 @@ function buildState() {
     view: { year: view.year, month: view.month },
     focus: { year: focus.year, month: focus.month, day: focus.day },
     cells: buildCells(view.year, view.month, now),
-    almanac: buildAlmanac(now),
+    almanac: buildAlmanac(now, almanacStyle),
     clocks: currentClockSnapshot(now)
   };
 }
@@ -254,6 +261,11 @@ function loadWorldClocks() {
     }
     writePreferences(next);
   }
+}
+
+function initializeAlmanacStyle() {
+  almanacStyleCatalog = configureAlmanacStyles({ logger });
+  almanacStyle = readAlmanacStyle(readPreferences());
 }
 
 function persistWorldClocks() {
@@ -507,6 +519,10 @@ function openSettingsMenu(event, position) {
       setOpenAtLogin: (value) => {
         applyLoginItem(Boolean(value));
       },
+      openAlmanacStyles: () => {
+        keepWindowOpen = true;
+        sendPanel('almanac');
+      },
       openClocks: () => {
         keepWindowOpen = true;
         sendPanel('clocks');
@@ -691,7 +707,7 @@ function updateClock() {
 
   if (calendarWindow && !calendarWindow.isDestroyed() && calendarWindow.isVisible()) {
     calendarWindow.webContents.send('calendar:onTick', {
-      almanac: buildAlmanac(now),
+      almanac: buildAlmanac(now, almanacStyle),
       clocks: currentClockSnapshot(now)
     });
   }
@@ -797,6 +813,26 @@ function registerIpc() {
   });
 
   ipcMain.handle('calendar:getState', () => buildState());
+
+  ipcMain.handle('almanac:getStyles', () => {
+    if (!almanacStyleCatalog) initializeAlmanacStyle();
+    return almanacStyleCatalog.list(almanacStyle);
+  });
+
+  ipcMain.handle('almanac:setStyle', (_event, id) => {
+    // Invalid ids never touch preferences or the in-memory selection.
+    if (!isStyleId(id)) return { ok: false };
+    if (!almanacStyleCatalog) initializeAlmanacStyle();
+
+    // Selecting the current style closes the panel in the renderer without a
+    // disk write, so only a real change is persisted.
+    if (id !== almanacStyle) {
+      almanacStyle = id;
+      writePreferences({ ...readPreferences(), almanacStyle });
+    }
+
+    return { ok: true, almanac: buildAlmanac(new Date(), almanacStyle) };
+  });
 
   ipcMain.handle('calendar:setView', (_event, payload) => applyViewPayload(payload));
 
@@ -942,6 +978,7 @@ async function bootstrap() {
   initializeLoginItem();
   resetViewToToday();
   loadWorldClocks();
+  initializeAlmanacStyle();
   setupWeather();
   registerIpc();
   createCalendarWindow();

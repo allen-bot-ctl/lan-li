@@ -13,7 +13,9 @@ const nextMonth = document.getElementById('next-month');
 const todayButton = document.getElementById('today-button');
 const settingsButton = document.getElementById('settings-button');
 const grid = document.getElementById('grid');
-const almanacDate = document.getElementById('almanac-date');
+const almanacCard = document.getElementById('almanac-card');
+const almanacStyleName = document.getElementById('almanac-style-name');
+const almanacCustomize = document.getElementById('almanac-customize');
 const almanacYi = document.getElementById('almanac-yi');
 const almanacJi = document.getElementById('almanac-ji');
 const clockList = document.getElementById('clock-list');
@@ -37,6 +39,9 @@ const weatherPicker = document.getElementById('weather-picker');
 const weatherSearch = document.getElementById('weather-search');
 const weatherPickerClose = document.getElementById('weather-picker-close');
 const weatherList = document.getElementById('weather-list');
+const almanacPicker = document.getElementById('almanac-picker');
+const almanacPickerClose = document.getElementById('almanac-picker-close');
+const almanacStyleList = document.getElementById('almanac-style-list');
 
 let state = null;
 let yearOptionsBuilt = false;
@@ -48,6 +53,7 @@ let weatherSearchToken = 0;
 let weatherSearchTimer = null;
 let weatherQuickCities = null;
 let weatherQuickToken = 0;
+let almanacStylesToken = 0;
 let updateMode = null;
 let bannerMode = null;
 let checkStatusTimer = null;
@@ -70,7 +76,19 @@ function buildYearOptions() {
 function renderAlmanac(almanac) {
   if (!almanac) return;
   lunarSubtitle.textContent = `${almanac.ganZhiText} · ${almanac.lunarMonthText}`;
-  almanacDate.textContent = almanac.lunarDayText;
+  almanacStyleName.textContent = almanac.styleName;
+  almanacStyleName.title = `农历${almanac.lunarDayText}`;
+
+  // CSSOM custom properties are the only per-style colours; inline style
+  // attributes stay forbidden by the CSP.
+  if (almanac.styleId === 'lunar') {
+    almanacCard.style.removeProperty('--almanac-accent-light');
+    almanacCard.style.removeProperty('--almanac-accent-dark');
+  } else {
+    almanacCard.style.setProperty('--almanac-accent-light', almanac.accentLight);
+    almanacCard.style.setProperty('--almanac-accent-dark', almanac.accentDark);
+  }
+
   almanacYi.textContent = almanac.yiText;
   almanacYi.title = almanac.yiTitle;
   almanacJi.textContent = almanac.jiText;
@@ -261,6 +279,7 @@ function runClockSearch() {
 
 function openClockEditor() {
   closeWeatherPicker();
+  closeAlmanacPicker();
   clearSettingsHighlight();
   clockPicker.hidden = false;
   clockSearch.value = '';
@@ -570,6 +589,7 @@ function runWeatherSearch() {
 
 function openWeatherPicker() {
   closeClockEditor();
+  closeAlmanacPicker();
   clearSettingsHighlight();
   weatherPicker.hidden = false;
   weatherSearch.value = '';
@@ -589,6 +609,90 @@ function closeWeatherPicker() {
   weatherQuickToken += 1;
   weatherQuickCities = null;
   weatherList.replaceChildren();
+}
+
+function renderAlmanacStyleRows(rows) {
+  almanacStyleList.replaceChildren();
+  if (!Array.isArray(rows)) return;
+
+  for (const row of rows) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'picker-item almanac-style-item';
+    button.setAttribute('role', 'option');
+    button.setAttribute('aria-selected', row.selected ? 'true' : 'false');
+
+    const badge = document.createElement('span');
+    badge.className = 'almanac-badge';
+    badge.textContent = row.badge;
+    badge.style.setProperty('--almanac-badge-light', row.accentLight);
+    badge.style.setProperty('--almanac-badge-dark', row.accentDark);
+
+    const info = document.createElement('span');
+    info.className = 'almanac-style-info';
+
+    const name = document.createElement('span');
+    name.className = 'picker-name';
+    name.textContent = row.name;
+
+    const tagline = document.createElement('span');
+    tagline.className = 'picker-zone';
+    tagline.textContent = row.tagline;
+
+    info.append(name, tagline);
+    button.append(badge, info);
+
+    if (row.selected) {
+      const selected = document.createElement('span');
+      selected.className = 'picker-zone';
+      selected.textContent = '已选';
+      button.append(selected);
+    }
+
+    button.addEventListener('click', () => {
+      selectAlmanacStyle(row);
+    });
+    almanacStyleList.append(button);
+  }
+}
+
+function loadAlmanacStyles() {
+  const token = almanacStylesToken + 1;
+  almanacStylesToken = token;
+  api.getAlmanacStyles().then((rows) => {
+    if (token === almanacStylesToken) renderAlmanacStyleRows(rows);
+  }).catch(() => {
+    if (token === almanacStylesToken) renderAlmanacStyleRows([]);
+  });
+}
+
+function selectAlmanacStyle(row) {
+  if (!row) return;
+  if (row.selected) {
+    closeAlmanacPicker();
+    return;
+  }
+
+  api.setAlmanacStyle(row.id).then((result) => {
+    if (!result || result.ok !== true) return;
+    renderAlmanac(result.almanac);
+    closeAlmanacPicker();
+  }).catch(() => {});
+}
+
+function openAlmanacPicker() {
+  closeClockEditor();
+  closeWeatherPicker();
+  clearSettingsHighlight();
+  almanacPicker.hidden = false;
+  almanacStyleList.replaceChildren();
+  loadAlmanacStyles();
+}
+
+function closeAlmanacPicker() {
+  almanacPicker.hidden = true;
+  almanacStylesToken += 1;
+  almanacStyleList.replaceChildren();
 }
 
 function clearCheckStatusTimer() {
@@ -687,10 +791,19 @@ weatherSearch.addEventListener('input', () => {
   runWeatherSearch();
 });
 
+almanacCustomize.addEventListener('click', () => {
+  openAlmanacPicker();
+});
+
+almanacPickerClose.addEventListener('click', () => {
+  closeAlmanacPicker();
+});
+
 api.onOpenPanel((panel) => {
   clearSettingsHighlight();
   if (panel === 'clocks') openClockEditor();
   if (panel === 'weather') openWeatherPicker();
+  if (panel === 'almanac') openAlmanacPicker();
 });
 
 document.addEventListener('pointerdown', clearSettingsHighlight, true);

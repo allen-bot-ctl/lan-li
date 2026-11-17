@@ -7,6 +7,7 @@
 | [0001](0001-empty-tray-and-compact-window.md) | 去掉菜单栏图标，窗口收紧为 580×400 | `acdfd06` |
 | [0002](0002-macos-15-intel-runner.md) | Release 使用 `macos-15-intel` | `f5b63c9` |
 | [0003](0003-unsigned-probe-and-self-update.md) | 未签名包走 probe-only + 应用内自更新，而不是打开 Release 页 | `ba31737`、`8ec7534` |
+| [0004](0004-almanac-styles.md) | 黄历风格用固定逐词映射，而非随机抽取；文案原创，不借用「程序员老黄历」 | 0.1.20 |
 
 ## 新增 ADR
 

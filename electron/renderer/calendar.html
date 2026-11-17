@@ -54,10 +54,10 @@
     </main>
 
     <aside class="now-pane" aria-label="黄历、世界时钟与天气">
-      <section class="card almanac-card" aria-label="黄历">
+      <section class="card almanac-card" id="almanac-card" aria-label="黄历">
         <div class="card-head">
-          <span class="card-title">黄历</span>
-          <span class="almanac-date" id="almanac-date">—</span>
+          <span class="card-title almanac-style-name" id="almanac-style-name">农历黄历</span>
+          <button class="card-link" id="almanac-customize" type="button">去定制 ›</button>
         </div>
         <div class="almanac-row">
           <span class="almanac-tag almanac-tag-yi">宜</span>
@@ -134,6 +134,16 @@
           spellcheck="false"
         >
         <div class="picker-list" id="weather-list" role="listbox" aria-label="选择天气城市"></div>
+      </section>
+    </div>
+
+    <div class="picker-overlay" id="almanac-picker" hidden>
+      <section class="picker-sheet" role="dialog" aria-modal="true" aria-label="选择黄历风格">
+        <div class="picker-head">
+          <span class="picker-title">黄历风格</span>
+          <button class="picker-close" id="almanac-picker-close" type="button">完成</button>
+        </div>
+        <div class="picker-list" id="almanac-style-list" role="listbox" aria-label="选择黄历风格"></div>
       </section>
     </div>
   </div>

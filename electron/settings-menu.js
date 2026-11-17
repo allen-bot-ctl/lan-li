@@ -37,6 +37,11 @@ function buildSettingsMenuTemplate(state, actions) {
     },
     { type: 'separator' },
     {
+      id: 'choose-almanac-style',
+      label: '黄历风格…',
+      click: callback(handlers.openAlmanacStyles)
+    },
+    {
       id: 'edit-clocks',
       label: '编辑世界时钟…',
       click: callback(handlers.openClocks)

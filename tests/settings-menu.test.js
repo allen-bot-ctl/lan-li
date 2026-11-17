@@ -17,6 +17,7 @@ test('settings menu follows the confirmed order and separators', () => {
       'check-update',
       'open-at-login',
       '---',
+      'choose-almanac-style',
       'edit-clocks',
       'choose-weather-city',
       '---',
@@ -63,6 +64,7 @@ test('panel and quit entries forward to their actions', () => {
   const template = buildSettingsMenuTemplate(
     { version: 'v0.1.16', openAtLogin: false },
     {
+      openAlmanacStyles: () => called.push('almanac'),
       openClocks: () => called.push('clocks'),
       openWeather: () => called.push('weather'),
       quit: () => called.push('quit')
@@ -71,8 +73,9 @@ test('panel and quit entries forward to their actions', () => {
 
   template[3].click();
   template[4].click();
-  template[6].click();
-  assert.deepEqual(called, ['clocks', 'weather', 'quit']);
+  template[5].click();
+  template[7].click();
+  assert.deepEqual(called, ['almanac', 'clocks', 'weather', 'quit']);
 });
 
 test('quit entry displays the Cmd+Q accelerator', () => {

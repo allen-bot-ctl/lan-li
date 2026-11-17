@@ -1,6 +1,10 @@
 'use strict';
 
 const { Solar } = require('lunar-javascript');
+const {
+  createStyleCatalog,
+  mapAlmanacTerms
+} = require('./almanac-styles');
 
 const MIN_YEAR = 1900;
 const MAX_YEAR = 2100;
@@ -122,20 +126,51 @@ function buildCells(year, month, today) {
   return cells;
 }
 
-// 黄历卡片：干支生肖纪年与农历月用于左侧顶栏，农历月日用于卡片标题行右侧；
-// 当日宜忌全部来自 lunar-javascript 离线计算。
+// 黄历卡片：干支生肖纪年与农历月用于左侧顶栏，农历月日用于卡片标题行；
+// 当日宜忌全部来自 lunar-javascript 离线计算，再按所选风格逐词映射。
 // 可见文本只取前若干项（单行放不下由渲染层 CSS 省略号截断），
-// title 用完整列表；只由「现在」决定，不随翻月或焦点日变化。
+// title 用完整列表；只由「现在」与 styleId 决定，不随翻月或焦点日变化。
 const ALMANAC_MAX_ITEMS = 6;
 
-function buildAlmanac(date) {
+let styleCatalog = null;
+
+// The main process calls this once during startup so style-file warnings go to
+// the file logger. Tests (and accidental early calls) lazily load the same
+// packaged directory with console warnings instead.
+function configureAlmanacStyles(options = {}) {
+  styleCatalog = createStyleCatalog(options);
+  return styleCatalog;
+}
+
+function getStyleCatalog() {
+  if (!styleCatalog) {
+    styleCatalog = createStyleCatalog({
+      logger: { warn: (message) => console.warn(message) }
+    });
+  }
+  return styleCatalog;
+}
+
+function buildAlmanac(date, styleId = 'lunar') {
   const solar = Solar.fromYmd(date.getFullYear(), date.getMonth() + 1, date.getDate());
   const lunar = solar.getLunar();
-  const yi = lunar.getDayYi().map(String);
-  const ji = lunar.getDayJi().map(String);
+  const rawYi = lunar.getDayYi().map(String);
+  const rawJi = lunar.getDayJi().map(String);
+  const style = getStyleCatalog().get(styleId);
+  const mappedYi = mapAlmanacTerms(rawYi, style.map);
+  const mappedJi = mapAlmanacTerms(rawJi, style.map);
+  const isLunar = style.definition.id === 'lunar';
+  const yi = mappedYi.items;
+  const ji = mappedJi.items;
   const ganZhiText = `${lunar.getYearInGanZhi()}${lunar.getYearShengXiao()}年`;
   const lunarMonthText = `${lunar.getMonthInChinese()}月`;
   return {
+    styleId: style.definition.id,
+    styleName: style.definition.name,
+    accentLight: style.definition.accent.light,
+    accentDark: style.definition.accent.dark,
+    rawYi,
+    rawJi,
     ganZhiText,
     lunarMonthText,
     lunarDayText: `${lunar.getMonthInChinese()}月${lunar.getDayInChinese()}`,
@@ -143,8 +178,8 @@ function buildAlmanac(date) {
     ji,
     yiText: yi.slice(0, ALMANAC_MAX_ITEMS).join(' '),
     jiText: ji.slice(0, ALMANAC_MAX_ITEMS).join(' '),
-    yiTitle: yi.join(' '),
-    jiTitle: ji.join(' ')
+    yiTitle: isLunar ? rawYi.join(' ') : mappedYi.title,
+    jiTitle: isLunar ? rawJi.join(' ') : mappedJi.title
   };
 }
 
@@ -159,5 +194,7 @@ module.exports = {
   daysInMonth,
   buildCell,
   buildCells,
+  configureAlmanacStyles,
+  mapAlmanacTerms,
   buildAlmanac
 };

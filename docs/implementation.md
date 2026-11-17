@@ -41,13 +41,15 @@ ${M}月${D}日 ${HH}:${mm}:${ss}
 
 **右侧「黄历」（`buildAlmanac`）**
 
-- 右栏顶部为紧凑的「黄历」卡片；卡内不再重复大字干支年。
+- 右栏顶部为紧凑的黄历卡片；卡内不再重复大字干支年。
 - `ganZhiText`：`` `${lunar.getYearInGanZhi()}${lunar.getYearShengXiao()}年` ``，如 `丙午马年`；`lunarMonthText` 为 `getMonthInChinese() + '月'`，闰月自然带出 `闰六月`。两者用于左侧顶栏的灰色小字「丙午马年 · 十月」。
-- `lunarDayText`：`` `${lunar.getMonthInChinese()}月${lunar.getDayInChinese()}` ``，如 `十月初九`，显示在黄历卡标题行右侧。
-- `yi` / `ji`：`lunar.getDayYi()` / `lunar.getDayJi()` 的完整数组；`yiText` / `jiText` 只取前 `ALMANAC_MAX_ITEMS`（6）项用空格连接，供单行显示（放不下由 CSS 省略号截断）；`yiTitle` / `jiTitle` 是完整列表，用作悬停 title。
-- 只由「现在」决定，不随翻月或焦点日变化；`calendar:onTick` 每秒重算，跨天（午夜）自动刷新。数据全部来自 lunar-javascript 离线计算，不接网络。
+- `lunarDayText`：`` `${lunar.getMonthInChinese()}月${lunar.getDayInChinese()}` ``，如 `十月初九`，作为卡片标题行风格名的悬停 title（前缀「农历」）。
+- `rawYi` / `rawJi` 保存 `lunar.getDayYi()` / `getDayJi()` 的完整原词数组。`yi` / `ji` 是逐词映射并按映射后文案去重后的完整列表；`yiText` / `jiText` 只取前 `ALMANAC_MAX_ITEMS`（6）项用空格连接，供单行显示（放不下由 CSS 省略号截断）；`yiTitle` / `jiTitle` 是完整列表，用作悬停 title。农历风格原样显示原词，`title` 与 0.1.19 相同；其它风格的 title 为「文案（原词）」。
+- `styleId` / `styleName` / `accentLight` / `accentDark` 随结果下发，供卡片标题、主题色与风格面板使用。只由「现在」与 `styleId` 决定，不随翻月或焦点日变化；`calendar:onTick` 每秒重算，跨天（午夜）自动刷新。数据全部来自 lunar-javascript 离线计算，不接网络。
+- 风格表由 `electron/almanac-styles.js` 在主进程启动时同步读取 `electron/data/almanac-styles/{coder,worker,student,fitness}.json` 并缓存；`lunar` 是主进程常量与恒等映射。文件读取失败、`schemaVersion !== 1` 或 `id` 与文件名不符时，该风格仍使用常量表中的名称、徽标与颜色，但映射退化为原词，并写一条 logger 警告。
+- 偏好键 `preferences.json` 顶层 `almanacStyle`：只接受 5 个风格 id；缺失、类型不对或未知值一律按 `lunar` 处理，且不回写。仅在用户选中非当前风格时写入，保留其它键。
 
-**测试**：`tests/calendar.test.js`（节气、初七、2026-11-16 黄历「丙午马年 / 十月 / 十月初八 / 纳采 / 上梁」、42 格与 lead、今日/周末/节日标记、菜单栏标题、禁用 `getOtherFestivals`）。
+**测试**：`tests/calendar.test.js`（节气、初七、2026-11-16 黄历「丙午马年 / 十月 / 十月初八 / 纳采 / 上梁」、42 格与 lead、今日/周末/节日标记、菜单栏标题、禁用 `getOtherFestivals`）；`tests/almanac-styles.test.js`（114 词表与四份映射完全相等、文件 schema、兜底、去重、确定性、默认兼容、偏好清洗、4 个日期 × 5 种风格的固定输出）。
 
 ## 2. 世界时钟（`electron/world-clocks.js`）
 
@@ -143,10 +145,10 @@ ${M}月${D}日 ${HH}:${mm}:${ss}
 
 - 顶栏「⚙︎ 设置」把按钮左缘/下缘加 4px 的坐标经 preload `openSettings({ x, y })` → `menu:openSettings` 发给主进程；渲染层只负责高亮按钮。
 - 主进程用 `buildSettingsMenuTemplate({ version, openAtLogin }, actions)` 生成模板，再 `Menu.buildFromTemplate` + `menu.popup({ window, x, y })`。菜单左上角直接放在按钮左缘、下方 4px 处；超出窗口右侧时交给 macOS 自动调整。坐标缺失时退回光标位置。
-- 模板顺序固定：检查更新（`sublabel` 为 `formatVersionLabel(app.getVersion())`）、登录时打开（`type: 'checkbox'`，`checked` 来自 `getOpenAtLogin()`）、分隔线、编辑世界时钟…、更换天气城市…、分隔线、退出栏历（`accelerator: 'Cmd+Q'`）。
+- 模板顺序固定：检查更新（`sublabel` 为 `formatVersionLabel(app.getVersion())`）、登录时打开（`type: 'checkbox'`，`checked` 来自 `getOpenAtLogin()`）、分隔线、黄历风格…、编辑世界时钟…、更换天气城市…、分隔线、退出栏历（`accelerator: 'Cmd+Q'`）。
 - 检查更新（设置菜单的项与右栏底部的文字链接）都调用 `requestUpdateCheck()` → `performUpdateCheck()`（`updater.checkNow({ manual: true })`）；底部入口经 `update:check` 到达主进程，结果仍走 `update:status`，不另写更新逻辑。
 - 「登录时打开」点击后用 Electron 回传的 `menuItem.checked` 调 `applyLoginItem()`，业务实现不变。
-- 面板动作经 `ui:openPanel`（`clocks` / `weather`）通知渲染层打开对应面板。菜单打开期间 `scheduleClose()` 暂停；选择面板/检查更新后窗口保持可见，其它方式关闭菜单且指针在窗口外时按原 200ms 逻辑收起。
+- 面板动作经 `ui:openPanel`（`almanac` / `clocks` / `weather`）通知渲染层打开对应面板。菜单打开期间 `scheduleClose()` 暂停；选择面板/检查更新后窗口保持可见，其它方式关闭菜单且指针在窗口外时按原 200ms 逻辑收起。
 
 **退出**
 
@@ -207,6 +209,8 @@ main.setupUpdates()
 | `weather:searchCity` | `searchCity` | `query`；主进程请求 Open-Meteo 地理编码，返回最多 8 条 `{ name, admin1, country, latitude, longitude, label }`，`label` 为「城市名 · 省/州 · 国家」；空查询返回空数组 |
 | `weather:quickCities` | `getQuickCities` | 无参数；按手动城市 `weatherCity.country` 或自动模式的 IP 国家，从内置 `electron/data/quick-cities.json` 返回 `{ country, countryCode, cities: [{ name, latitude, longitude, country?, admin1?, label, selected }] }`；无法确定国家或该国不在清单时 `cities` 为空 |
 | `weather:setCity` | `setCity` | `{ name, latitude, longitude, country?, admin1? }` 或 `null`；校验后写入/删除 `preferences.weatherCity` 并立即返回（不等待网络），后台强制刷新，结果经 `weather:update` 异步推送 |
+| `almanac:getStyles` | `getAlmanacStyles` | 无参数；返回固定顺序的 5 项 `{ id, name, tagline, badge, accentLight, accentDark, selected }` |
+| `almanac:setStyle` | `setAlmanacStyle` | `id` 字符串；5 个合法 id 之一时，若与当前不同则写入 `preferences.almanacStyle`，返回 `{ ok: true, almanac }`；非法 id 不写盘，返回 `{ ok: false }` |
 | `calendar:getState` | `getState` | 当前 `view`、`focus`、42 格、`almanac`、`clocks: { items }`（每项含 `time`、`relativeText`、`isMenuBar`） |
 | `calendar:setView` | `setView` | 校验并切换浏览年月/焦点日，返回新状态 |
 | `calendar:goToday` | `goToday` | 浏览年月与焦点日回到今天，返回新状态 |
@@ -232,11 +236,11 @@ main.setupUpdates()
 | --- | --- | --- |
 | `calendar:onTick` | `onTick` | 每秒发送 `{ almanac, clocks }`；仅窗口可见时发送，每个城市的 `time` 与 `relativeText` 按当前时刻重新计算 |
 | `weather:update` | `onWeatherUpdate` | 后台或打开窗口刷新后的天气结果；失败同样下发 `{ ok: false, text: '天气暂不可用', emoji: '🌡️' }` |
-| `ui:openPanel` | `onOpenPanel` | `'clocks'` 或 `'weather'`；由设置菜单触发，渲染层打开对应面板 |
+| `ui:openPanel` | `onOpenPanel` | `'almanac'`、`'clocks'` 或 `'weather'`；由设置菜单触发，渲染层打开对应面板 |
 | `update:notice` | `onUpdateNotice` | `ready` / `manual` 横幅；打开窗口与加载完成时重发 |
 | `update:status` | `onUpdateStatus` | 短状态；**仅手动检查**时发送 |
 
-**preload API 全量（23 个）**：`getVersion`、`getState`、`setView`、`goToday`、`addClock`、`removeClock`、`setMenuBarClock`、`searchClocks`、`getWeather`、`searchCity`、`getQuickCities`、`setCity`、`onWeatherUpdate`、`onTick`、`pointerEnter`、`pointerLeave`、`openSettings`、`onOpenPanel`、`onUpdateNotice`、`onUpdateStatus`、`checkUpdate`、`restartToUpdate`、`openLatestRelease`。
+**preload API 全量（25 个）**：`getVersion`、`getState`、`setView`、`goToday`、`addClock`、`removeClock`、`setMenuBarClock`、`searchClocks`、`getWeather`、`searchCity`、`getQuickCities`、`setCity`、`getAlmanacStyles`、`setAlmanacStyle`、`onWeatherUpdate`、`onTick`、`pointerEnter`、`pointerLeave`、`openSettings`、`onOpenPanel`、`onUpdateNotice`、`onUpdateStatus`、`checkUpdate`、`restartToUpdate`、`openLatestRelease`。
 
 **状态文案（`electron/update-status.js`）**
 
