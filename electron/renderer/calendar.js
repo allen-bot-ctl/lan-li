@@ -361,10 +361,10 @@ function renderWeather(result) {
   weatherText.title = text;
 }
 
-function requestWeather(coordinates) {
+function requestWeather(coordinates, location) {
   const token = weatherToken + 1;
   weatherToken = token;
-  api.getWeather(coordinates).then((result) => {
+  api.getWeather(coordinates, location).then((result) => {
     if (token === weatherToken) renderWeather(result);
   }).catch(() => {
     if (token === weatherToken) renderWeather(null);
@@ -373,21 +373,32 @@ function requestWeather(coordinates) {
 
 // Ask CoreLocation first; on refusal, failure or the 10s timeout the main
 // process falls back to IP location. The main process owns all network access.
+// The location descriptor tells the main process where the coordinates came
+// from, so it can log the source (系统 / IP) without logging coordinates.
 function refreshWeather() {
   if (!navigator.geolocation) {
-    requestWeather();
+    requestWeather(undefined, { source: 'none' });
     return;
   }
 
   navigator.geolocation.getCurrentPosition(
     (position) => {
       const coords = position && position.coords;
-      requestWeather(coords
-        ? { latitude: coords.latitude, longitude: coords.longitude }
-        : undefined);
+      requestWeather(
+        coords
+          ? { latitude: coords.latitude, longitude: coords.longitude }
+          : undefined,
+        { source: 'system' }
+      );
     },
-    () => {
-      requestWeather();
+    (error) => {
+      requestWeather(undefined, {
+        source: 'system',
+        error: {
+          code: error && error.code,
+          message: error && error.message
+        }
+      });
     },
     {
       enableHighAccuracy: false,

@@ -32,18 +32,14 @@ function errorMessage(error) {
 
 function noop() {}
 
-// Wires Electron's built-in autoUpdater to the official update.electronjs.org
-// feed. Squirrel.Mac is the thing that actually replaces the app; this module
-// only decides what to tell the user when that cannot happen.
-//
-// Unsigned macOS builds cannot use Squirrel.Mac at all: setFeedURL itself
-// throws "Could not get code signature for running application". In that case
-// we enter probe-only mode and ask the same HTTP feed directly, which still
-// answers "up-to-date" (204) or "a newer release exists" (200 JSON).
+// Probes the official update.electronjs.org feed directly and, when a newer
+// release exists, hands the release zip to the in-app self-updater. Squirrel.Mac
+// is not used: the ad-hoc signed macOS builds cannot pass Squirrel.Mac's code
+// signature check, so macOS always runs in probe-only mode instead of ever
+// calling autoUpdater.setFeedURL.
 function setupAutoUpdate(options) {
   const {
     app,
-    autoUpdater,
     net,
     onReady = noop,
     onManual = noop,
@@ -109,17 +105,9 @@ function setupAutoUpdate(options) {
     'User-Agent': `LanLi/${version} (${platform}: ${arch})`
   };
 
-  let mode = 'squirrel';
-  let setupError = null;
-  let updateSeen = false;
-  let updateName = '';
   let probePromise = null;
-  let probeAttempted = false;
   let firstCheckTimer = null;
   let checkTimer = null;
-  let checkSource = 'auto';
-
-  const isManualCheck = () => checkSource === 'manual';
 
   function announceManual(name, url) {
     const key = `manual:${name || version}`;
@@ -150,7 +138,7 @@ function setupAutoUpdate(options) {
   }
 
   async function runSelfUpdate(result, manual) {
-    const name = result.name || updateName;
+    const name = result.name;
     emitStatus('downloading', { manual, name });
 
     let outcome;
@@ -166,20 +154,19 @@ function setupAutoUpdate(options) {
     if (stopped) return;
 
     if (outcome && outcome.ok) {
-      updateSeen = true;
-      updateName = outcome.name || name;
-      log(`self-update ready: ${updateName}`);
+      const readyName = outcome.name || name;
+      log(`self-update ready: ${readyName}`);
       // Keep the normal ready notice so the renderer's existing 「新版本已就绪
       // / 重启更新」 path is reused; the extra flag only switches the install
       // mechanism in the main process.
       try {
-        onReady({ name: updateName, mode: 'ready-self' });
+        onReady({ name: readyName, mode: 'ready-self' });
       } catch (error) {
         log(`ready callback failed: ${errorMessage(error)}`);
       }
       emitStatus('ready', {
         manual,
-        name: updateName,
+        name: readyName,
         selfUpdate: true
       });
       return;
@@ -247,20 +234,15 @@ function setupAutoUpdate(options) {
     if (stopped) return;
 
     if (result && result.state === 'up-to-date') {
-      updateSeen = false;
-      updateName = '';
       log('feed probe indicates up-to-date');
       emitStatus('up-to-date', { manual });
       return;
     }
 
     if (result && result.state === 'manual' && result.name) {
-      updateSeen = true;
-      updateName = result.name;
-
-      // Probe-only mode on an unsigned macOS build can apply the release zip
-      // itself. Preparation is async; 'downloading' gives the manual check
-      // immediate feedback while automatic checks stay silent in main.js.
+      // Probe-only mode can apply the release zip itself. Preparation is async;
+      // 'downloading' gives the manual check immediate feedback while automatic
+      // checks stay silent in main.js.
       if (result.url && selfUpdate && selfUpdate.available) {
         void runSelfUpdate(result, manual);
         return;
@@ -281,114 +263,20 @@ function setupAutoUpdate(options) {
     applyProbeResult(result, manual);
   }
 
-  function attachAutoUpdaterListeners() {
-    autoUpdater.on('checking-for-update', () => {
-      probeAttempted = false;
-      log('checking for update');
-    });
-
-    autoUpdater.on('update-available', () => {
-      updateSeen = true;
-      log('update available; downloading');
-      emitStatus('downloading', { manual: isManualCheck() });
-    });
-
-    autoUpdater.on('update-not-available', () => {
-      updateSeen = false;
-      updateName = '';
-      log('update not available');
-      emitStatus('up-to-date', { manual: isManualCheck() });
-    });
-
-    autoUpdater.on('update-downloaded', (_event, _notes, releaseName) => {
-      updateSeen = true;
-      updateName = String(releaseName || '').trim();
-      log(`update downloaded: ${updateName || 'unknown release'}`);
-      // A downloaded update waits for the user to click 「重启更新」. Unlike the
-      // one-time manual-download reminder, this notice must be shown again every
-      // time the window opens until the app is actually replaced.
-      try {
-        onReady({ name: updateName });
-      } catch (error) {
-        log(`ready callback failed: ${errorMessage(error)}`);
-      }
-      emitStatus('ready', { manual: isManualCheck(), name: updateName });
-    });
-
-    autoUpdater.on('error', (error) => {
-      log(`update error: ${errorMessage(error)}`);
-      void handleUpdateError({ manual: isManualCheck() });
-    });
-  }
-
   log(`feed ${feedUrl}`);
 
-  // An unsigned build makes setFeedURL throw before any 'error' event can
-  // fire, so setup must survive it and fall back to probing the feed itself.
-  try {
-    autoUpdater.setFeedURL({ url: feedUrl, headers, serverType: 'default' });
-    attachAutoUpdaterListeners();
-  } catch (error) {
-    setupError = error;
-    mode = 'probe-only';
-    log(
-      `autoUpdater setup failed: ${errorMessage(error)}; ` +
-      'entering probe-only mode'
-    );
-  }
-
-  async function handleUpdateError(context) {
-    if (stopped) return;
-
-    const manual = Boolean(context && context.manual);
-
-    // A known update plus an updater error almost always means Squirrel.Mac
-    // could not verify/replace this build. Offer the manual download once per
-    // release instead of repeating an error.
-    if (updateSeen && updateName) {
-      const url = fallbackManualUrl(updateName);
-      announceManual(updateName, url);
-      emitStatus('manual', { manual, name: updateName, url });
-      return;
-    }
-
-    // Some unsigned builds fail before 'update-available' is emitted. Probe
-    // the same JSON feed once to confirm what the feed actually reports.
-    // Repeated errors while that probe is pending/done must not emit a second,
-    // conflicting final state.
-    if (probeAttempted) {
-      log('ignoring repeated updater error; feed probe already attempted');
-      return;
-    }
-    probeAttempted = true;
-
-    const result = await startProbe();
-    applyProbeResult(result, manual);
-  }
+  // macOS runs in probe-only mode unconditionally: the ad-hoc signature cannot
+  // pass Squirrel.Mac's verification, so setFeedURL is never called.
+  log('macOS 未正式签名，使用 probe-only');
 
   function checkNow(flags) {
     const manual = Boolean(flags && flags.manual === true);
     if (stopped) return { state: 'error', stopped: true };
 
-    if (mode === 'probe-only') {
-      log(`${manual ? 'manual' : 'automatic'} check start`);
-      if (manual) emitStatus('checking', { manual: true });
-      void runProbeCheck(manual);
-      return { state: 'checking', mode };
-    }
-
-    checkSource = manual ? 'manual' : 'auto';
-    probeAttempted = false;
     log(`${manual ? 'manual' : 'automatic'} check start`);
     if (manual) emitStatus('checking', { manual: true });
-    try {
-      autoUpdater.checkForUpdates();
-    } catch (error) {
-      log(`checkForUpdates threw: ${errorMessage(error)}`);
-      void handleUpdateError({ manual });
-      return { state: 'error' };
-    }
-    return { state: 'checking' };
+    void runProbeCheck(manual);
+    return { state: 'checking', mode: 'probe-only' };
   }
 
   if (schedule) {
@@ -397,8 +285,8 @@ function setupAutoUpdate(options) {
   }
 
   return {
-    mode,
-    setupError: setupError ? errorMessage(setupError) : null,
+    mode: 'probe-only',
+    setupError: null,
     feedUrl,
     checkNow,
     stop() {

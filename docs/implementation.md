@@ -154,10 +154,9 @@ ${M}月${D}日 ${HH}:${mm}:${ss}
 ```text
 main.setupUpdates()
   ├─ createMacSelfUpdater(...)       仅在 darwin && isPackaged && arch==='x64' && fetch 时 available
-  └─ setupAutoUpdate({ app, autoUpdater, net, selfUpdate, callbacks })
+  └─ setupAutoUpdate({ app, net, selfUpdate, callbacks })
        ├─ 非 darwin 或未打包 → disabled（「开发态不检查更新」）
-       ├─ autoUpdater.setFeedURL(...) 成功 → Squirrel 模式
-       └─ 抛错（未签名）→ probe-only：net.fetch 同一 feed
+       └─ darwin 且已打包 → 一律 probe-only（ad-hoc 签名，不调用 setFeedURL）
             ├─ 204 → up-to-date
             ├─ 200 + name/url → 有更新
             │    ├─ selfUpdate.available → 下载/校验/暂存 → onReady(mode:'ready-self')
@@ -168,8 +167,8 @@ main.setupUpdates()
 - feed：`https://update.electronjs.org/allen-bot-ctl/lan-li/${platform}-${arch}/${version}`。
 - 首次检查在启动约 10 秒后，之后每 6 小时；探测超时 15 秒。
 - 自动检查无更新时静默；只有 `manual === true` 的状态才会经 `update:status` 发给渲染进程。
-- 手动检查日志：`manual check start`；结束状态为 `up-to-date` / `manual` / `error` 时写 `manual check result: <state>`（`ready` 不在此列）。
-- 下载成功：渲染层横幅「新版本已就绪 / 重启更新」。自更新路径的「重启更新」调 `selfUpdater.installReady()`；Squirrel 路径调 `autoUpdater.quitAndInstall()`。
+- 手动检查日志：`manual check start`；结束状态为 `up-to-date` / `manual` / `error` 时写 `manual check result: <state>`（`ready` 不在此列）。进入 probe-only 时写 `macOS 未正式签名，使用 probe-only`。
+- 下载成功：渲染层横幅「新版本已就绪 / 重启更新」。当前 macOS 只有自更新路径，「重启更新」调 `selfUpdater.installReady()`。
 - 失败回退：`fallbackManualUrl` 能从版本号推导时直接给同版本 `.dmg` 直链，否则 `RELEASES_LATEST_URL`。同一版本的手动下载提醒只出现一次（偏好文件 `updateNotifications` 去重）。
 - 完整行为与边界见 [updater.md](updater.md)。
 
@@ -181,7 +180,7 @@ main.setupUpdates()
 - 行格式：`${new Date().toISOString()} [level] message`；`level` 为 `info` / `warn` / `error`。
 - 同时输出到终端（`console.log/warn/error`）。
 - 文件超过 1MB（`DEFAULT_MAX_BYTES = 1024 * 1024`）时，在下次写入前轮转为同目录 `main.old.log`；重命名失败会先删旧文件再试一次。
-- 天气刷新成功/失败与失败原因也会经同一 logger 写入（前缀 `[栏历] 天气：`）。
+- 天气刷新成功/失败与失败原因也会经同一 logger 写入（前缀 `[栏历] 天气：`）；`weather:get` 时还写一行定位来源：`定位来源=系统` 或 `定位来源=IP（系统定位失败 code=<n> <NAME>: <message>）`，只写来源与城市，不写坐标。
 - 任何文件系统失败都被吞掉：日志不得让应用崩溃；`app.getPath('logs')` 未就绪时下次写入继续重试。
 - 安装脚本把步骤写入 `~/Library/Logs/栏历/update-install.log`，与 `main.log` 分开。
 
@@ -195,8 +194,8 @@ main.setupUpdates()
 
 | 频道 | preload API | 作用 |
 | --- | --- | --- |
-| `app:version` | `getVersion` | 返回 `formatVersionLabel(app.getVersion())`，如 `v0.1.11` |
-| `weather:get` | `getWeather` | 可选 `{ latitude, longitude }`；有坐标走反向地理编码 + Open-Meteo，无坐标先 IP 定位；返回 `{ ok, text, ... }`，30 分钟缓存 |
+| `app:version` | `getVersion` | 返回 `formatVersionLabel(app.getVersion())`，如 `v0.1.12` |
+| `weather:get` | `getWeather` | 可选 `{ latitude, longitude }` 与定位来源 `location`（`{ source: 'system' }` / `{ source: 'system', error: { code, message } }` / `{ source: 'none' }`）；有坐标走反向地理编码 + Open-Meteo，无坐标先 IP 定位；返回 `{ ok, text, ... }`，30 分钟缓存 |
 | `calendar:getState` | `getState` | 当前 `view`、`focus`、42 格、`almanac`、`clocks`（含 `menuBarTimeZone` 与 `current.isMenuBar`）、`openAtLogin` |
 | `calendar:setView` | `setView` | 校验并切换浏览年月/焦点日，返回新状态 |
 | `calendar:goToday` | `goToday` | 浏览年月与焦点日回到今天，返回新状态 |
@@ -215,7 +214,7 @@ main.setupUpdates()
 | `pointer:enter` | `pointerEnter` | 取消关闭计时 |
 | `pointer:leave` | `pointerLeave` | 安排 200ms 关闭 |
 | `app:quit` | `quit` | 退出应用 |
-| `update:restart` | `restartToUpdate` | 就绪后重启更新（自更新或 Squirrel） |
+| `update:restart` | `restartToUpdate` | 就绪后重启更新（自更新） |
 | `update:openLatest` | `openLatestRelease` | 打开手动下载地址 |
 
 **send（主 → 渲染）**
@@ -264,10 +263,10 @@ main.setupUpdates()
 
 ## 9. 天气（`electron/weather.js`）
 
-- 纯函数：`describeWeatherCode`（WMO → 晴/多云/阴/雾/毛毛雨/雨/雪/阵雨/阵雪/雷暴等）、`pickCityName`（`city` → `locality` → `principalSubdivision`）、`pickIpCity`、`normalizeCoordinates`、`parseIpLocation`、`formatWeatherResult`（`城市 · 天气 · X°C`）以及两个请求 URL 构造器。测试直接 require，不联网。
+- 纯函数：`describeWeatherCode`（WMO → 晴/多云/阴/雾/毛毛雨/雨/雪/阵雨/阵雪/雷暴等）、`pickCityName`（`city` → `locality` → `principalSubdivision`）、`pickIpCity`、`normalizeCoordinates`、`parseIpLocation`、`formatWeatherResult`（`城市 · 天气 · X°C`）、`describeLocationSource`（定位来源 → `定位来源=系统` / `定位来源=IP（…）` 文案）以及两个请求 URL 构造器。测试直接 require，不联网。
 - 网络顺序：
-  - 渲染层先 `navigator.geolocation.getCurrentPosition`，`timeout: 10000`；成功则把 `{ latitude, longitude }` 传给 `weather:get`。
-  - 无坐标、拒绝、失败或超时时，主进程请求 `https://ipwho.is/`，用返回的 `latitude` / `longitude` / `city`。
+  - 渲染层先 `navigator.geolocation.getCurrentPosition`，`timeout: 10000`；成功则把 `{ latitude, longitude }` 与定位来源 `{ source: 'system' }` 传给 `weather:get`；失败则带 `{ source: 'system', error: { code, message } }`；无 `navigator.geolocation` 则带 `{ source: 'none' }`。
+  - 无坐标、拒绝、失败或超时时，主进程请求 `https://ipwho.is/`，用返回的 `latitude` / `longitude` / `city`，并写 `定位来源=IP（…）` 日志。
   - 有坐标时请求 BigDataCloud 反向地理编码（`localityLanguage=zh`）取城市名；该请求失败只记 warn，天气仍按「当前位置」显示。
   - 最后请求 Open-Meteo `current=temperature_2m,weather_code&timezone=auto`。
 - `createWeatherService({ fetch, logger, now, setTimeout, clearTimeout })`：所有请求带 `User-Agent` 与 8 秒超时；结果缓存 30 分钟，并记录最近坐标供后台刷新。失败也写入缓存时间，30 分钟内不重复请求；成功/失败分别写 info/warn 日志。
@@ -275,7 +274,7 @@ main.setupUpdates()
 - 打开窗口时调用 `refreshWeather()`：缓存超过 30 分钟才重新请求；`setInterval` 每 30 分钟后台刷新一次，结果经 `weather:update` 推给渲染层。首次打开且无缓存时不抢先做 IP 请求，由渲染层带坐标触发。
 - 渲染层只显示一行；失败统一显示「天气暂不可用」，不弹窗。CSP 仍为 `default-src 'self'`，不放开网络。
 
-**测试**：`tests/weather.test.js`（WMO 映射、城市名优先级、IP 失败、坐标校验、URL、格式化、注入假 fetch 的缓存/失败路径）。
+**测试**：`tests/weather.test.js`（WMO 映射、城市名优先级、IP 失败、坐标校验、URL、格式化、定位来源文案、注入假 fetch 的缓存/失败路径）。
 
 ## 相关文档
 

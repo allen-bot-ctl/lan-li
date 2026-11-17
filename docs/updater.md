@@ -7,17 +7,16 @@
 | 文件 | 职责 |
 | --- | --- |
 | `electron/main.js` | 创建自更新器、调用 `setupAutoUpdate`、把回调转成 IPC、处理「重启更新」 |
-| `electron/updater.js` | 选择 Squirrel / probe-only / disabled，调度检查，解释结果，决定 ready/manual/error |
+| `electron/updater.js` | 选择 probe-only / disabled，调度检查，解释结果，决定 ready/manual/error |
 | `electron/mac-self-update.js` | 校验 URL、下载、sha256、解压、plist 校验、暂存、安装脚本 |
 | `electron/update-feed.js` | feed URL 拼接、`204`/`200` 语义 |
 | `electron/update-status.js` | 手动检查短文案 |
 | `electron/logger.js` | `main.log` 与轮转 |
 
-## 三种模式
+## 运行模式
 
 1. **disabled**：`platform !== 'darwin'` 或 `app.isPackaged !== true`。手动检查返回「开发态不检查更新」；不联网。
-2. **squirrel**：`autoUpdater.setFeedURL(...)` 成功。适用于将来有 Developer ID 签名的包；下载完成后「重启更新」调用 `autoUpdater.quitAndInstall()`。
-3. **probe-only**：`setFeedURL` 抛出（未签名包会抛 `Could not get code signature for running application`）。记录 `entering probe-only mode`，改为直接 `net.fetch` 同一个 feed。
+2. **probe-only**：darwin 且已打包时**一律**进入。ad-hoc 签名的包无法通过 Squirrel.Mac 的签名校验，所以不再调用 `autoUpdater.setFeedURL`，而是直接 `net.fetch` 同一个 feed。记录 `macOS 未正式签名，使用 probe-only`。
 
 ## feed 与调度
 
@@ -98,7 +97,7 @@ https://github.com/allen-bot-ctl/lan-li/releases/download/v<ver>/LanLi-<ver>-mac
 
 ## 「重启更新」与安装脚本
 
-前提：`updateNotice.mode === 'ready'`。自更新路径调用 `selfUpdater.installReady()`；Squirrel 路径调用 `autoUpdater.quitAndInstall()`。
+前提：`updateNotice.mode === 'ready'`。当前 macOS 只有自更新路径，「重启更新」调用 `selfUpdater.installReady()`。
 
 `installReady()` 的步骤：
 
@@ -144,7 +143,7 @@ $1 pid  $2 当前 .app  $3 新 .app  $4 备份路径  $5 暂存目录
 
 ## 将来有签名时
 
-Squirrel 路径保留。签名包 `setFeedURL` 成功后，下载完成仍显示「新版本已就绪」；`updateNotice.selfUpdate` 不为真时，「重启更新」走 `autoUpdater.quitAndInstall()`。
+当前代码没有 Squirrel 路径（macOS 一律 probe-only）。若将来拿到 Developer ID 签名并公证，需要重新加回 `autoUpdater.setFeedURL`、`'update-downloaded'` 等监听与 `autoUpdater.quitAndInstall()` 的「重启更新」分支，并按签名能力切换模式。
 
 ## 升级路径与文档口径
 
@@ -155,7 +154,7 @@ Squirrel 路径保留。签名包 `setFeedURL` 成功后，下载完成仍显示
 ## 相关测试
 
 - `tests/update-feed.test.js`：URL 拼接与 204/200/错误。
-- `tests/updater.test.js`：probe-only 回落、200 手动提醒、网络失败、并发共享、Squirrel 错误回落、日志轮转。
+- `tests/updater.test.js`：probe-only 模式、200 手动提醒、网络失败、并发共享、日志轮转。
 - `tests/mac-self-update.test.js`：URL/版本/架构校验、sha256、包校验、暂存复用、并发、安装脚本、probe→self-update 流程。
 - `tests/update-status.test.js`：状态文案与计时标志。
 

@@ -25,36 +25,13 @@ function makeApp(dir) {
   };
 }
 
-function makeAutoUpdater(options = {}) {
-  const listeners = new Map();
-  const state = {
-    setFeedUrlCalls: 0,
-    checkForUpdatesCalls: 0,
-    feedPayload: null,
-    listeners
-  };
-
+function makeAutoUpdater() {
+  const state = { setFeedUrlCalls: 0 };
   return {
     state,
-    setFeedURL(payload) {
+    setFeedURL() {
       state.setFeedUrlCalls += 1;
-      state.feedPayload = payload;
-      if (options.setFeedURLThrows) {
-        throw new Error('Could not get code signature for running application');
-      }
-    },
-    on(event, listener) {
-      listeners.set(event, listener);
-    },
-    checkForUpdates() {
-      state.checkForUpdatesCalls += 1;
-      if (options.checkForUpdatesThrows) {
-        throw new Error('checkForUpdates failed');
-      }
-    },
-    emit(event, ...args) {
-      const listener = listeners.get(event);
-      if (listener) listener(...args);
+      throw new Error('setFeedURL must not be called on macOS');
     }
   };
 }
@@ -122,7 +99,7 @@ function makeCollector() {
 function setupProbeOnly(t, options = {}) {
   const dir = tempDir(t);
   const app = makeApp(dir);
-  const autoUpdater = makeAutoUpdater(options.autoUpdater);
+  const autoUpdater = makeAutoUpdater();
   const collector = makeCollector();
   const logs = [];
   const manualCalls = [];
@@ -157,25 +134,24 @@ function setupProbeOnly(t, options = {}) {
   };
 }
 
-test('setFeedURL throwing enters probe-only mode and reports up-to-date', async (t) => {
+test('macOS always enters probe-only mode without calling setFeedURL', async (t) => {
   const env = setupProbeOnly(t, {
-    autoUpdater: { setFeedURLThrows: true },
     fetch: async () => feedResponse(204, null)
   });
 
   assert.notEqual(env.updater, null);
   assert.equal(env.updater.mode, 'probe-only');
-  assert.equal(env.autoUpdater.state.setFeedUrlCalls, 1);
-  assert.match(env.logs.join('\n'), /entering probe-only mode/);
+  assert.equal(env.autoUpdater.state.setFeedUrlCalls, 0);
+  assert.match(env.logs.join('\n'), /macOS 未正式签名，使用 probe-only/);
   assert.match(env.updater.feedUrl, /darwin-x64\/0\.1\.3$/);
 
   const immediate = env.updater.checkNow({ manual: true });
   assert.equal(immediate.state, 'checking');
-  assert.equal(env.autoUpdater.state.checkForUpdatesCalls, 0);
+  assert.equal(env.autoUpdater.state.setFeedUrlCalls, 0);
 
   await env.collector.waitForFinal(1);
 
-  assert.equal(env.autoUpdater.state.checkForUpdatesCalls, 0);
+  assert.equal(env.autoUpdater.state.setFeedUrlCalls, 0);
   assert.deepEqual(
     env.collector.statuses.map((status) => [status.state, status.manual]),
     [
@@ -189,7 +165,6 @@ test('setFeedURL throwing enters probe-only mode and reports up-to-date', async 
 
 test('probe-only mode reports a manual download once for a 200 feed payload', async (t) => {
   const env = setupProbeOnly(t, {
-    autoUpdater: { setFeedURLThrows: true },
     fetch: async () => feedResponse(200, {
       name: '栏历 v0.1.4',
       url: 'https://example.invalid/LanLi-0.1.4-mac-x64.zip'
@@ -217,7 +192,6 @@ test('probe-only mode reports a manual download once for a 200 feed payload', as
 
 test('probe-only mode reports error when the feed fetch rejects', async (t) => {
   const env = setupProbeOnly(t, {
-    autoUpdater: { setFeedURLThrows: true },
     fetch: async () => {
       throw new Error('network down');
     }
@@ -241,7 +215,6 @@ test('concurrent manual clicks share one feed probe but both get a final state',
   });
 
   const env = setupProbeOnly(t, {
-    autoUpdater: { setFeedURLThrows: true },
     fetch: () => {
       fetchCalls += 1;
       return pendingFetch;
@@ -260,42 +233,6 @@ test('concurrent manual clicks share one feed probe but both get a final state',
   const finals = env.collector.statuses.filter((status) => FINAL_STATES.has(status.state));
   assert.equal(finals.length, 2);
   assert.ok(finals.every((status) => status.state === 'up-to-date' && status.manual === true));
-});
-
-test('squirrel mode falls back to the feed probe after an updater error event', async (t) => {
-  const env = setupProbeOnly(t, {
-    autoUpdater: {},
-    fetch: async () => feedResponse(204, null)
-  });
-
-  assert.equal(env.updater.mode, 'squirrel');
-  env.updater.checkNow({ manual: true });
-  assert.equal(env.autoUpdater.state.checkForUpdatesCalls, 1);
-  assert.deepEqual(env.collector.statuses[0], { state: 'checking', manual: true });
-
-  env.autoUpdater.emit('error', new Error('signature check failed'));
-  await env.collector.waitForFinal(1);
-
-  const final = env.collector.statuses.at(-1);
-  assert.equal(final.state, 'up-to-date');
-  assert.equal(final.manual, true);
-});
-
-test('squirrel mode falls back to the feed probe when checkForUpdates throws synchronously', async (t) => {
-  const env = setupProbeOnly(t, {
-    autoUpdater: { checkForUpdatesThrows: true },
-    fetch: async () => feedResponse(204, null)
-  });
-
-  const immediate = env.updater.checkNow({ manual: true });
-  assert.equal(immediate.state, 'error');
-  assert.match(env.logs.join('\n'), /checkForUpdates threw: checkForUpdates failed/);
-
-  await env.collector.waitForFinal(1);
-
-  const final = env.collector.statuses.at(-1);
-  assert.equal(final.state, 'up-to-date');
-  assert.equal(final.manual, true);
 });
 
 test('logger appends ISO-timestamped lines and rotates main.log', (t) => {

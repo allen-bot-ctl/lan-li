@@ -1,6 +1,6 @@
 {
   "name": "lan-li",
-  "version": "0.1.11",
+  "version": "0.1.12",
   "private": true,
   "description": "栏历：macOS 菜单栏公历与农历月历。",
   "homepage": "https://allen-bot-ctl.github.io/lan-li/",
@@ -49,7 +49,8 @@
           ]
         }
       ],
-      "identity": null,
+      "identity": "-",
+      "hardenedRuntime": false,
       "category": "public.app-category.utilities",
       "artifactName": "LanLi-${version}-mac-${arch}.${ext}",
       "icon": "electron/assets/icon.png",

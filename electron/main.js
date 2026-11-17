@@ -656,9 +656,9 @@ function applyViewPayload(payload) {
 function registerIpc() {
   ipcMain.handle('app:version', () => formatVersionLabel(app.getVersion()));
 
-  ipcMain.handle('weather:get', (_event, payload) => {
+  ipcMain.handle('weather:get', (_event, payload, location) => {
     if (!weatherService) return unavailableWeather();
-    return weatherService.get(payload);
+    return weatherService.get(payload, location);
   });
 
   ipcMain.handle('calendar:getState', () => buildState());

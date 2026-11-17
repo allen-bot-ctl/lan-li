@@ -9,6 +9,8 @@ const {
   FORECAST_ENDPOINT,
   CACHE_TTL_MS,
   UNAVAILABLE_TEXT,
+  GEOLOCATION_ERROR_TEXT,
+  describeLocationSource,
   describeWeatherCode,
   pickCityName,
   pickIpCity,
@@ -175,4 +177,76 @@ test('weather service uses coordinates, caches for 30 minutes and logs failures'
   });
   assert.deepEqual(await failing.get(null), { ok: false, text: UNAVAILABLE_TEXT });
   assert.ok(logs.some((line) => line === 'warn:更新失败：offline'));
+});
+
+test('location source describes system success, failure and missing geolocation', () => {
+  assert.equal(describeLocationSource({ source: 'system' }), '定位来源=系统');
+  assert.equal(
+    describeLocationSource({ source: 'system', error: { code: 3, message: 'Timeout expired' } }),
+    '定位来源=IP（系统定位失败 code=3 TIMEOUT: Timeout expired）'
+  );
+  assert.equal(
+    describeLocationSource({ source: 'system', error: { code: 1, message: 'User denied Geolocation' } }),
+    '定位来源=IP（系统定位失败 code=1 PERMISSION_DENIED: User denied Geolocation）'
+  );
+  assert.equal(
+    describeLocationSource({ source: 'system', error: { code: 2, message: 'Position unavailable' } }),
+    '定位来源=IP（系统定位失败 code=2 POSITION_UNAVAILABLE: Position unavailable）'
+  );
+  assert.equal(
+    describeLocationSource({ source: 'system', error: { code: 3 } }),
+    '定位来源=IP（系统定位失败 code=3 TIMEOUT）'
+  );
+  assert.equal(
+    describeLocationSource({ source: 'none' }),
+    '定位来源=IP（无系统定位 API）'
+  );
+  assert.equal(describeLocationSource(null), '');
+  assert.equal(describeLocationSource(undefined), '');
+  assert.equal(describeLocationSource({ source: 'unknown' }), '');
+});
+
+test('geolocation error codes map to DOM constant names', () => {
+  assert.equal(GEOLOCATION_ERROR_TEXT[1], 'PERMISSION_DENIED');
+  assert.equal(GEOLOCATION_ERROR_TEXT[2], 'POSITION_UNAVAILABLE');
+  assert.equal(GEOLOCATION_ERROR_TEXT[3], 'TIMEOUT');
+});
+
+test('weather service logs the location source without logging coordinates', async () => {
+  const logs = [];
+  function fakeFetch(url) {
+    if (url.startsWith(REVERSE_GEOCODE_ENDPOINT)) {
+      return Promise.resolve(response({ city: '纽约', locality: '', principalSubdivision: '' }));
+    }
+    if (url.startsWith(FORECAST_ENDPOINT)) {
+      return Promise.resolve(response({ current: { temperature_2m: 8.2, weather_code: 2 } }));
+    }
+    return Promise.reject(new Error('unexpected URL ' + url));
+  }
+
+  const service = createWeatherService({
+    fetch: fakeFetch,
+    logger: {
+      info: (message) => logs.push('info:' + message),
+      warn: (message) => logs.push('warn:' + message)
+    }
+  });
+
+  await service.get({ latitude: 40.71, longitude: -74.01 }, { source: 'system' });
+  assert.ok(logs.some((line) => line === 'info:定位来源=系统'));
+  assert.ok(!logs.some((line) => line.includes('40.71')));
+
+  const failing = createWeatherService({
+    fetch: async () => {
+      throw new Error('offline');
+    },
+    logger: { warn: (message) => logs.push('warn:' + message) }
+  });
+  await failing.get(null, {
+    source: 'system',
+    error: { code: 3, message: 'Timeout expired' }
+  });
+  assert.ok(logs.some((line) => (
+    line === 'warn:定位来源=IP（系统定位失败 code=3 TIMEOUT: Timeout expired）'
+  )));
 });

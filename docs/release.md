@@ -11,7 +11,7 @@
 | `README.md` | 标题 `# 栏历 X.Y.Z`、打包产物示例、`vX.Y.Z` 相关文案 |
 | `site/index.html` | `data-app-version` 的版本文本；如首页文案有「当前版本」也要同步 |
 
-当前版本：`0.1.11`。现有标签 `v0.1.0` 至 `v0.1.11` 均已存在。
+当前版本：`0.1.12`。现有标签 `v0.1.0` 至 `v0.1.12` 均已存在。
 
 ## 本地打包
 
@@ -19,13 +19,19 @@
 npm run dist
 ```
 
-等价于 `electron-builder --mac`。`package.json` 的 `build.mac.target` 仍同时包含 dmg 与 zip 的 `x64`、`arm64`，`build.mac.identity` 为 `null`（不签名、不公证）。因此本地可能产出：
+等价于 `electron-builder --mac`。`package.json` 的 `build.mac.target` 仍同时包含 dmg 与 zip 的 `x64`、`arm64`，`build.mac.identity` 为 `"-"`（ad-hoc 签名，`hardenedRuntime: false`），**不公证**。因此本地可能产出：
 
 ```text
-dist/LanLi-0.1.11-mac-x64.dmg
-dist/LanLi-0.1.11-mac-x64.zip
-dist/LanLi-0.1.11-mac-arm64.dmg
-dist/LanLi-0.1.11-mac-arm64.zip
+dist/LanLi-0.1.12-mac-x64.dmg
+dist/LanLi-0.1.12-mac-x64.zip
+dist/LanLi-0.1.12-mac-arm64.dmg
+dist/LanLi-0.1.12-mac-arm64.zip
+```
+
+本地可校验 ad-hoc 签名：
+
+```bash
+codesign -dv --verbose=2 "dist/mac/栏历.app" 2>&1 | grep "Signature=adhoc"
 ```
 
 本地不会自动生成 `.zip.sha256`；正式发布由 workflow 生成。**本地 `npm run dist` 不是正式发布**，也不能替代真机验收。
@@ -35,8 +41,8 @@ dist/LanLi-0.1.11-mac-arm64.zip
 触发：推送 `v*` 标签，例如：
 
 ```bash
-git tag v0.1.11
-git push origin v0.1.11
+git tag v0.1.12
+git push origin v0.1.12
 ```
 
 > 本仓库禁止重写**已经有下载**的发布标签。发现问题时发新版本，不要删标签重推。
@@ -53,9 +59,16 @@ git push origin v0.1.11
    npx electron-builder --mac dmg zip --x64 --publish never
    ```
 
-   环境变量：`CSC_IDENTITY_AUTO_DISCOVERY: "false"`。
+   环境变量：`CSC_IDENTITY_AUTO_DISCOVERY: "false"`。`build.mac.identity` 为 `"-"`，产物为 ad-hoc 签名。
 
-6. 生成 zip 校验和：
+6. 校验 ad-hoc 签名（失败即中止）：
+
+   ```bash
+   codesign -dv --verbose=2 "dist/mac/栏历.app" 2>&1 | tee /tmp/codesign.log
+   grep -q "Signature=adhoc" /tmp/codesign.log
+   ```
+
+7. 生成 zip 校验和：
 
    ```bash
    cd dist
@@ -64,8 +77,8 @@ git push origin v0.1.11
    done
    ```
 
-7. 上传 artifact：`dist/LanLi-*-mac-x64.dmg`、`dist/LanLi-*-mac-x64.zip`、`dist/LanLi-*-mac-x64.zip.sha256`。
-8. `publish` job（`ubuntu-latest`）用 `softprops/action-gh-release@v2` 创建 Release，名称 `栏历 <tag>`，上传上述三类资产。
+8. 上传 artifact：`dist/LanLi-*-mac-x64.dmg`、`dist/LanLi-*-mac-x64.zip`、`dist/LanLi-*-mac-x64.zip.sha256`。
+9. `publish` job（`ubuntu-latest`）用 `softprops/action-gh-release@v2` 创建 Release，名称 `栏历 <tag>`，上传上述三类资产。
 
 正式资产只有：
 
@@ -74,6 +87,12 @@ git push origin v0.1.11
 - `LanLi-<ver>-mac-x64.zip.sha256`
 
 **不需要** `latest-mac.yml`；update.electronjs.org 直接读 Release 资产。Release body 与 README/主页统一写明「0.1.5 及更早版本需手动安装一次 0.1.6」，见 [updater.md](updater.md#升级路径与文档口径)。
+
+## 定位授权提示
+
+ad-hoc 签名后，应用能被 macOS 的定位服务登记，因此用户**首次打开**时可能看到「栏历想要使用您的位置」授权弹窗（用途说明来自 `Info.plist` 的 `NSLocationWhenInUseUsageDescription`）。允许后走系统定位，拒绝/超时则回退 IP 定位。
+
+由于每版 ad-hoc 签名都是新的临时身份，**更新到新版本后 macOS 可能要求重新授权**；这是 ad-hoc 签名的预期行为，不要当作回归问题。
 
 ## 何时算发布完成
 

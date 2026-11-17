@@ -15,6 +15,14 @@ const CACHE_TTL_MS = 30 * 60 * 1000;
 const REQUEST_TIMEOUT_MS = 8000;
 const UNAVAILABLE_TEXT = '天气暂不可用';
 
+// GeolocationPositionError codes reported by navigator.geolocation. The names
+// mirror the DOM constant names and are only used for the main-process log.
+const GEOLOCATION_ERROR_TEXT = Object.freeze({
+  1: 'PERMISSION_DENIED',
+  2: 'POSITION_UNAVAILABLE',
+  3: 'TIMEOUT'
+});
+
 // WMO weather interpretation codes used by Open-Meteo.
 const WEATHER_CODE_TEXT = Object.freeze({
   0: '晴',
@@ -49,6 +57,41 @@ const WEATHER_CODE_TEXT = Object.freeze({
 
 function unavailableWeather() {
   return { ok: false, text: UNAVAILABLE_TEXT };
+}
+
+// Describes where the coordinates came from, for the main-process log. The
+// renderer sends a small descriptor alongside weather:get:
+//   { source: 'system' }                                   → system location ok
+//   { source: 'system', error: { code, message } }         → system location failed
+//   { source: 'none' }                                     → no navigator.geolocation
+// Coordinates themselves are never logged; only the source and, on failure, the
+// error code/message.
+function describeLocationSource(location) {
+  if (!location || typeof location !== 'object') return '';
+
+  if (location.source === 'none') {
+    return '定位来源=IP（无系统定位 API）';
+  }
+
+  if (location.source === 'system') {
+    const error = location.error;
+    if (!error || typeof error !== 'object') {
+      return '定位来源=系统';
+    }
+
+    const code = finiteNumber(error.code);
+    const message = textValue(error.message);
+    const name = code === null ? '' : (GEOLOCATION_ERROR_TEXT[code] || '');
+    const codeText = code === null
+      ? ''
+      : `code=${code}` + (name ? ` ${name}` : '');
+    const detail = [codeText, message].filter(Boolean).join(': ');
+    return detail
+      ? `定位来源=IP（系统定位失败 ${detail}）`
+      : '定位来源=IP（系统定位失败）';
+  }
+
+  return '';
 }
 
 function describeWeatherCode(code) {
@@ -254,7 +297,13 @@ function createWeatherService(options = {}) {
     return Boolean(cache) && now() - cache.at < cacheTtlMs;
   }
 
-  function get(coordinates) {
+  function get(coordinates, location) {
+    const sourceText = describeLocationSource(location);
+    if (sourceText) {
+      const isSystem = location && location.source === 'system' && !location.error;
+      log(isSystem ? 'info' : 'warn', sourceText);
+    }
+
     const normalized = normalizeCoordinates(coordinates);
     if (normalized) lastCoordinates = normalized;
 
@@ -312,7 +361,9 @@ module.exports = {
   REQUEST_TIMEOUT_MS,
   UNAVAILABLE_TEXT,
   WEATHER_CODE_TEXT,
+  GEOLOCATION_ERROR_TEXT,
   unavailableWeather,
+  describeLocationSource,
   describeWeatherCode,
   pickCityName,
   pickIpCity,

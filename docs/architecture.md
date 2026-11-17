@@ -12,8 +12,8 @@ electron/
   world-clocks.js   多时区城市目录、校验、列表操作与时钟格式化纯逻辑
   weather.js        天气纯逻辑（WMO 映射、城市名、坐标/URL/格式化）与主进程请求服务
   login-item.js     未签名包登录项回退：生成/删除本应用的 LaunchAgent plist
-  updater.js        自动更新编排（Squirrel 路径 + probe-only）
-  mac-self-update.js 未签名包的应用内下载、校验、暂存、安装
+  updater.js        自动更新编排（probe-only）
+  mac-self-update.js ad-hoc 签名包的应用内下载、校验、暂存、安装
   update-feed.js    feed URL 拼接与 204/200 语义
   update-status.js  手动检查状态的短文案映射
   app-version.js    右栏版本号标签格式化
@@ -54,9 +54,9 @@ site/               GitHub Pages 静态主页（不是应用运行时的一部�
   → 返回 clocks 快照 → 渲染层只展示
 
 天气（打开窗口/后台刷新）
-  → 渲染层 navigator.geolocation（10s 超时）
-  → preload getWeather({ latitude, longitude } | 省略)
-  → 主进程 weather 服务：反向地理编码 + Open-Meteo（无坐标时先 ipwho.is）
+  → 渲染层 navigator.geolocation（10s 超时）取坐标，并把定位来源（系统成功 / 失败 code+message / 无 geolocation）随请求传给主进程
+  → preload getWeather({ latitude, longitude } | 省略, location)
+  → 主进程 weather 服务：反向地理编码 + Open-Meteo（无坐标时先 ipwho.is），并按 location 写一行定位来源日志
   → 30 分钟缓存 → 返回/推送 weather:update → 渲染层显示一行天气
 ```
 
@@ -76,7 +76,7 @@ site/               GitHub Pages 静态主页（不是应用运行时的一部�
 - 菜单栏形态：`app.dock.hide()`、`Menu.setApplicationMenu(null)`、`new Tray(nativeImage.createEmpty())`、每秒写文字标题。
 - 窗口：无边框、不可缩放、`alwaysOnTop`、默认隐藏；按托盘 bounds 与 `workArea` 定位；`mouse-enter` / `mouse-leave` / `click` / Esc 的开关逻辑。
 - 状态与偏好：当前浏览年月、焦点日、首次登录项初始化、更新提醒去重、世界时钟列表与当前索引。
-- 天气编排：设置仅允许 `geolocation` 的权限处理器，创建带注入 `net.fetch` 的天气服务，打开窗口/后台定时刷新并推送 `weather:update`。
+- 天气编排：设置仅允许 `geolocation` 的权限处理器，创建带注入 `net.fetch` 的天气服务，打开窗口/后台定时刷新并推送 `weather:update`；`weather:get` 时按渲染层传来的定位来源写 `定位来源=系统` / `定位来源=IP（…）` 日志（不写坐标）。
 - 更新编排：创建 `mac-self-update` 实例、调用 `setupAutoUpdate`、把 `onReady` / `onManual` / `onStatus` 转成 IPC。
 - 日志：`createLogger()` 写文件并在控制台输出。
 
@@ -115,7 +115,7 @@ site/               GitHub Pages 静态主页（不是应用运行时的一部�
 
 - 渲染主进程给的 `cells`、`almanac`、`clocks`、`weather`、`openAtLogin`、版本号与更新横幅。
 - 交互：上一月/下一月、年份下拉、返回今天、点击格子、登录项开关、世界时钟左右切换/添加/删除/搜索、检查更新、重启更新/下载新版、退出。
-- 打开窗口时先用 `navigator.geolocation.getCurrentPosition` 取坐标（10 秒超时），再经 `weather:get` 请求主进程；主进程后台刷新通过 `weather:update` 推回。
+- 打开窗口时先用 `navigator.geolocation.getCurrentPosition` 取坐标（10 秒超时），再把坐标与定位来源（成功 / 失败 code+message / 无 `navigator.geolocation`）一起经 `weather:get` 传给主进程；主进程后台刷新通过 `weather:update` 推回。
 - 指针进入/离开窗口根节点时通知主进程；Esc 由主进程的 `before-input-event` 处理。
 - 手动检查时先本地显示「正在检查…」，之后应用主进程推来的状态；定时状态约 2.6 秒后恢复。
 
@@ -156,7 +156,7 @@ site/               GitHub Pages 静态主页（不是应用运行时的一部�
 
 **职责**
 
-- `release.yml`：标签 `v*` 触发；Node 20；`npm ci`；`npm test`；`npx electron-builder --mac dmg zip --x64 --publish never`；生成 zip 的 sha256；上传并在 `ubuntu-latest` 创建 Release。
+- `release.yml`：标签 `v*` 触发；Node 20；`npm ci`；`npm test`；`npx electron-builder --mac dmg zip --x64 --publish never`（ad-hoc 签名）；`codesign -dv` 校验 `Signature=adhoc`；生成 zip 的 sha256；上传并在 `ubuntu-latest` 创建 Release。
 - `pages.yml`：`master` 推送或手动触发，把 `site/` 发布到 GitHub Pages。
 
 **边界**
