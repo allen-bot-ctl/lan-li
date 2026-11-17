@@ -130,7 +130,7 @@
 
       <section class="weather-card" aria-label="天气">
         <div class="pane-label">天气</div>
-        <div class="weather-line" id="weather-text">天气加载中…</div>
+        <button class="weather-line" id="weather-text" type="button" aria-label="选择天气城市">天气加载中…</button>
       </section>
 
       <div class="pane-footer">
@@ -150,6 +150,21 @@
           <button class="picker-close" id="clock-picker-close" type="button">完成</button>
         </div>
         <div class="picker-list" id="clock-list" role="listbox" aria-label="选择时区"></div>
+      </div>
+
+      <div class="clock-picker" id="weather-picker" hidden>
+        <div class="picker-head">
+          <input
+            class="clock-search"
+            id="weather-search"
+            type="search"
+            placeholder="搜索城市"
+            autocomplete="off"
+            spellcheck="false"
+          >
+          <button class="picker-close" id="weather-picker-close" type="button">完成</button>
+        </div>
+        <div class="picker-list" id="weather-list" role="listbox" aria-label="选择天气城市"></div>
       </div>
     </aside>
   </div>

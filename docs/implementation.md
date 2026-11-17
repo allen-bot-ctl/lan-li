@@ -180,7 +180,7 @@ main.setupUpdates()
 - 行格式：`${new Date().toISOString()} [level] message`；`level` 为 `info` / `warn` / `error`。
 - 同时输出到终端（`console.log/warn/error`）。
 - 文件超过 1MB（`DEFAULT_MAX_BYTES = 1024 * 1024`）时，在下次写入前轮转为同目录 `main.old.log`；重命名失败会先删旧文件再试一次。
-- 天气刷新成功/失败与失败原因也会经同一 logger 写入（前缀 `[栏历] 天气：`）；`weather:get` 时还写一行定位来源：`定位来源=系统` 或 `定位来源=IP（系统定位失败 code=<n> <NAME>: <message>）`，只写来源与城市，不写坐标。
+- 天气刷新成功/失败与失败原因也会经同一 logger 写入（前缀 `[栏历] 天气：`）；每次取位后还写一行 `天气位置=手动：<城市>` 或 `天气位置=IP：<城市>`，只写来源与城市，不写坐标。
 - 任何文件系统失败都被吞掉：日志不得让应用崩溃；`app.getPath('logs')` 未就绪时下次写入继续重试。
 - 安装脚本把步骤写入 `~/Library/Logs/栏历/update-install.log`，与 `main.log` 分开。
 
@@ -195,8 +195,9 @@ main.setupUpdates()
 | 频道 | preload API | 作用 |
 | --- | --- | --- |
 | `app:version` | `getVersion` | 返回 `formatVersionLabel(app.getVersion())`，如 `v0.1.13` |
-| `weather:get` | `getWeather` | 可选 `{ latitude, longitude }` 与定位来源 `location`（`{ source: 'system' }` / `{ source: 'system', error: { code, message } }` / `{ source: 'ip', reason }` / `{ source: 'none' }`）；有坐标走反向地理编码 + Open-Meteo，无坐标先 IP 定位；返回 `{ ok, text, ... }`，30 分钟缓存 |
-| `weather:location` | `getWeatherLocation` | 返回定位模式 `{ mode: 'system' \| 'ip', reason? }`；主进程惰性执行定位授权申请（读状态、`not determined` 时申请一次并等待最多 30 秒），`denied`/`restricted` 返回 `ip` 让渲染层直接走 IP，其余返回 `system` |
+| `weather:get` | `getWeather` | 返回当前天气结果；有 `preferences.weatherCity` 时直接用其城市名与坐标，否则按 IP 定位；30 分钟缓存 |
+| `weather:searchCity` | `searchCity` | `query`；主进程请求 Open-Meteo 地理编码，返回最多 8 条 `{ name, admin1, country, latitude, longitude, label }`，`label` 为「城市名 · 省/州 · 国家」；空查询返回空数组 |
+| `weather:setCity` | `setCity` | `{ name, latitude, longitude }` 或 `null`；校验后写入/删除 `preferences.weatherCity`，立即刷新并返回当前天气结果 |
 | `calendar:getState` | `getState` | 当前 `view`、`focus`、42 格、`almanac`、`clocks`（含 `menuBarTimeZone` 与 `current.isMenuBar`）、`openAtLogin` |
 | `calendar:setView` | `setView` | 校验并切换浏览年月/焦点日，返回新状态 |
 | `calendar:goToday` | `goToday` | 浏览年月与焦点日回到今天，返回新状态 |
@@ -227,7 +228,7 @@ main.setupUpdates()
 | `update:notice` | `onUpdateNotice` | `ready` / `manual` 横幅；打开窗口与加载完成时重发 |
 | `update:status` | `onUpdateStatus` | 短状态；**仅手动检查**时发送 |
 
-**preload API 全量（22 个）**：`getVersion`、`getState`、`setView`、`goToday`、`addClock`、`removeClock`、`selectClock`、`setMenuBarClock`、`searchClocks`、`getWeather`、`getWeatherLocation`、`onWeatherUpdate`、`onTick`、`pointerEnter`、`pointerLeave`、`setLogin`、`quit`、`onUpdateNotice`、`checkForUpdate`、`onUpdateStatus`、`restartToUpdate`、`openLatestRelease`。
+**preload API 全量（23 个）**：`getVersion`、`getState`、`setView`、`goToday`、`addClock`、`removeClock`、`selectClock`、`setMenuBarClock`、`searchClocks`、`getWeather`、`searchCity`、`setCity`、`onWeatherUpdate`、`onTick`、`pointerEnter`、`pointerLeave`、`setLogin`、`quit`、`onUpdateNotice`、`checkForUpdate`、`onUpdateStatus`、`restartToUpdate`、`openLatestRelease`。
 
 **状态文案（`electron/update-status.js`）**
 
@@ -264,30 +265,21 @@ main.setupUpdates()
 
 ## 9. 天气（`electron/weather.js`）
 
-- 纯函数：`describeWeatherCode`（WMO → 晴/多云/阴/雾/毛毛雨/雨/雪/阵雨/阵雪/雷暴等）、`pickCityName`（`city` → `locality` → `principalSubdivision`）、`pickIpCity`、`normalizeCoordinates`、`parseIpLocation`、`formatWeatherResult`（`城市 · 天气 · X°C`）、`describeLocationSource`（定位来源 → `定位来源=系统` / `定位来源=IP（…）` 文案）以及两个请求 URL 构造器。测试直接 require，不联网。
-- 网络顺序：
-  - 首次刷新前，渲染层先经 `weather:location` 让主进程确认定位授权（见 [第 10 节](#10-定位授权electronlocation-permissionjs)）：`authorized` 走系统定位，`denied` / `restricted` 直接走 IP。
-  - 渲染层 `navigator.geolocation.getCurrentPosition`，`timeout: 10000`；成功则把 `{ latitude, longitude }` 与定位来源 `{ source: 'system' }` 传给 `weather:get`；失败则带 `{ source: 'system', error: { code, message } }`；授权被拒绝/受限则带 `{ source: 'ip', reason }`；无 `navigator.geolocation` 则带 `{ source: 'none' }`。
-  - 无坐标、拒绝、失败或超时时，主进程请求 `https://ipwho.is/`，用返回的 `latitude` / `longitude` / `city`，并写 `定位来源=IP（…）` 日志。
-  - 有坐标时请求 BigDataCloud 反向地理编码（`localityLanguage=zh`）取城市名；该请求失败只记 warn，天气仍按「当前位置」显示。
-  - 最后请求 Open-Meteo `current=temperature_2m,weather_code&timezone=auto`。
-- `createWeatherService({ fetch, logger, now, setTimeout, clearTimeout })`：所有请求带 `User-Agent` 与 8 秒超时；结果缓存 30 分钟，并记录最近坐标供后台刷新。失败也写入缓存时间，30 分钟内不重复请求；成功/失败分别写 info/warn 日志。
-- 主进程 `setupWeatherPermissions()` 用 `session.defaultSession.setPermissionRequestHandler` / `setPermissionCheckHandler` 仅允许本窗口的 `geolocation`，其余权限拒绝。`package.json` 的 `build.mac.extendInfo` 增加 `NSLocationWhenInUseUsageDescription` 与 `NSLocationUsageDescription`（「用于显示当地天气」）。
-- 打开窗口时调用 `refreshWeather()`：缓存超过 30 分钟才重新请求；`setInterval` 每 30 分钟后台刷新一次，结果经 `weather:update` 推给渲染层。首次打开且无缓存时不抢先做 IP 请求，由渲染层带坐标触发。
+- 纯函数：`describeWeatherCode`（WMO → 晴/多云/阴/雾/毛毛雨/雨/雪/阵雨/阵雪/雷暴等）、`pickCityName`（`city` → `locality` → `principalSubdivision`）、`pickIpCity`、`normalizeCoordinates`、`parseIpLocation`、`normalizeWeatherCity`（`{ name, latitude, longitude }` 校验）、`readWeatherCity` / `writeWeatherCity`（从偏好读取、写入或删除 `weatherCity`）、`resolveWeatherLocation`（手动城市优先，否则用 IP 数据）、`parseGeocodingResults`（Open-Meteo 地理编码结果 → 列表行）、`formatWeatherResult`（`城市 · 天气 · X°C`）、`describeWeatherLocation`（`天气位置=手动：<城市>` / `天气位置=IP：<城市>`）以及反向地理编码、地理编码与天气 URL 构造器。测试直接 require，不联网。
+- 位置来源：
+  - `preferences.weatherCity` 存在时，直接用保存的 `name`、`latitude`、`longitude`，**不请求 `ipwho.is`，也不做反向地理编码**。启动时由主进程读入天气服务。
+  - 否则请求 `https://ipwho.is/`，用返回的 `latitude` / `longitude` / `city`；城市名缺失时再请求 BigDataCloud 反向地理编码（`localityLanguage=zh`），失败只记 warn，天气仍按「当前位置」显示。
+  - 最后请求 Open-Meteo `current=temperature_2m,weather_code&timezone=auto`，并写 `天气位置=手动：<城市>` / `天气位置=IP：<城市>` 日志。
+- 手动选择城市：
+  - 点击天气行，渲染层打开复用 `.clock-picker` / `.picker-*` 样式的城市浮层；列表首项固定为「自动（按 IP）」，其余为「城市名 · 省/州 · 国家」。
+  - 输入框经 `weather:searchCity` 调 `https://geocoding-api.open-meteo.com/v1/search?name=<q>&count=8&language=zh&format=json`；网络请求只在主进程。
+  - 选中城市经 `weather:setCity` 写入 `preferences.weatherCity = { name, latitude, longitude }`，选「自动」则删除该键；主进程立即清理缓存并强制刷新，结果经 IPC 返回并推送 `weather:update`。
+- `createWeatherService({ fetch, logger, now, setTimeout, clearTimeout, weatherCity })`：所有请求带 `User-Agent` 与 8 秒超时；结果缓存 30 分钟，失败也写入缓存时间，30 分钟内不重复请求；成功/失败分别写 info/warn 日志。`setCity` 会清空旧城市缓存并让进行中的旧请求失效。
+- 打开窗口时调用 `refreshWeather()`：缓存超过 30 分钟才重新请求；`setInterval` 每 30 分钟后台刷新一次，结果经 `weather:update` 推给渲染层。首次打开且无缓存时主进程会按 IP 或手动城市取一次。
 - 渲染层只显示一行；失败统一显示「天气暂不可用」，不弹窗。CSP 仍为 `default-src 'self'`，不放开网络。
+- 不再请求 macOS 定位授权：没有 `navigator.geolocation`、定位权限处理器、`NSLocation*` 用途说明或原生定位依赖。
 
-**测试**：`tests/weather.test.js`（WMO 映射、城市名优先级、IP 失败、坐标校验、URL、格式化、定位来源文案、注入假 fetch 的缓存/失败路径）。
-
-## 10. 定位授权（`electron/location-permission.js`）
-
-Electron 的 `navigator.geolocation` 在 macOS 上不会调用 `CLLocationManager` 的 `requestWhenInUseAuthorization`（electron/electron#29314、#45290），所以 ad-hoc 签名包虽然被系统登记为定位客户端，却从不弹授权框、只会超时。因此主进程用 `node-mac-permissions` 原生申请一次「使用时」授权。
-
-- 纯函数 `decideLocationAction(status)`：把授权状态映射成动作与日志文本——`not determined` → `request`（申请）；`authorized` → `system`（走系统定位）；`denied` / `restricted` → `ip`（直接走 IP，日志写明原因）；模块加载失败 / 未知状态 → `system`（照旧走现有流程，不崩溃、不申请）。
-- `createLocationPermission({ platform, isPackaged, requireModule, logger, now, setTimeout, clearTimeout })`：原生模块只在 `darwin` 上经注入的 `requireModule` 惰性加载，加载失败只记 warn 并返回「不可用」。`ensureAuthorized()` 读状态、写 `定位授权=<status>` 日志；`not determined` 时申请一次并写 `申请定位授权结果=<status>`，再轮询等待授权变化（最多 30 秒，`setTimeout` 轮询，不阻塞事件循环）。结果在主进程记忆，之后不再重复申请。
-- 开发态（`npm start`，未打包，Info.plist 无用途说明）跳过原生申请，避免 `requestWhenInUseAuthorization` 崩溃，走现有流程。
-- 依赖 `node-mac-permissions` 放在 `optionalDependencies`（`os: ["darwin"]`）：Linux 上 `npm ci` 自动跳过、`npm test` 不受影响；macOS CI 上用 `@electron/rebuild` 为 Electron 重建并打进 `app.asar.unpacked`（`build.asarUnpack` 包含其 `.node`），详见 [release.md](release.md)。
-
-**测试**：`tests/location-permission.test.js`（决策纯函数覆盖 not determined/authorized/denied/restricted/模块加载失败；工厂覆盖申请一次、轮询等待、超时回退、非 darwin/未打包跳过、require 失败不抛）。
+**测试**：`tests/weather.test.js`（WMO 映射、城市名优先级、IP 失败、坐标校验、URL、地理编码结果解析、`weatherCity` 读写/清除、有无手动城市的取位逻辑、定位来源日志文案、注入假 fetch 的缓存/失败路径与手动/自动切换）。
 
 ## 相关文档
 

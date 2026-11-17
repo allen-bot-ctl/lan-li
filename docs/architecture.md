@@ -10,8 +10,7 @@ electron/
   preload.js        contextBridge 暴露 window.lanli，只转发既有 IPC
   calendar.js       农历/公历/42 格/菜单栏标题/「黄历」纯逻辑
   world-clocks.js   多时区城市目录、校验、列表操作与时钟格式化纯逻辑
-  weather.js        天气纯逻辑（WMO 映射、城市名、坐标/URL/格式化）与主进程请求服务
-  location-permission.js macOS 定位授权原生申请（node-mac-permissions）与授权决策纯逻辑
+  weather.js        天气纯逻辑（WMO 映射、城市名、地理编码、坐标/URL/格式化、手动城市偏好）与主进程请求服务
   login-item.js     未签名包登录项回退：生成/删除本应用的 LaunchAgent plist
   updater.js        自动更新编排（probe-only）
   mac-self-update.js ad-hoc 签名包的应用内下载、校验、暂存、安装
@@ -29,7 +28,7 @@ site/               GitHub Pages 静态主页（不是应用运行时的一部�
 - `electron/main.js`：唯一主进程入口（`package.json` 的 `main`）。持有 `Tray`、`BrowserWindow`、每秒定时器与更新器。
 - `electron/preload.js`：窗口 `webPreferences` 中 `contextIsolation: true`、`nodeIntegration: false`、`sandbox: true`；通过 `contextBridge.exposeInMainWorld('lanli', ...)` 暴露有限 API。
 - `electron/renderer/`：静态 HTML/CSS/JS。只做渲染、翻月、开关、世界时钟的显示/切换/搜索浮层、天气行、检查更新按钮、指针进出、Esc；不 `require('lunar-javascript')`，也不计算时区或天气代码。
-- `electron/calendar.js`、`world-clocks.js`、`weather.js`、`location-permission.js`、`login-item.js`、`update-feed.js`、`update-status.js`、`app-version.js`、`logger.js`、`mac-self-update.js`：可在没有 Electron 的情况下被 `node --test` require 的模块（`logger.js` 仅在默认取日志路径时惰性 require Electron；`weather.js` 的网络请求通过注入的 `fetch` 完成；`location-permission.js` 的原生模块只在 darwin 上惰性 require 且可注入；`login-item.js` 的 `fs` 与路径可注入）。
+- `electron/calendar.js`、`world-clocks.js`、`weather.js`、`login-item.js`、`update-feed.js`、`update-status.js`、`app-version.js`、`logger.js`、`mac-self-update.js`：可在没有 Electron 的情况下被 `node --test` require 的模块（`logger.js` 仅在默认取日志路径时惰性 require Electron；`weather.js` 的网络请求通过注入的 `fetch` 完成；`login-item.js` 的 `fs` 与路径可注入）。
 - `site/`：纯静态主页，由 `.github/workflows/pages.yml` 部署，不参与打包。
 
 窗口尺寸常量在 `electron/main.js`：`WINDOW_WIDTH = 580`、`WINDOW_HEIGHT = 400`；`electron/renderer/calendar.css` 中 `html, body` 也是 `580px × 400px`。左侧目录区 `.calendar-pane` 为 `420px`，右侧橙栏 `.now-pane` 为 `160px`。改尺寸必须两处一起改，并重新做真机验收。
@@ -55,17 +54,17 @@ site/               GitHub Pages 静态主页（不是应用运行时的一部�
   → 返回 clocks 快照 → 渲染层只展示
 
 天气（打开窗口/后台刷新）
-  → 主进程首次刷新前经 location-permission 读定位授权状态并写日志（`定位授权=<status>`）；not determined 时原生申请一次「使用时」授权（node-mac-permissions），并轮询等待授权变化（最多 30 秒，不阻塞事件循环）
-  → 渲染层经 getWeatherLocation 拿到模式：authorized → navigator.geolocation（10s 超时）取坐标；denied/restricted → 直接走 IP
-  → 渲染层把定位来源（系统成功 / 失败 code+message / 定位授权被拒绝·受限 / 无 geolocation）随请求传给主进程
-  → 主进程 weather 服务：反向地理编码 + Open-Meteo（无坐标时先 ipwho.is），并按 location 写一行定位来源日志
+  → 有 preferences.weatherCity 时直接用保存的城市名与坐标；否则主进程请求 ipwho.is 按 IP 取坐标与城市
+  → IP 城市名缺失时请求 BigDataCloud 反向地理编码（city → locality → principalSubdivision）
+  → 主进程 weather 服务请求 Open-Meteo，并写一行 `天气位置=手动：<城市>` / `天气位置=IP：<城市>` 日志
   → 30 分钟缓存 → 返回/推送 weather:update → 渲染层显示一行天气
+  → 点击天气行 → weather:searchCity 调 Open-Meteo 地理编码，weather:setCity 保存/清除 weatherCity 并立即刷新
 ```
 
 - 农历计算只发生在主进程的 `electron/calendar.js`，底层是 `lunar-javascript@1.7.8` 的 `Solar.fromYmd`。完全离线。
 - 时区格式化只发生在主进程的 `electron/world-clocks.js`，使用 `Intl.DateTimeFormat` 与注入的本地时区；渲染层不推导时差。
-- 偏好文件：`app.getPath('userData')/preferences.json`，保存 `loginItemInitialized`、`updateNotifications`（每个版本的一次性手动下载提醒）、`worldClocks`（`{ items: [{ id, label }], index }`）与顶层 `menuBarTimeZone`（IANA id；省略或 `null` 表示跟随系统本地时区，不把系统本地时区写死成字符串；非法或对应时钟不在时钟列表中则清除）。天气结果只缓存在主进程内存，不写偏好文件。
-- 网络只在主进程发生：天气（`ipwho.is`、BigDataCloud 反向地理编码、Open-Meteo，均为 HTTPS）与打包后的 `update.electronjs.org` feed 探测、GitHub Release 资产下载。渲染层 CSP 不放开网络，开发态不检查更新。
+- 偏好文件：`app.getPath('userData')/preferences.json`，保存 `loginItemInitialized`、`updateNotifications`（每个版本的一次性手动下载提醒）、`worldClocks`（`{ items: [{ id, label }], index }`）、顶层 `menuBarTimeZone`（IANA id；省略或 `null` 表示跟随系统本地时区，不把系统本地时区写死成字符串；非法或对应时钟不在时钟列表中则清除）与可选的 `weatherCity`（`{ name, latitude, longitude }`；省略表示按 IP 定位）。天气结果只缓存在主进程内存，不写偏好文件。
+- 网络只在主进程发生：天气（`ipwho.is`、BigDataCloud 反向地理编码、Open-Meteo 天气与地理编码，均为 HTTPS）与打包后的 `update.electronjs.org` feed 探测、GitHub Release 资产下载。渲染层 CSP 不放开网络，开发态不检查更新。
 - 详细实现见 [implementation.md](implementation.md)；更新细节见 [updater.md](updater.md)。
 
 ## 分层职责与边界
@@ -78,7 +77,7 @@ site/               GitHub Pages 静态主页（不是应用运行时的一部�
 - 菜单栏形态：`app.dock.hide()`、`Menu.setApplicationMenu(null)`、`new Tray(nativeImage.createEmpty())`、每秒写文字标题。
 - 窗口：无边框、不可缩放、`alwaysOnTop`、默认隐藏；按托盘 bounds 与 `workArea` 定位；`mouse-enter` / `mouse-leave` / `click` / Esc 的开关逻辑。
 - 状态与偏好：当前浏览年月、焦点日、首次登录项初始化、更新提醒去重、世界时钟列表与当前索引。
-- 天气编排：设置仅允许 `geolocation` 的权限处理器，创建带注入 `net.fetch` 的天气服务与原生定位授权助手（`location-permission`），打开窗口/后台定时刷新并推送 `weather:update`；首次刷新前原生申请一次定位授权（`weather:location` 时惰性执行并记忆结果），`weather:get` 时按渲染层传来的定位来源写 `定位来源=系统` / `定位来源=IP（…）` 日志（不写坐标）。
+- 天气编排：创建带注入 `net.fetch` 的天气服务（启动时读入 `weatherCity`），打开窗口/后台定时刷新并推送 `weather:update`；IP 与手动城市的取位、地理编码搜索、`weatherCity` 读写都在主进程完成，并写 `天气位置=手动：<城市>` / `天气位置=IP：<城市>` 日志（不写坐标）。
 - 更新编排：创建 `mac-self-update` 实例、调用 `setupAutoUpdate`、把 `onReady` / `onManual` / `onStatus` 转成 IPC。
 - 日志：`createLogger()` 写文件并在控制台输出。
 
@@ -98,7 +97,7 @@ site/               GitHub Pages 静态主页（不是应用运行时的一部�
 
 **职责**
 
-- 仅通过 `contextBridge` 暴露当前已有的 22 个 API（清单见 [implementation.md](implementation.md#6-ipc-完整清单)）。
+- 仅通过 `contextBridge` 暴露当前已有的 23 个 API（清单见 [implementation.md](implementation.md#6-ipc-完整清单)）。
 - 把 `invoke` / `send` / `on` 一一对应到固定频道。
 
 **边界**
@@ -117,7 +116,7 @@ site/               GitHub Pages 静态主页（不是应用运行时的一部�
 
 - 渲染主进程给的 `cells`、`almanac`、`clocks`、`weather`、`openAtLogin`、版本号与更新横幅。
 - 交互：上一月/下一月、年份下拉、返回今天、点击格子、登录项开关、世界时钟左右切换/添加/删除/搜索、检查更新、重启更新/下载新版、退出。
-- 打开窗口时先用 `navigator.geolocation.getCurrentPosition` 取坐标（10 秒超时），再把坐标与定位来源（成功 / 失败 code+message / 无 `navigator.geolocation`）一起经 `weather:get` 传给主进程；主进程后台刷新通过 `weather:update` 推回。
+- 天气行只请求主进程的当前结果；点击天气行打开城市选择浮层（复用世界时钟搜索浮层样式），经 `weather:searchCity` 搜索、`weather:setCity` 保存或清除手动城市。定位、网络与偏好读写都不在渲染层。
 - 指针进入/离开窗口根节点时通知主进程；Esc 由主进程的 `before-input-event` 处理。
 - 手动检查时先本地显示「正在检查…」，之后应用主进程推来的状态；定时状态约 2.6 秒后恢复。
 
@@ -137,8 +136,7 @@ site/               GitHub Pages 静态主页（不是应用运行时的一部�
 
 - `calendar.js`：42 格、次要文字、菜单栏标题、「黄历」。
 - `world-clocks.js`：城市目录与搜索、IANA 校验、世界时钟格式化、列表增删/绕回、偏好清洗。
-- `weather.js`：WMO 代码中文映射、城市名选择、坐标校验、请求 URL、结果格式化，以及可注入 `fetch` 的主进程请求服务与 30 分钟缓存。
-- `location-permission.js`：定位授权状态到动作（申请 / 走系统定位 / 走 IP）的纯函数映射，以及可注入原生模块的 `createLocationPermission`（darwin 上惰性 require `node-mac-permissions`，首次刷新前申请一次并轮询等待）。
+- `weather.js`：WMO 代码中文映射、城市名选择、坐标校验、地理编码结果解析、`weatherCity` 读写/清除、手动城市与 IP 的取位逻辑、请求 URL、结果格式化，以及可注入 `fetch` 的主进程请求服务与 30 分钟缓存。
 - `update-feed.js`：feed URL 与 204/200 解释。
 - `update-status.js`：状态到短文案/计时标志的映射。
 - `app-version.js`：`v` 前缀规范化。

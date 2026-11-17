@@ -9,19 +9,12 @@ const IP_LOCATION_URL = 'https://ipwho.is/';
 const REVERSE_GEOCODE_ENDPOINT =
   'https://api.bigdatacloud.net/data/reverse-geocode-client';
 const FORECAST_ENDPOINT = 'https://api.open-meteo.com/v1/forecast';
+const GEOCODING_ENDPOINT = 'https://geocoding-api.open-meteo.com/v1/search';
 
 const USER_AGENT = 'LanLi (+https://allen-bot-ctl.github.io/lan-li/)';
 const CACHE_TTL_MS = 30 * 60 * 1000;
 const REQUEST_TIMEOUT_MS = 8000;
 const UNAVAILABLE_TEXT = '天气暂不可用';
-
-// GeolocationPositionError codes reported by navigator.geolocation. The names
-// mirror the DOM constant names and are only used for the main-process log.
-const GEOLOCATION_ERROR_TEXT = Object.freeze({
-  1: 'PERMISSION_DENIED',
-  2: 'POSITION_UNAVAILABLE',
-  3: 'TIMEOUT'
-});
 
 // WMO weather interpretation codes used by Open-Meteo.
 const WEATHER_CODE_TEXT = Object.freeze({
@@ -57,49 +50,6 @@ const WEATHER_CODE_TEXT = Object.freeze({
 
 function unavailableWeather() {
   return { ok: false, text: UNAVAILABLE_TEXT };
-}
-
-// Describes where the coordinates came from, for the main-process log. The
-// renderer sends a small descriptor alongside weather:get:
-//   { source: 'system' }                                   → system location ok
-//   { source: 'system', error: { code, message } }         → system location failed
-//   { source: 'ip', reason: 'denied' | 'restricted' }      → location auth denied/restricted → IP
-//   { source: 'none' }                                     → no navigator.geolocation
-// Coordinates themselves are never logged; only the source and, on failure, the
-// error code/message.
-function describeLocationSource(location) {
-  if (!location || typeof location !== 'object') return '';
-
-  if (location.source === 'none') {
-    return '定位来源=IP（无系统定位 API）';
-  }
-
-  if (location.source === 'ip') {
-    const reason = textValue(location.reason);
-    if (reason === 'denied') return '定位来源=IP（定位授权被拒绝）';
-    if (reason === 'restricted') return '定位来源=IP（定位授权受限）';
-    return '定位来源=IP（定位授权不可用）';
-  }
-
-  if (location.source === 'system') {
-    const error = location.error;
-    if (!error || typeof error !== 'object') {
-      return '定位来源=系统';
-    }
-
-    const code = finiteNumber(error.code);
-    const message = textValue(error.message);
-    const name = code === null ? '' : (GEOLOCATION_ERROR_TEXT[code] || '');
-    const codeText = code === null
-      ? ''
-      : `code=${code}` + (name ? ` ${name}` : '');
-    const detail = [codeText, message].filter(Boolean).join(': ');
-    return detail
-      ? `定位来源=IP（系统定位失败 ${detail}）`
-      : '定位来源=IP（系统定位失败）';
-  }
-
-  return '';
 }
 
 function describeWeatherCode(code) {
@@ -151,6 +101,99 @@ function parseIpLocation(data) {
   const coordinates = normalizeCoordinates(data);
   if (!coordinates) return null;
   return { coordinates, city: pickIpCity(data) };
+}
+
+function normalizeWeatherCity(value) {
+  if (!value || typeof value !== 'object') return null;
+  const name = textValue(value.name);
+  const coordinates = normalizeCoordinates(value);
+  if (!name || !coordinates) return null;
+  return {
+    name,
+    latitude: coordinates.latitude,
+    longitude: coordinates.longitude
+  };
+}
+
+function readWeatherCity(preferences) {
+  if (!preferences || typeof preferences !== 'object') return null;
+  return normalizeWeatherCity(preferences.weatherCity);
+}
+
+function writeWeatherCity(preferences, city) {
+  const next = preferences && typeof preferences === 'object'
+    ? { ...preferences }
+    : {};
+  const normalized = normalizeWeatherCity(city);
+  if (normalized) {
+    next.weatherCity = normalized;
+  } else {
+    delete next.weatherCity;
+  }
+  return next;
+}
+
+// A saved city always wins over IP data, so a manual choice never triggers an
+// ipwho.is request or a reverse-geocode lookup.
+function resolveWeatherLocation(manualCity, ipData) {
+  const manual = normalizeWeatherCity(manualCity);
+  if (manual) {
+    return {
+      source: 'manual',
+      coordinates: {
+        latitude: manual.latitude,
+        longitude: manual.longitude
+      },
+      city: manual.name
+    };
+  }
+
+  const ip = parseIpLocation(ipData);
+  if (!ip) return null;
+  return { source: 'ip', coordinates: ip.coordinates, city: ip.city };
+}
+
+function describeWeatherLocation(location) {
+  const source = location && location.source === 'manual' ? 'manual' : 'ip';
+  const city = location && textValue(location.city);
+  const label = city || '当前位置';
+  return source === 'manual'
+    ? `天气位置=手动：${label}`
+    : `天气位置=IP：${label}`;
+}
+
+function buildGeocodingUrl(query) {
+  const name = textValue(query);
+  if (!name) return '';
+  return `${GEOCODING_ENDPOINT}` +
+    `?name=${encodeURIComponent(name)}` +
+    '&count=8&language=zh&format=json';
+}
+
+function parseGeocodingResults(data) {
+  if (!data || typeof data !== 'object' || !Array.isArray(data.results)) {
+    return [];
+  }
+
+  const rows = [];
+  for (const item of data.results) {
+    if (!item || typeof item !== 'object') continue;
+    const name = textValue(item.name);
+    const coordinates = normalizeCoordinates(item);
+    if (!name || !coordinates) continue;
+
+    const admin1 = textValue(item.admin1);
+    const country = textValue(item.country);
+    rows.push({
+      name,
+      admin1,
+      country,
+      latitude: coordinates.latitude,
+      longitude: coordinates.longitude,
+      label: [name, admin1, country].filter(Boolean).join(' · ')
+    });
+  }
+  return rows;
 }
 
 function formatTemperature(value) {
@@ -223,9 +266,10 @@ function createWeatherService(options = {}) {
     ? options.timeoutMs
     : REQUEST_TIMEOUT_MS;
 
+  let manualCity = normalizeWeatherCity(options.weatherCity);
   let cache = null; // { at, result }
-  let lastCoordinates = null;
   let inFlight = null;
+  let generation = 0;
 
   function log(level, message) {
     const write = logger[level];
@@ -252,11 +296,11 @@ function createWeatherService(options = {}) {
     }
   }
 
-  async function locate(coordinates) {
-    if (coordinates) return { coordinates, city: '' };
+  async function locate() {
+    if (manualCity) return resolveWeatherLocation(manualCity, null);
 
     const data = await fetchJson(IP_LOCATION_URL);
-    const location = parseIpLocation(data);
+    const location = resolveWeatherLocation(null, data);
     if (!location) throw new Error('IP 定位未返回有效坐标');
     return location;
   }
@@ -268,22 +312,27 @@ function createWeatherService(options = {}) {
     return pickCityName(data);
   }
 
-  async function load(coordinates) {
-    const location = await locate(coordinates);
-    lastCoordinates = location.coordinates;
+  async function load() {
+    const requestGeneration = generation;
+    const location = await locate();
+    if (requestGeneration !== generation) return null;
 
     let city = location.city;
-    if (!city) {
+    if (!city && location.source === 'ip') {
       try {
         city = await lookupCity(location.coordinates);
       } catch (error) {
         log('warn', '城市名获取失败：' + describeError(error));
       }
+      if (requestGeneration !== generation) return null;
     }
+
+    log('info', describeWeatherLocation({ source: location.source, city }));
 
     const data = await fetchJson(
       buildForecastUrl(location.coordinates.latitude, location.coordinates.longitude)
     );
+    if (requestGeneration !== generation) return null;
     const current = data && data.current && typeof data.current === 'object'
       ? data.current
       : {};
@@ -305,36 +354,45 @@ function createWeatherService(options = {}) {
     return Boolean(cache) && now() - cache.at < cacheTtlMs;
   }
 
-  function get(coordinates, location) {
-    const sourceText = describeLocationSource(location);
-    if (sourceText) {
-      const isSystem = location && location.source === 'system' && !location.error;
-      log(isSystem ? 'info' : 'warn', sourceText);
-    }
-
-    const normalized = normalizeCoordinates(coordinates);
-    if (normalized) lastCoordinates = normalized;
-
+  function get() {
     if (isFresh()) return Promise.resolve(cache.result);
-    return request(normalized || lastCoordinates);
+    return request();
   }
 
-  function request(coordinates) {
+  function request() {
     if (inFlight) return inFlight;
 
-    inFlight = load(coordinates)
+    const requestGeneration = generation;
+    inFlight = load()
       .then((result) => {
+        if (requestGeneration !== generation || !result) return null;
         log('info', '更新成功：' + result.text);
         return store(result);
       })
       .catch((error) => {
+        if (requestGeneration !== generation) return null;
         log('warn', '更新失败：' + describeError(error));
         return store(unavailableWeather());
       })
       .finally(() => {
-        inFlight = null;
+        if (requestGeneration === generation) inFlight = null;
       });
     return inFlight;
+  }
+
+  function setCity(city) {
+    manualCity = normalizeWeatherCity(city);
+    generation += 1;
+    cache = null;
+    inFlight = null;
+    return manualCity;
+  }
+
+  async function searchCity(query) {
+    const url = buildGeocodingUrl(query);
+    if (!url) return [];
+    const data = await fetchJson(url);
+    return parseGeocodingResults(data);
   }
 
   // Open-window refresh respects the 30-minute cache; the background timer
@@ -342,14 +400,15 @@ function createWeatherService(options = {}) {
   // newer than the TTL.
   function refresh(options) {
     const force = Boolean(options && options.force);
-    if (!cache && !lastCoordinates) return Promise.resolve(null);
     if (!force && isFresh()) return Promise.resolve(cache.result);
-    return request(lastCoordinates);
+    return request();
   }
 
   return {
     get,
     refresh,
+    setCity,
+    searchCity,
     getCached() {
       return cache ? cache.result : null;
     }
@@ -364,22 +423,28 @@ module.exports = {
   IP_LOCATION_URL,
   REVERSE_GEOCODE_ENDPOINT,
   FORECAST_ENDPOINT,
+  GEOCODING_ENDPOINT,
   USER_AGENT,
   CACHE_TTL_MS,
   REQUEST_TIMEOUT_MS,
   UNAVAILABLE_TEXT,
   WEATHER_CODE_TEXT,
-  GEOLOCATION_ERROR_TEXT,
   unavailableWeather,
-  describeLocationSource,
   describeWeatherCode,
+  describeWeatherLocation,
   pickCityName,
   pickIpCity,
   normalizeCoordinates,
   parseIpLocation,
+  normalizeWeatherCity,
+  readWeatherCity,
+  writeWeatherCity,
+  resolveWeatherLocation,
   formatTemperature,
   formatWeatherResult,
   buildReverseGeocodeUrl,
   buildForecastUrl,
+  buildGeocodingUrl,
+  parseGeocodingResults,
   createWeatherService
 };

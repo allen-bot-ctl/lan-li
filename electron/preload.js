@@ -12,8 +12,9 @@ contextBridge.exposeInMainWorld('lanli', {
   selectClock: (payload) => ipcRenderer.invoke('clocks:select', payload),
   setMenuBarClock: (payload) => ipcRenderer.invoke('clocks:setMenuBar', payload),
   searchClocks: (payload) => ipcRenderer.invoke('clocks:search', payload),
-  getWeather: (coordinates, location) => ipcRenderer.invoke('weather:get', coordinates, location),
-  getWeatherLocation: () => ipcRenderer.invoke('weather:location'),
+  getWeather: () => ipcRenderer.invoke('weather:get'),
+  searchCity: (query) => ipcRenderer.invoke('weather:searchCity', query),
+  setCity: (city) => ipcRenderer.invoke('weather:setCity', city),
   onWeatherUpdate: (callback) => {
     ipcRenderer.on('weather:update', (_event, payload) => callback(payload));
   },

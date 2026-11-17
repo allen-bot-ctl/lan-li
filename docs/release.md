@@ -59,7 +59,7 @@ git push origin v0.1.13
    npx electron-builder --mac dmg zip --x64 --publish never
    ```
 
-   环境变量：`CSC_IDENTITY_AUTO_DISCOVERY: "false"`。`build.mac.identity` 为 `"-"`，产物为 ad-hoc 签名。electron-builder 会用 `@electron/rebuild` 把 `optionalDependencies` 里的 `node-mac-permissions`（`os: ["darwin"]`，原生模块）为 Electron 重建，并按 `build.asarUnpack` 把它解包到 `app.asar.unpacked`，供主进程定位授权使用。
+   环境变量：`CSC_IDENTITY_AUTO_DISCOVERY: "false"`。`build.mac.identity` 为 `"-"`，产物为 ad-hoc 签名。天气只使用 IP 定位与手动城市，不包含原生定位模块。
 
 6. 校验 ad-hoc 签名（失败即中止）：
 
@@ -68,15 +68,7 @@ git push origin v0.1.13
    grep -q "Signature=adhoc" /tmp/codesign.log
    ```
 
-7. 校验原生定位模块（失败即中止）：确认 `.app` 内存在 `node-mac-permissions` 的 `.node` 且为 x86_64：
-
-   ```bash
-   find "dist/mac/栏历.app" -name '*.node' -print | xargs file
-   ```
-
-   workflow 里该步骤先 `find ... -name '*.node'` 落到临时文件，若为空直接失败，再 `xargs file` 并 `grep -q "x86_64"`；不是 x86_64 也会失败。
-
-8. 生成 zip 校验和：
+7. 生成 zip 校验和：
 
    ```bash
    cd dist
@@ -85,8 +77,8 @@ git push origin v0.1.13
    done
    ```
 
-9. 上传 artifact：`dist/LanLi-*-mac-x64.dmg`、`dist/LanLi-*-mac-x64.zip`、`dist/LanLi-*-mac-x64.zip.sha256`。
-10. `publish` job（`ubuntu-latest`）用 `softprops/action-gh-release@v2` 创建 Release，名称 `栏历 <tag>`，上传上述三类资产。
+8. 上传 artifact：`dist/LanLi-*-mac-x64.dmg`、`dist/LanLi-*-mac-x64.zip`、`dist/LanLi-*-mac-x64.zip.sha256`。
+9. `publish` job（`ubuntu-latest`）用 `softprops/action-gh-release@v2` 创建 Release，名称 `栏历 <tag>`，上传上述三类资产。
 
 正式资产只有：
 
@@ -96,11 +88,9 @@ git push origin v0.1.13
 
 **不需要** `latest-mac.yml`；update.electronjs.org 直接读 Release 资产。Release body 与 README/主页统一写明「0.1.5 及更早版本需手动安装一次 0.1.6」，见 [updater.md](updater.md#升级路径与文档口径)。
 
-## 定位授权提示
+## 天气定位
 
-ad-hoc 签名后应用能被 macOS 的定位服务登记为客户端，但 Electron 的 `navigator.geolocation` 不会主动申请授权。因此主进程在首次刷新天气前用 `node-mac-permissions` 原生调用 `CLLocationManager` 的 `requestWhenInUseAuthorization` 申请一次「使用时」授权（用途说明来自 `Info.plist` 的 `NSLocationWhenInUseUsageDescription`），用户**首次打开**时会看到「栏历想要使用您的位置」授权弹窗。允许后走系统定位，拒绝/受限则直接回退 IP 定位。
-
-由于每版 ad-hoc 签名都是新的临时身份，**更新到新版本后 macOS 可能要求重新授权**；这是 ad-hoc 签名的预期行为，不要当作回归问题。
+天气默认按 IP 定位，点击天气行可搜索并保存手动城市（Open-Meteo 地理编码，写入 `preferences.json` 的 `weatherCity`）。应用不申请 macOS 定位授权，也不依赖 `node-mac-permissions` 等原生定位模块，因此首次打开不会出现「栏历想要使用您的位置」弹窗。
 
 ## 何时算发布完成
 

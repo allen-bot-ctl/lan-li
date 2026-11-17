@@ -163,7 +163,7 @@
             <article class="feature">
               <span class="feature-mark">03</span>
               <h3>本地计算</h3>
-              <p>公历、农历、二十四节气与节日都来自本地库，不上传日历内容。天气由主进程经 macOS 定位（失败时 IP 定位）向 BigDataCloud 与 Open-Meteo 请求，结果缓存 30 分钟；失败只显示「天气暂不可用」。除天气与检查 GitHub Release 更新外不发起网络请求。底栏的「检查更新」入口可随时手动检查；自动检查无更新时保持静默，手动检查会提示「已是最新」。0.1.6 起，未签名包也可在应用内下载并校验新版本，重启后完成替换。</p>
+              <p>公历、农历、二十四节气与节日都来自本地库，不上传日历内容。天气默认按 IP 定位，点击天气行可手动选择城市；数据由主进程向 ipwho.is、BigDataCloud 与 Open-Meteo 请求，结果缓存 30 分钟；失败只显示「天气暂不可用」。除天气与检查 GitHub Release 更新外不发起网络请求。底栏的「检查更新」入口可随时手动检查；自动检查无更新时保持静默，手动检查会提示「已是最新」。0.1.6 起，未签名包也可在应用内下载并校验新版本，重启后完成替换。</p>
             </article>
           </div>
         </div>
@@ -220,7 +220,7 @@
             <h2>当前范围</h2>
           </div>
           <div class="about-copy">
-            <p>本轮 GitHub Release 与主页只提供 macOS Intel（x64）的 <span class="literal">.dmg</span>。Release 里的 <span class="literal">.zip</span> 与同名 <span class="literal">.zip.sha256</span> 供应用内自更新使用；0.1.5 及更早版本需手动安装一次 0.1.6。右栏天气只显示当前位置的一行当前天气，不提供多日预报或天气设置。其他平台等验收通过后再扩展。</p>
+            <p>本轮 GitHub Release 与主页只提供 macOS Intel（x64）的 <span class="literal">.dmg</span>。Release 里的 <span class="literal">.zip</span> 与同名 <span class="literal">.zip.sha256</span> 供应用内自更新使用；0.1.5 及更早版本需手动安装一次 0.1.6。右栏天气只显示一行当前天气，可点击天气行选择城市，不提供多日预报或独立设置页。其他平台等验收通过后再扩展。</p>
             <p>本地执行 <span class="literal">npm run dist</span> 仍可能同时打出 x64 与 arm64 包；GitHub Actions 打出的正式下载目前只有 Intel x64。</p>
             <p>源码、问题与开发说明都在 <a href="https://github.com/allen-bot-ctl/lan-li" target="_blank" rel="noreferrer">allen-bot-ctl/lan-li</a>。</p>
           </div>

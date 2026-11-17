@@ -94,15 +94,15 @@
 
 **教训**：对「设置后还能读回」的平台 API，必须以读回值作为成功判据；兜底方案要限定在本应用自己的文件，且删除路径与写入路径同等重要。
 
-## 11. 未签名 / ad-hoc 应用拿不到 CoreLocation 授权，定位静默超时
+## 11. Electron 不会申请 macOS 定位授权，天气最终改为 IP + 手动城市
 
-**现象**：0.1.11 及更早的完全未签名包上，`navigator.geolocation` 从不弹授权，10 秒超时后静默回退 IP 定位（显示的是 IP 城市）。日志里只有「天气：更新失败：This operation was aborted」，没有定位失败原因和来源。
+**现象**：`navigator.geolocation` 在 macOS 上从不弹授权框，10 秒后超时并静默回退 IP。改用 ad-hoc 签名后，系统只在 locationd 里登记客户端，仍不弹授权；再用 `node-mac-permissions` 原生申请，授权也无法稳定保留。
 
-**根因**：未签名 bundle 没有被 macOS 定位服务登记，CoreLocation 不会对无签名的应用弹授权，`getCurrentPosition` 直接走失败/超时路径；同时主进程不知道定位来源，日志里也分不清系统定位与 IP 定位。
+**根因**：Electron 不会调用 `CLLocationManager` 的 `requestWhenInUseAuthorization`（electron/electron#29314、#45290）。第三方库虽然能触发一次原生申请，但会释放 `CLLocationManager`，授权状态无法按预期保持，继续依赖它只会增加原生依赖和不确定性。
 
-**处理**：0.1.12 起打包改为 ad-hoc 签名，并让渲染进程把定位来源（成功带坐标 / 失败带 code+message / 无 `navigator.geolocation`）随 `weather:get` 传给主进程，便于从 main.log 判定定位走了哪条路。但真机读回发现：**ad-hoc 签名只让系统在 locationd 里登记客户端**（`clients.plist` 有 `app.lanli.LanLi` 但无 `Authorized` 字段），Electron 的 `navigator.geolocation` 并不会调用 `CLLocationManager` 的 `requestWhenInUseAuthorization`（electron/electron#29314、#45290），所以仍从不弹授权框、每次都是 `code=3 TIMEOUT` 回退 IP。0.1.13 起主进程在首次刷新天气前用 `node-mac-permissions` 原生申请一次「使用时」授权，`authorized` 走系统定位，`denied`/`restricted` 直接走 IP。
+**处理**：放弃系统定位，删除 `node-mac-permissions`、原生授权模块、`NSLocation*` 用途说明和渲染层定位调用。天气默认用 ipwho.is 按 IP 取坐标与城市；点击天气行可搜索并保存手动城市（Open-Meteo 地理编码，`preferences.weatherCity`），有手动城市时直接用其名称与坐标。日志明确写 `天气位置=手动：<城市>` 或 `天气位置=IP：<城市>`。
 
-**教训**：依赖系统授权的能力（定位、登录项等）要在有签名（哪怕 ad-hoc）的前提下验收；ad-hoc 签名只解决「系统登记客户端」，不会让 Electron 主动申请授权，需要原生调用 `CLLocationManager` 才能真正弹授权框。定位失败要记录来源和错误码，不能只靠「更新失败」这类下游报错反推。
+**教训**：系统授权能力要在真机、目标签名方式下先验证再投入；如果平台 API 不能可靠工作，优先选可预测、可降级的方案，而不是叠加原生补丁。定位来源要写进日志，避免只靠天气请求失败反推。
 
 ## 相关文档
 

@@ -11,8 +11,7 @@ const {
   dialog,
   autoUpdater,
   net,
-  shell,
-  session
+  shell
 } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
@@ -56,9 +55,11 @@ const {
 const {
   CACHE_TTL_MS: WEATHER_REFRESH_MS,
   createWeatherService,
+  normalizeWeatherCity,
+  readWeatherCity,
+  writeWeatherCity,
   unavailableWeather
 } = require('./weather');
-const { createLocationPermission } = require('./location-permission');
 const { createLoginItem } = require('./login-item');
 
 const WINDOW_WIDTH = 580;
@@ -75,8 +76,6 @@ let updateNotice = null;
 let weatherService = null;
 let weatherTimer = null;
 let loginItem = null;
-let locationPermission = null;
-let locationAuthPromise = null;
 
 const logger = createLogger();
 
@@ -404,30 +403,10 @@ function sendUpdateStatus(status) {
   calendarWindow.webContents.send('update:status', status);
 }
 
-function setupWeatherPermissions() {
-  const ses = session.defaultSession;
-  const isOurWindow = (webContents) =>
-    Boolean(calendarWindow) && webContents === calendarWindow.webContents;
-
-  ses.setPermissionRequestHandler((webContents, permission, callback) => {
-    callback(permission === 'geolocation' && isOurWindow(webContents));
-  });
-  ses.setPermissionCheckHandler((webContents, permission) => {
-    return permission === 'geolocation' && isOurWindow(webContents);
-  });
-}
-
 function setupWeather() {
   weatherService = createWeatherService({
     fetch: (url, init) => net.fetch(url, init),
-    logger: {
-      info: (message) => logger.info('[栏历] 天气：' + message),
-      warn: (message) => logger.warn('[栏历] 天气：' + message)
-    }
-  });
-  locationPermission = createLocationPermission({
-    platform: process.platform,
-    isPackaged: app.isPackaged,
+    weatherCity: readWeatherCity(readPreferences()),
     logger: {
       info: (message) => logger.info('[栏历] 天气：' + message),
       warn: (message) => logger.warn('[栏历] 天气：' + message)
@@ -436,19 +415,6 @@ function setupWeather() {
   weatherTimer = setInterval(() => {
     refreshWeather(true);
   }, WEATHER_REFRESH_MS);
-}
-
-// Native location authorization is requested once, lazily, before the first
-// weather refresh. The result is memoized so subsequent refreshes never prompt
-// again; denied/restricted settle to the IP path without re-asking.
-function ensureLocationAuthorized() {
-  if (!locationPermission) {
-    return Promise.resolve({ action: 'system', status: 'unavailable', log: '' });
-  }
-  if (!locationAuthPromise) {
-    locationAuthPromise = locationPermission.ensureAuthorized();
-  }
-  return locationAuthPromise;
 }
 
 function sendWeather(result) {
@@ -680,21 +646,28 @@ function applyViewPayload(payload) {
 function registerIpc() {
   ipcMain.handle('app:version', () => formatVersionLabel(app.getVersion()));
 
-  ipcMain.handle('weather:get', (_event, payload, location) => {
+  ipcMain.handle('weather:get', () => {
     if (!weatherService) return unavailableWeather();
-    return weatherService.get(payload, location);
+    return weatherService.get();
   });
 
-  ipcMain.handle('weather:location', async () => {
+  ipcMain.handle('weather:searchCity', async (_event, query) => {
+    if (!weatherService) return [];
     try {
-      const decision = await ensureLocationAuthorized();
-      if (decision && decision.action === 'ip') {
-        return { mode: 'ip', reason: decision.status };
-      }
-      return { mode: 'system' };
-    } catch {
-      return { mode: 'system' };
+      return await weatherService.searchCity(query);
+    } catch (error) {
+      logger.warn('[栏历] 天气：城市搜索失败：' +
+        (error && error.message ? error.message : error));
+      return [];
     }
+  });
+
+  ipcMain.handle('weather:setCity', async (_event, city) => {
+    const normalized = normalizeWeatherCity(city);
+    writePreferences(writeWeatherCity(readPreferences(), normalized));
+    if (!weatherService) return unavailableWeather();
+    weatherService.setCity(normalized);
+    return refreshWeather(true);
   });
 
   ipcMain.handle('calendar:getState', () => buildState());
@@ -854,7 +827,6 @@ async function bootstrap() {
   initializeLoginItem();
   resetViewToToday();
   loadWorldClocks();
-  setupWeatherPermissions();
   setupWeather();
   registerIpc();
   createCalendarWindow();

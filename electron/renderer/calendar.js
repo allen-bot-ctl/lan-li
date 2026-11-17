@@ -39,6 +39,10 @@ const checkUpdateButton = document.getElementById('check-update-button');
 const checkUpdateLabel = document.getElementById('check-update-label');
 const appVersion = document.getElementById('app-version');
 const weatherText = document.getElementById('weather-text');
+const weatherPicker = document.getElementById('weather-picker');
+const weatherSearch = document.getElementById('weather-search');
+const weatherPickerClose = document.getElementById('weather-picker-close');
+const weatherList = document.getElementById('weather-list');
 
 let state = null;
 let yearOptionsBuilt = false;
@@ -49,6 +53,8 @@ let searchToken = 0;
 let searchTimer = null;
 let wheelLockedAt = 0;
 let weatherToken = 0;
+let weatherSearchToken = 0;
+let weatherSearchTimer = null;
 
 function daysInMonth(year, month) {
   return new Date(year, month, 0).getDate();
@@ -361,71 +367,91 @@ function renderWeather(result) {
   weatherText.title = text;
 }
 
-function requestWeather(coordinates, location) {
+function requestWeather() {
   const token = weatherToken + 1;
   weatherToken = token;
-  api.getWeather(coordinates, location).then((result) => {
+  api.getWeather().then((result) => {
     if (token === weatherToken) renderWeather(result);
   }).catch(() => {
     if (token === weatherToken) renderWeather(null);
   });
 }
 
-// The main process requests native location authorization before the first
-// refresh. Ask it which path to take: when it already knows the permission is
-// denied/restricted, skip CoreLocation and go straight to IP; otherwise ask
-// CoreLocation first, and on refusal, failure or the 10s timeout the main
-// process falls back to IP. The main process owns all network access. The
-// location descriptor tells the main process where the coordinates came from,
-// so it can log the source (系统 / IP) without logging coordinates.
-async function refreshWeather() {
-  let mode = 'system';
-  let reason = '';
-  try {
-    const info = await api.getWeatherLocation();
-    if (info && info.mode === 'ip') {
-      mode = 'ip';
-      reason = info.reason;
-    }
-  } catch {
-    mode = 'system';
-  }
+// The main process owns the weather location: a saved city or IP geolocation.
+// The renderer only asks for the current result; all network access stays in
+// the main process.
+function refreshWeather() {
+  requestWeather();
+}
 
-  if (mode === 'ip') {
-    requestWeather(undefined, { source: 'ip', reason });
-    return;
-  }
+function weatherRowButton(row) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'picker-item';
+  button.setAttribute('role', 'option');
 
-  if (!navigator.geolocation) {
-    requestWeather(undefined, { source: 'none' });
-    return;
-  }
+  const name = document.createElement('span');
+  name.className = 'picker-name';
+  name.textContent = row.label;
 
-  navigator.geolocation.getCurrentPosition(
-    (position) => {
-      const coords = position && position.coords;
-      requestWeather(
-        coords
-          ? { latitude: coords.latitude, longitude: coords.longitude }
-          : undefined,
-        { source: 'system' }
-      );
-    },
-    (error) => {
-      requestWeather(undefined, {
-        source: 'system',
-        error: {
-          code: error && error.code,
-          message: error && error.message
-        }
-      });
-    },
-    {
-      enableHighAccuracy: false,
-      timeout: 10000,
-      maximumAge: 30 * 60 * 1000
-    }
-  );
+  button.append(name);
+  button.addEventListener('click', () => {
+    const city = row.auto
+      ? null
+      : { name: row.name, latitude: row.latitude, longitude: row.longitude };
+    api.setCity(city).then((result) => {
+      renderWeather(result);
+      closeWeatherPicker();
+    }).catch(() => {
+      refreshWeather();
+    });
+  });
+  return button;
+}
+
+function renderWeatherPicker(rows) {
+  weatherList.replaceChildren();
+  weatherList.append(weatherRowButton({ auto: true, label: '自动（按 IP）' }));
+
+  if (!Array.isArray(rows) || rows.length === 0) return;
+  for (const row of rows) {
+    weatherList.append(weatherRowButton(row));
+  }
+}
+
+function runWeatherSearch() {
+  if (weatherSearchTimer) {
+    clearTimeout(weatherSearchTimer);
+    weatherSearchTimer = null;
+  }
+  weatherSearchTimer = setTimeout(() => {
+    weatherSearchTimer = null;
+    const token = weatherSearchToken + 1;
+    weatherSearchToken = token;
+    api.searchCity(weatherSearch.value).then((rows) => {
+      if (token === weatherSearchToken) renderWeatherPicker(rows);
+    }).catch(() => {
+      if (token === weatherSearchToken) renderWeatherPicker([]);
+    });
+  }, 60);
+}
+
+function openWeatherPicker() {
+  weatherPicker.hidden = false;
+  weatherSearch.value = '';
+  renderWeatherPicker([]);
+  runWeatherSearch();
+  weatherSearch.focus();
+}
+
+function closeWeatherPicker() {
+  weatherPicker.hidden = true;
+  if (weatherSearchTimer) {
+    clearTimeout(weatherSearchTimer);
+    weatherSearchTimer = null;
+  }
+  weatherSearchToken += 1;
+  weatherList.replaceChildren();
 }
 
 function showUpdateNotice(notice) {
@@ -541,6 +567,18 @@ clockPickerClose.addEventListener('click', () => {
 
 clockSearch.addEventListener('input', () => {
   runClockSearch();
+});
+
+weatherText.addEventListener('click', () => {
+  openWeatherPicker();
+});
+
+weatherPickerClose.addEventListener('click', () => {
+  closeWeatherPicker();
+});
+
+weatherSearch.addEventListener('input', () => {
+  runWeatherSearch();
 });
 
 // Horizontal trackpad swipe (or shift-wheel) switches clocks. Lock briefly so
