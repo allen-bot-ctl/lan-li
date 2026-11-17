@@ -429,6 +429,25 @@ select {
   opacity: 0.75;
 }
 
+/* 卡片入口默认隐藏，悬停/聚焦所在卡片时再显示；保留占位以免卡片高度变化 */
+#almanac-customize,
+#clock-edit,
+.weather-change {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+}
+
+.almanac-card:hover #almanac-customize,
+.almanac-card:focus-within #almanac-customize,
+.world-clock-card:hover #clock-edit,
+.world-clock-card:focus-within #clock-edit,
+.weather-card:hover .weather-change,
+.weather-card:focus-visible .weather-change {
+  opacity: 1;
+  pointer-events: auto;
+}
+
 .almanac-card {
   padding-bottom: 9px;
   cursor: pointer;

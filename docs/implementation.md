@@ -53,7 +53,7 @@ ${M}月${D}日 ${HH}:${mm}:${ss}
 - 风格表由 `electron/almanac-styles.js` 在主进程启动时同步读取 `electron/data/almanac-styles/{coder,worker,student,fitness}.json` 并缓存；`lunar` 是主进程常量与恒等映射。文件读取失败、`schemaVersion !== 1` 或 `id` 与文件名不符时，该风格仍使用常量表中的名称、徽标与颜色，但映射退化为原词，并写一条 logger 警告。
 - 焦点数据 `electron/data/almanac-focus.json` 由 `electron/almanac-focus.js` 在同一处启动流程同步读取一次并缓存，结构见第 5 节。任何读取/结构问题都只写一条 logger 警告，全部词按 `36525` 计分、签语与提示为空，不影响卡片其它内容。
 - 偏好键 `preferences.json` 顶层 `almanacStyle`：只接受 5 个风格 id；缺失、类型不对或未知值一律按 `lunar` 处理，且不回写。仅在用户选中非当前风格时写入，保留其它键。
-- 渲染层「黄历」卡片显示四行：宜行 / 忌行（`#almanac-focus-yi`、`#almanac-focus-ji`，14px 加粗、单行、不设 `text-overflow`）、签语行 `#almanac-quote`、底注行 `#almanac-meta`。点击整张卡片（`#almanac-customize` 除外）打开「今日黄历」面板；「去定制 ›」仍打开黄历风格面板。
+- 渲染层「黄历」卡片显示四行：宜行 / 忌行（`#almanac-focus-yi`、`#almanac-focus-ji`，14px 加粗、单行、不设 `text-overflow`）、签语行 `#almanac-quote`、底注行 `#almanac-meta`。点击整张卡片（`#almanac-customize` 除外）打开「今日黄历」面板；「去定制 ›」仍打开黄历风格面板。该入口默认 `opacity: 0` + `pointer-events: none` 占位隐藏，仅在 `.almanac-card:hover` 或 `:focus-within` 时显示，带 120ms opacity 过渡。
 
 **测试**：`tests/calendar.test.js`（节气、初七、2026-11-16 黄历「丙午马年 / 十月 / 十月初八 / 纳采 / 上梁」、42 格与 lead、今日/周末/节日标记、菜单栏标题、禁用 `getOtherFestivals`）；`tests/almanac-styles.test.js`（114 词表与四份映射完全相等、文件 schema、兜底、去重、确定性、默认兼容、偏好清洗、4 个日期 × 5 种风格选词一致）；`tests/almanac-focus.test.js`（数据 sha256/结构、36525 天稀有度复算、60 条签语、7 个固定日期、确定性、2026 相邻不重复、特殊词与平局、降级、不联网、不截断）。
 
@@ -130,7 +130,7 @@ ${M}月${D}日 ${HH}:${mm}:${ss}
 - `calendar:getState` / `calendar:setView` / `calendar:goToday` 返回的 state 包含 `clocks: { items }`；每个 item 为 `{ id, label, time, relativeText, isMenuBar }`，`time` 是 `HH:mm`，`relativeText` 由主进程按本地时区算好，`isMenuBar` 按 IANA id 与别名比较。不下发完整 IANA 列表。
 - `calendar:onTick` 每秒发送 `{ almanac, clocks }`（窗口可见时），`clocks` 与菜单栏标题都按当前时刻重新计算。
 - 右栏「世界时钟」卡片常驻列出全部城市：城市名、相对时区小字、右侧 `HH:mm`；菜单栏显示中的城市带橙色「菜单栏」标签。`‹`/`›`、圆点、`+`/`×` 与滑动手势都已移除。
-- 标题右侧「编辑」打开编辑面板（覆盖整个面板的居中浮层）：上方搜索框沿用 `clocks:search`，下方列出已添加城市；每行「设为菜单栏」经 `clocks:setMenuBar` 持久化并立即刷新托盘标题，当前项禁用；「移除」经 `clocks:remove`，删除当前菜单栏时区时回退本地。
+- 标题右侧「编辑」默认占位隐藏，仅在 `.world-clock-card:hover` 或 `:focus-within` 时显示；点击后打开编辑面板（覆盖整个面板的居中浮层）：上方搜索框沿用 `clocks:search`，下方列出已添加城市；每行「设为菜单栏」经 `clocks:setMenuBar` 持久化并立即刷新托盘标题，当前项禁用；「移除」经 `clocks:remove`，删除当前菜单栏时区时回退本地。
 - 编辑面板的搜索结果在面板内滚动，已添加的时区直接过滤，不再显示「已添加」行；搜索框为空时不显示「没有匹配的时区」，只有输入内容且无结果时才显示。添加后不关闭面板，列表与搜索结果同步刷新。面板不新建窗口、不调用系统对话框、无网络、无定位。
 - 空列表显示「尚未添加城市」。`buildAlmanac` / `buildCells` / `isToday` 仍按系统本地时间，不受菜单栏显示时区影响。
 
@@ -296,7 +296,7 @@ main.setupUpdates()
 ## 8. 版本号（`electron/app-version.js`）
 
 - `formatVersionLabel`：去首尾空白；已有 `v`/`V` 前缀去重；必须以数字开头且只含 `0-9A-Za-z.+-`；否则返回 `''`。
-- 渲染层 `loadVersion()` → `app:version`，在右栏底部居中显示为「栏历 vX.Y.Z」；`app:version` 仍返回 `formatVersionLabel()` 的 `vX.Y.Z`，渲染层只在前面加产品名。右侧以「·」分隔「检查更新」文字按钮，点击经 `update:check` 复用设置菜单的更新检查。版本号不会被检查状态文案覆盖，也不会因设置菜单的 sublabel 重复占位。
+- 渲染层 `loadVersion()` → `app:version`，在右栏底部居中显示为「栏历 vX.Y.Z」；`app:version` 仍返回 `formatVersionLabel()` 的 `vX.Y.Z`，渲染层只在前面加产品名。右侧以「·」分隔「检查更新」文字按钮，点击经 `update:check` 复用设置菜单的更新检查；该按钮不属于三张卡片的隐藏选择器，始终可见。版本号不会被检查状态文案覆盖，也不会因设置菜单的 sublabel 重复占位。
 
 **测试**：`tests/app-version.test.js`。
 
@@ -319,7 +319,7 @@ main.setupUpdates()
   - 点击列表项后渲染层**立即关闭面板**并把天气卡片文字显示为「<城市名> · 加载中…」，不等网络；`weather:setCity` 写入 `preferences.weatherCity = { name, latitude, longitude, country?, admin1? }`（选「自动」则删除该键）后立即返回，主进程清理缓存并异步强制刷新，结果经 `weather:update` 推送。
 - `createWeatherService({ fetch, logger, now, setTimeout, clearTimeout, weatherCity })`：所有请求带 `User-Agent` 与 8 秒超时；结果缓存 30 分钟，失败也写入缓存时间，30 分钟内不重复请求；成功/失败分别写 info/warn 日志。`setCity` 会清空旧城市缓存并让进行中的旧请求失效。
 - 打开窗口时调用 `refreshWeather()`：缓存超过 30 分钟才重新请求；`setInterval` 每 30 分钟后台刷新一次，结果经 `weather:update` 推给渲染层。首次打开且无缓存时主进程会按 IP 或手动城市取一次。
-- 结果带 `emoji`（`weatherEmoji()` 按「雷 → 雪 → 雨 → 雾 → 阴 → 多云 → 晴」优先匹配；未知用 `🌡️`），渲染层在 40px 单行里显示 emoji、`17°`、城市名与行尾「更换 ›」（`#weather-city` 只写城市名，即 `result.city`）；悬停 title 为「城市 · 天气」。加载中显示「天气加载中…」或「城市名 · 加载中…」，全部数据源失败统一显示「天气暂不可用」，不弹窗。CSP 仍为 `default-src 'self'`，不放开网络。
+- 结果带 `emoji`（`weatherEmoji()` 按「雷 → 雪 → 雨 → 雾 → 阴 → 多云 → 晴」优先匹配；未知用 `🌡️`），渲染层在 40px 单行里显示 emoji、`17°`、城市名与行尾「更换 ›」（`#weather-city` 只写城市名，即 `result.city`）；「更换 ›」默认占位隐藏，天气卡 `.weather-card:hover` 或 `:focus-visible` 时显示；悬停 title 为「城市 · 天气」。加载中显示「天气加载中…」或「城市名 · 加载中…」，全部数据源失败统一显示「天气暂不可用」，不弹窗。CSP 仍为 `default-src 'self'`，不放开网络。
 - 不再请求 macOS 定位授权：没有 `navigator.geolocation`、定位权限处理器、`NSLocation*` 用途说明或原生定位依赖。
 
 **测试**：`tests/weather.test.js`（城市码表匹配与 admin1 回退、itboy 与 wttr.in 解析、URL 构造、IP 失败、坐标校验、地理编码结果解析、天气文字→emoji 映射、`weatherCity` 含 `country`/`admin1` 的读写/清除、有无手动城市的取位逻辑、手动/IP 国家来源、itboy 失败回退、非中国直走 wttr.in、定位与来源日志文案、注入假 fetch 的缓存/失败路径与手动/自动切换）；`tests/quick-cities.test.js`（清单结构、国家代码/中英文国家名匹配、已选城市判定）；`tests/ui-wiring.test.js`（空搜索时显示「常用城市」并走 `weather:quickCities`）。
