@@ -14,6 +14,7 @@ const {
   pickIpCity,
   normalizeCoordinates,
   parseIpLocation,
+  countryFromIpData,
   normalizeWeatherCity,
   readWeatherCity,
   writeWeatherCity,
@@ -613,4 +614,67 @@ test('weather service caches results and failures for 30 minutes', async () => {
   const cached = await succeeding.get();
   assert.equal(cached.text, first.text);
   assert.deepEqual(await succeeding.refresh(), first);
+});
+
+test('weather service exposes the manual or IP country for quick cities', async () => {
+  assert.deepEqual(
+    countryFromIpData({ success: true, country: 'China', country_code: 'cn' }),
+    { country: 'China', countryCode: 'CN' }
+  );
+  assert.deepEqual(countryFromIpData({ success: false }), {
+    country: '',
+    countryCode: ''
+  });
+  assert.deepEqual(countryFromIpData(null), { country: '', countryCode: '' });
+
+  const manual = createWeatherService({
+    fetch: async () => {
+      throw new Error('manual city must not request IP');
+    },
+    weatherCity: {
+      name: '东京',
+      latitude: 35.68,
+      longitude: 139.69,
+      country: '日本',
+      admin1: '东京都'
+    },
+    logger: {}
+  });
+  assert.deepEqual(await manual.getCountry(), { country: '日本', countryCode: '' });
+
+  const calls = [];
+  const automatic = createWeatherService({
+    fetch: async (url) => {
+      calls.push(url);
+      assert.ok(url.startsWith(IP_LOCATION_URL));
+      return response({
+        success: true,
+        city: '上海',
+        country: 'China',
+        country_code: 'CN',
+        latitude: 31.23,
+        longitude: 121.47
+      });
+    },
+    logger: {}
+  });
+  assert.deepEqual(await automatic.getCountry(), {
+    country: 'China',
+    countryCode: 'CN'
+  });
+  // The resolved IP country is kept, so opening the picker again does not
+  // trigger another ipwho.is request.
+  assert.deepEqual(await automatic.getCountry(), {
+    country: 'China',
+    countryCode: 'CN'
+  });
+  assert.equal(calls.length, 1);
+
+  const offline = createWeatherService({
+    fetch: async () => {
+      throw new Error('offline');
+    },
+    logger: {}
+  });
+  assert.deepEqual(await offline.getCountry(), { country: '', countryCode: '' });
 });

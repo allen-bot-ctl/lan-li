@@ -1,0 +1,123 @@
+{
+  "CN": {
+    "country": "中国",
+    "aliases": ["China", "PRC", "中华人民共和国", "中国大陆"],
+    "cities": [
+      { "name": "北京", "latitude": 39.9042, "longitude": 116.4074, "country": "中国", "admin1": "北京市" },
+      { "name": "上海", "latitude": 31.2304, "longitude": 121.4737, "country": "中国", "admin1": "上海市" },
+      { "name": "杭州", "latitude": 30.2741, "longitude": 120.1551, "country": "中国", "admin1": "浙江省" },
+      { "name": "广州", "latitude": 23.1291, "longitude": 113.2644, "country": "中国", "admin1": "广东省" },
+      { "name": "深圳", "latitude": 22.5431, "longitude": 114.0579, "country": "中国", "admin1": "广东省" },
+      { "name": "成都", "latitude": 30.5728, "longitude": 104.0668, "country": "中国", "admin1": "四川省" },
+      { "name": "南京", "latitude": 32.0603, "longitude": 118.7969, "country": "中国", "admin1": "江苏省" },
+      { "name": "武汉", "latitude": 30.5928, "longitude": 114.3055, "country": "中国", "admin1": "湖北省" }
+    ]
+  },
+  "JP": {
+    "country": "日本",
+    "aliases": ["Japan", "JPN"],
+    "cities": [
+      { "name": "东京", "latitude": 35.6762, "longitude": 139.6503, "country": "日本", "admin1": "东京都" },
+      { "name": "大阪", "latitude": 34.6937, "longitude": 135.5023, "country": "日本", "admin1": "大阪府" },
+      { "name": "京都", "latitude": 35.0116, "longitude": 135.7681, "country": "日本", "admin1": "京都府" },
+      { "name": "名古屋", "latitude": 35.1815, "longitude": 136.9066, "country": "日本", "admin1": "爱知县" },
+      { "name": "札幌", "latitude": 43.0618, "longitude": 141.3545, "country": "日本", "admin1": "北海道" },
+      { "name": "福冈", "latitude": 33.5904, "longitude": 130.4017, "country": "日本", "admin1": "福冈县" }
+    ]
+  },
+  "US": {
+    "country": "美国",
+    "aliases": ["United States", "United States of America", "USA", "US"],
+    "cities": [
+      { "name": "纽约", "latitude": 40.7128, "longitude": -74.006, "country": "美国", "admin1": "纽约州" },
+      { "name": "华盛顿", "latitude": 38.9072, "longitude": -77.0369, "country": "美国", "admin1": "哥伦比亚特区" },
+      { "name": "波士顿", "latitude": 42.3601, "longitude": -71.0589, "country": "美国", "admin1": "马萨诸塞州" },
+      { "name": "芝加哥", "latitude": 41.8781, "longitude": -87.6298, "country": "美国", "admin1": "伊利诺伊州" },
+      { "name": "洛杉矶", "latitude": 34.0522, "longitude": -118.2437, "country": "美国", "admin1": "加利福尼亚州" },
+      { "name": "旧金山", "latitude": 37.7749, "longitude": -122.4194, "country": "美国", "admin1": "加利福尼亚州" }
+    ]
+  },
+  "KR": {
+    "country": "韩国",
+    "aliases": ["South Korea", "Korea", "Republic of Korea", "KOR"],
+    "cities": [
+      { "name": "首尔", "latitude": 37.5665, "longitude": 126.978, "country": "韩国", "admin1": "首尔特别市" },
+      { "name": "釜山", "latitude": 35.1796, "longitude": 129.0756, "country": "韩国", "admin1": "釜山广域市" },
+      { "name": "仁川", "latitude": 37.4563, "longitude": 126.7052, "country": "韩国", "admin1": "仁川广域市" },
+      { "name": "大邱", "latitude": 35.8714, "longitude": 128.6014, "country": "韩国", "admin1": "大邱广域市" },
+      { "name": "大田", "latitude": 36.3504, "longitude": 127.3845, "country": "韩国", "admin1": "大田广域市" },
+      { "name": "光州", "latitude": 35.1595, "longitude": 126.8526, "country": "韩国", "admin1": "光州广域市" }
+    ]
+  },
+  "SG": {
+    "country": "新加坡",
+    "aliases": ["Singapore", "SGP"],
+    "cities": [
+      { "name": "新加坡", "latitude": 1.3521, "longitude": 103.8198, "country": "新加坡", "admin1": "新加坡" },
+      { "name": "裕廊东", "latitude": 1.3329, "longitude": 103.7436, "country": "新加坡", "admin1": "西区" },
+      { "name": "兀兰", "latitude": 1.4382, "longitude": 103.789, "country": "新加坡", "admin1": "北区" },
+      { "name": "樟宜", "latitude": 1.3644, "longitude": 103.9915, "country": "新加坡", "admin1": "东区" },
+      { "name": "滨海湾", "latitude": 1.2834, "longitude": 103.8607, "country": "新加坡", "admin1": "中区" }
+    ]
+  },
+  "GB": {
+    "country": "英国",
+    "aliases": ["United Kingdom", "UK", "Great Britain", "GBR"],
+    "cities": [
+      { "name": "伦敦", "latitude": 51.5074, "longitude": -0.1278, "country": "英国", "admin1": "英格兰" },
+      { "name": "曼彻斯特", "latitude": 53.4808, "longitude": -2.2426, "country": "英国", "admin1": "英格兰" },
+      { "name": "伯明翰", "latitude": 52.4862, "longitude": -1.8904, "country": "英国", "admin1": "英格兰" },
+      { "name": "爱丁堡", "latitude": 55.9533, "longitude": -3.1883, "country": "英国", "admin1": "苏格兰" },
+      { "name": "格拉斯哥", "latitude": 55.8642, "longitude": -4.2518, "country": "英国", "admin1": "苏格兰" },
+      { "name": "利物浦", "latitude": 53.4084, "longitude": -2.9916, "country": "英国", "admin1": "英格兰" }
+    ]
+  },
+  "FR": {
+    "country": "法国",
+    "aliases": ["France", "FRA"],
+    "cities": [
+      { "name": "巴黎", "latitude": 48.8566, "longitude": 2.3522, "country": "法国", "admin1": "法兰西岛" },
+      { "name": "马赛", "latitude": 43.2965, "longitude": 5.3698, "country": "法国", "admin1": "普罗旺斯-阿尔卑斯-蓝色海岸" },
+      { "name": "里昂", "latitude": 45.764, "longitude": 4.8357, "country": "法国", "admin1": "奥弗涅-罗讷-阿尔卑斯" },
+      { "name": "图卢兹", "latitude": 43.6047, "longitude": 1.4442, "country": "法国", "admin1": "奥克西塔尼" },
+      { "name": "尼斯", "latitude": 43.7102, "longitude": 7.262, "country": "法国", "admin1": "普罗旺斯-阿尔卑斯-蓝色海岸" },
+      { "name": "波尔多", "latitude": 44.8378, "longitude": -0.5792, "country": "法国", "admin1": "新阿基坦" }
+    ]
+  },
+  "DE": {
+    "country": "德国",
+    "aliases": ["Germany", "Deutschland", "DEU"],
+    "cities": [
+      { "name": "柏林", "latitude": 52.52, "longitude": 13.405, "country": "德国", "admin1": "柏林州" },
+      { "name": "慕尼黑", "latitude": 48.1351, "longitude": 11.582, "country": "德国", "admin1": "巴伐利亚州" },
+      { "name": "汉堡", "latitude": 53.5511, "longitude": 9.9937, "country": "德国", "admin1": "汉堡州" },
+      { "name": "法兰克福", "latitude": 50.1109, "longitude": 8.6821, "country": "德国", "admin1": "黑森州" },
+      { "name": "科隆", "latitude": 50.9375, "longitude": 6.9603, "country": "德国", "admin1": "北莱茵-威斯特法伦州" },
+      { "name": "斯图加特", "latitude": 48.7758, "longitude": 9.1829, "country": "德国", "admin1": "巴登-符腾堡州" }
+    ]
+  },
+  "CA": {
+    "country": "加拿大",
+    "aliases": ["Canada", "CAN"],
+    "cities": [
+      { "name": "多伦多", "latitude": 43.6532, "longitude": -79.3832, "country": "加拿大", "admin1": "安大略省" },
+      { "name": "温哥华", "latitude": 49.2827, "longitude": -123.1207, "country": "加拿大", "admin1": "不列颠哥伦比亚省" },
+      { "name": "蒙特利尔", "latitude": 45.5017, "longitude": -73.5673, "country": "加拿大", "admin1": "魁北克省" },
+      { "name": "渥太华", "latitude": 45.4215, "longitude": -75.6972, "country": "加拿大", "admin1": "安大略省" },
+      { "name": "卡尔加里", "latitude": 51.0447, "longitude": -114.0719, "country": "加拿大", "admin1": "艾伯塔省" },
+      { "name": "埃德蒙顿", "latitude": 53.5461, "longitude": -113.4938, "country": "加拿大", "admin1": "艾伯塔省" }
+    ]
+  },
+  "AU": {
+    "country": "澳大利亚",
+    "aliases": ["Australia", "AUS"],
+    "cities": [
+      { "name": "悉尼", "latitude": -33.8688, "longitude": 151.2093, "country": "澳大利亚", "admin1": "新南威尔士州" },
+      { "name": "墨尔本", "latitude": -37.8136, "longitude": 144.9631, "country": "澳大利亚", "admin1": "维多利亚州" },
+      { "name": "布里斯班", "latitude": -27.4698, "longitude": 153.0251, "country": "澳大利亚", "admin1": "昆士兰州" },
+      { "name": "珀斯", "latitude": -31.9505, "longitude": 115.8605, "country": "澳大利亚", "admin1": "西澳大利亚州" },
+      { "name": "阿德莱德", "latitude": -34.9285, "longitude": 138.6007, "country": "澳大利亚", "admin1": "南澳大利亚州" },
+      { "name": "堪培拉", "latitude": -35.2809, "longitude": 149.13, "country": "澳大利亚", "admin1": "澳大利亚首都领地" }
+    ]
+  }
+}

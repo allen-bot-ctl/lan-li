@@ -12,6 +12,8 @@ electron/
   world-clocks.js   多时区城市目录、校验、列表操作、时钟格式化与相对时差纯逻辑
   settings-menu.js  「设置」原生菜单模板构建纯逻辑
   weather.js        天气纯逻辑（WMO 映射、emoji 映射、城市名、地理编码、坐标/URL/格式化、手动城市偏好）与主进程请求服务
+  quick-cities.js   天气面板离线常用城市：清单读取、国家代码/中英文国家名匹配与已选城市判定纯逻辑
+  data/             打包数据：中国城市码表与常用城市清单
   login-item.js     未签名包登录项回退：生成/删除本应用的 LaunchAgent plist
   updater.js        自动更新编排（probe-only）
   mac-self-update.js ad-hoc 签名包的应用内下载、校验、暂存、安装
@@ -29,7 +31,7 @@ site/               GitHub Pages 静态主页（不是应用运行时的一部�
 - `electron/main.js`：唯一主进程入口（`package.json` 的 `main`）。持有 `Tray`、`BrowserWindow`、每秒定时器与更新器。
 - `electron/preload.js`：窗口 `webPreferences` 中 `contextIsolation: true`、`nodeIntegration: false`、`sandbox: true`；通过 `contextBridge.exposeInMainWorld('lanli', ...)` 暴露有限 API。
 - `electron/renderer/`：静态 HTML/CSS/JS。只做渲染、翻月、年份选择、世界时钟列表与编辑面板、天气卡片与选城面板、设置按钮、指针进出、Esc；不 `require('lunar-javascript')`，也不计算时区或天气代码。
-- `electron/calendar.js`、`world-clocks.js`、`settings-menu.js`、`weather.js`、`login-item.js`、`update-feed.js`、`update-status.js`、`app-version.js`、`logger.js`、`mac-self-update.js`：可在没有 Electron 的情况下被 `node --test` require 的模块（`logger.js` 仅在默认取日志路径时惰性 require Electron；`weather.js` 的网络请求通过注入的 `fetch` 完成；`login-item.js` 的 `fs` 与路径可注入）。
+- `electron/calendar.js`、`world-clocks.js`、`settings-menu.js`、`weather.js`、`quick-cities.js`、`login-item.js`、`update-feed.js`、`update-status.js`、`app-version.js`、`logger.js`、`mac-self-update.js`：可在没有 Electron 的情况下被 `node --test` require 的模块（`logger.js` 仅在默认取日志路径时惰性 require Electron；`weather.js` 的网络请求通过注入的 `fetch` 完成；`login-item.js` 的 `fs` 与路径可注入）。
 - `site/`：纯静态主页，由 `.github/workflows/pages.yml` 部署，不参与打包。
 
 窗口尺寸常量在 `electron/main.js`：`WINDOW_WIDTH = 580`、`WINDOW_HEIGHT = 400`；`electron/renderer/calendar.css` 中 `html, body` 也是 `580px × 400px`。左侧月历 `.calendar-pane` 弹性占满剩余宽度（约 `404px`），右侧卡片栏 `.now-pane` 为 `176px`。改窗口尺寸必须两处一起改，并重新做真机验收。
@@ -65,12 +67,12 @@ site/               GitHub Pages 静态主页（不是应用运行时的一部�
   → 主进程 weather 服务按数据源取数：中国城市（手动城市 country === 'CN' 或码表精确匹配，IP 定位 country_code === 'CN' 且城市名在码表中）优先 itboy（打包的城市码表换算城市代码），失败回退 wttr.in；非中国城市直接走 wttr.in
   → 写 `天气位置=手动：<城市>` / `天气位置=IP：<城市>` 与 `天气来源=itboy（<城市> <代码>）` / `天气来源=wttr.in` 日志
   → 30 分钟缓存 → 返回/推送 weather:update → 渲染层显示天气卡片（emoji、温度、「城市 · 天气」）
-  → 点击天气卡片或「更换城市 ›」→ weather:searchCity 调 Open-Meteo 地理编码，weather:setCity 保存/清除 weatherCity 后立即返回；渲染层立即关闭面板并显示「城市 · 加载中…」，新结果经 weather:update 异步推送
+  → 点击天气卡片或「更换城市 ›」→ 搜索框为空时经 weather:quickCities 按当前国家（手动城市 country 或 IP country_code）列出内置「常用城市」，输入后经 weather:searchCity 调 Open-Meteo 地理编码；weather:setCity 保存/清除 weatherCity 后立即返回；渲染层立即关闭面板并显示「城市 · 加载中…」，新结果经 weather:update 异步推送
 ```
 
 - 农历计算只发生在主进程的 `electron/calendar.js`，底层是 `lunar-javascript@1.7.8` 的 `Solar.fromYmd`。完全离线。
 - 时区格式化只发生在主进程的 `electron/world-clocks.js`，使用 `Intl.DateTimeFormat` 与注入的本地时区；渲染层不推导时差。
-- 偏好文件：`app.getPath('userData')/preferences.json`，保存 `loginItemInitialized`、`updateNotifications`（每个版本的一次性手动下载提醒）、`worldClocks`（`{ items: [{ id, label }], index }`）、顶层 `menuBarTimeZone`（IANA id；省略或 `null` 表示跟随系统本地时区，不把系统本地时区写死成字符串；非法或对应时钟不在时钟列表中则清除）与可选的 `weatherCity`（`{ name, latitude, longitude, country?, admin1? }`；省略表示按 IP 定位）。天气结果只缓存在主进程内存，不写偏好文件；城市码表打包在 `electron/data/china-city-codes.json`。
+- 偏好文件：`app.getPath('userData')/preferences.json`，保存 `loginItemInitialized`、`updateNotifications`（每个版本的一次性手动下载提醒）、`worldClocks`（`{ items: [{ id, label }], index }`）、顶层 `menuBarTimeZone`（IANA id；省略或 `null` 表示跟随系统本地时区，不把系统本地时区写死成字符串；非法或对应时钟不在时钟列表中则清除）与可选的 `weatherCity`（`{ name, latitude, longitude, country?, admin1? }`；省略表示按 IP 定位）。天气结果只缓存在主进程内存，不写偏好文件；城市码表打包在 `electron/data/china-city-codes.json`，常用城市清单打包在 `electron/data/quick-cities.json`。
 - 网络只在主进程发生：天气（`ipwho.is`、`t.weather.itboy.net`、`wttr.in`、Open-Meteo 地理编码）与打包后的 `update.electronjs.org` feed 探测、GitHub Release 资产下载。渲染层 CSP 不放开网络，开发态不检查更新。
 - 详细实现见 [implementation.md](implementation.md)；更新细节见 [updater.md](updater.md)。
 
@@ -125,7 +127,7 @@ site/               GitHub Pages 静态主页（不是应用运行时的一部�
 - 渲染主进程给的 `cells`、`almanac`、`clocks`、`weather`、版本号与更新横幅；不渲染登录项状态（由原生菜单直接读取）。
 - 交互：上一月/下一月、年份下拉、今天、点击格子、世界时钟编辑面板（添加/搜索/设为菜单栏/移除）、天气卡片与选城面板、设置按钮、重启更新/下载新版。
 - 设置按钮只发送按钮坐标；菜单内容、登录项与退出都由主进程处理。`ui:openPanel` 到达时打开对应面板。
-- 天气卡片只请求主进程的当前结果；点击卡片打开城市选择面板，经 `weather:searchCity` 搜索、`weather:setCity` 保存或清除手动城市。定位、网络与偏好读写都不在渲染层。
+- 天气卡片只请求主进程的当前结果；点击卡片打开城市选择面板，搜索框为空时经 `weather:quickCities` 显示当前国家的离线常用城市，输入后经 `weather:searchCity` 搜索，`weather:setCity` 保存或清除手动城市。定位、网络与偏好读写都不在渲染层。
 - 指针进入/离开窗口根节点时通知主进程；Esc 由主进程的 `before-input-event` 处理。
 - 手动检查的短状态完全来自主进程 `update:status`；检查结果与更新通知共用 `update-banner`，定时状态约 2.6 秒后隐藏。
 
@@ -146,7 +148,8 @@ site/               GitHub Pages 静态主页（不是应用运行时的一部�
 - `calendar.js`：42 格、次要文字、菜单栏标题、「黄历」。
 - `world-clocks.js`：城市目录与搜索、IANA 校验、世界时钟格式化（`HH:mm` 与菜单栏标题）、相对时差文案、列表增删、偏好清洗。
 - `settings-menu.js`：设置菜单模板构建（顺序、版本 sublabel、登录项 checkbox、`Cmd+Q`）。
-- `weather.js`：WMO 代码中文映射、天气文字到 emoji 的映射、城市名选择、坐标校验、地理编码结果解析、`weatherCity` 读写/清除、手动城市与 IP 的取位逻辑、请求 URL、结果格式化，以及可注入 `fetch` 的主进程请求服务与 30 分钟缓存。
+- `weather.js`：WMO 代码中文映射、天气文字到 emoji 的映射、城市名选择、坐标校验、地理编码结果解析、`weatherCity` 读写/清除、手动城市与 IP 的取位逻辑、当前国家来源、请求 URL、结果格式化，以及可注入 `fetch` 的主进程请求服务与 30 分钟缓存。
+- `quick-cities.js`：离线常用城市清单读取、ISO 国家代码与中英文国家名匹配、城市记录校验与已选城市判定。
 - `update-feed.js`：feed URL 与 204/200 解释。
 - `update-status.js`：状态到短文案/计时标志的映射。
 - `app-version.js`：`v` 前缀规范化。

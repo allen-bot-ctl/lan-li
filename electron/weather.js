@@ -134,6 +134,18 @@ function parseIpLocation(data) {
   };
 }
 
+// ipwho.is returns both the localized/English country name and the country
+// code. Keep both so quick-city matching can prefer the stable code.
+function countryFromIpData(data) {
+  if (!data || typeof data !== 'object' || data.success === false) {
+    return { country: '', countryCode: '' };
+  }
+  return {
+    country: textValue(data.country),
+    countryCode: textValue(data.country_code).toUpperCase()
+  };
+}
+
 function normalizeWeatherCity(value) {
   if (!value || typeof value !== 'object') return null;
   const name = textValue(value.name);
@@ -355,6 +367,7 @@ function createWeatherService(options = {}) {
     : REQUEST_TIMEOUT_MS;
 
   let manualCity = normalizeWeatherCity(options.weatherCity);
+  let ipCountry = { country: '', countryCode: '' };
   let cache = null; // { at, result }
   let inFlight = null;
   let generation = 0;
@@ -389,6 +402,7 @@ function createWeatherService(options = {}) {
 
     const data = await fetchJson(IP_LOCATION_URL);
     const location = resolveWeatherLocation(null, data);
+    ipCountry = countryFromIpData(data);
     if (!location) throw new Error('IP 定位未返回有效坐标');
     return location;
   }
@@ -488,6 +502,24 @@ function createWeatherService(options = {}) {
     return manualCity;
   }
 
+  // The quick-city list follows the same location source as the weather card:
+  // a saved manual city or, when automatic, the last IP geolocation result.
+  // With automatic mode and no IP data yet, resolve it once so opening the
+  // picker can still show the country's cities.
+  async function getCountry() {
+    if (manualCity) {
+      return { country: manualCity.country || '', countryCode: '' };
+    }
+    if (!ipCountry.country && !ipCountry.countryCode) {
+      try {
+        await locate();
+      } catch {
+        // No country is available; the picker hides the quick-city section.
+      }
+    }
+    return { ...ipCountry };
+  }
+
   async function searchCity(query) {
     const url = buildGeocodingUrl(query);
     if (!url) return [];
@@ -509,6 +541,7 @@ function createWeatherService(options = {}) {
     refresh,
     setCity,
     searchCity,
+    getCountry,
     getCached() {
       return cache ? cache.result : null;
     }
@@ -540,6 +573,7 @@ module.exports = {
   pickIpCity,
   normalizeCoordinates,
   parseIpLocation,
+  countryFromIpData,
   normalizeWeatherCity,
   readWeatherCity,
   writeWeatherCity,

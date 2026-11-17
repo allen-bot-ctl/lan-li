@@ -61,6 +61,10 @@ const {
   writeWeatherCity,
   unavailableWeather
 } = require('./weather');
+const {
+  findQuickCities,
+  sameCity
+} = require('./quick-cities');
 const { createLoginItem } = require('./login-item');
 
 const WINDOW_WIDTH = 580;
@@ -751,6 +755,33 @@ function registerIpc() {
         (error && error.message ? error.message : error));
       return [];
     }
+  });
+
+  // Built-in quick cities follow the same country source as the weather card:
+  // a saved manual city's country, or the IP country for automatic mode.
+  ipcMain.handle('weather:quickCities', async () => {
+    const manual = readWeatherCity(readPreferences());
+    let country = manual ? manual.country || '' : '';
+    if (!manual && weatherService) {
+      try {
+        const current = await weatherService.getCountry();
+        country = current.countryCode || current.country;
+      } catch {
+        country = '';
+      }
+    }
+
+    const group = findQuickCities(country);
+    if (!group) return { country: '', countryCode: '', cities: [] };
+    return {
+      country: group.country,
+      countryCode: group.code,
+      cities: group.cities.map((city) => ({
+        ...city,
+        label: [city.name, city.admin1, city.country].filter(Boolean).join(' · '),
+        selected: sameCity(city, manual)
+      }))
+    };
   });
 
   // Save first and return immediately; the refresh runs in the background and

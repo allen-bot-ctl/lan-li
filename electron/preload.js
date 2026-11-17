@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('lanli', {
   searchClocks: (payload) => ipcRenderer.invoke('clocks:search', payload),
   getWeather: () => ipcRenderer.invoke('weather:get'),
   searchCity: (query) => ipcRenderer.invoke('weather:searchCity', query),
+  getQuickCities: () => ipcRenderer.invoke('weather:quickCities'),
   setCity: (city) => ipcRenderer.invoke('weather:setCity', city),
   onWeatherUpdate: (callback) => {
     ipcRenderer.on('weather:update', (_event, payload) => callback(payload));

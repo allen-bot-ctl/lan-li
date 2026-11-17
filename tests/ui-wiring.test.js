@@ -31,3 +31,16 @@ test('clock candidates drop added zones and only report no match for a query', (
   assert.match(renderer, /clockSearch\.value\.trim\(\) === ''/);
   assert.equal(/meta\.textContent = '已添加'/.test(renderer), false);
 });
+
+test('weather picker lists quick cities when the search box is empty', () => {
+  const renderer = source('electron/renderer/calendar.js');
+  const preload = source('electron/preload.js');
+  const main = source('electron/main.js');
+
+  assert.match(renderer, /weatherSearch\.value\.trim\(\) === ''/);
+  assert.match(renderer, /section\.textContent = '常用城市'/);
+  assert.match(renderer, /api\.getQuickCities\(\)/);
+  assert.match(renderer, /tag\.textContent = '已选'/);
+  assert.match(preload, /getQuickCities:\s*\(\)\s*=>\s*ipcRenderer\.invoke\('weather:quickCities'\)/);
+  assert.match(main, /ipcMain\.handle\('weather:quickCities'/);
+});

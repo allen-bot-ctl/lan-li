@@ -205,6 +205,7 @@ main.setupUpdates()
 | `app:version` | `getVersion` | 返回 `formatVersionLabel(app.getVersion())`，如 `v0.1.13` |
 | `weather:get` | `getWeather` | 返回当前天气结果；有 `preferences.weatherCity` 时直接用其城市名与坐标，否则按 IP 定位；30 分钟缓存 |
 | `weather:searchCity` | `searchCity` | `query`；主进程请求 Open-Meteo 地理编码，返回最多 8 条 `{ name, admin1, country, latitude, longitude, label }`，`label` 为「城市名 · 省/州 · 国家」；空查询返回空数组 |
+| `weather:quickCities` | `getQuickCities` | 无参数；按手动城市 `weatherCity.country` 或自动模式的 IP 国家，从内置 `electron/data/quick-cities.json` 返回 `{ country, countryCode, cities: [{ name, latitude, longitude, country?, admin1?, label, selected }] }`；无法确定国家或该国不在清单时 `cities` 为空 |
 | `weather:setCity` | `setCity` | `{ name, latitude, longitude, country?, admin1? }` 或 `null`；校验后写入/删除 `preferences.weatherCity` 并立即返回（不等待网络），后台强制刷新，结果经 `weather:update` 异步推送 |
 | `calendar:getState` | `getState` | 当前 `view`、`focus`、42 格、`almanac`、`clocks: { items }`（每项含 `time`、`relativeText`、`isMenuBar`） |
 | `calendar:setView` | `setView` | 校验并切换浏览年月/焦点日，返回新状态 |
@@ -280,16 +281,18 @@ main.setupUpdates()
   - `preferences.weatherCity` 存在时，直接用保存的 `name`、`latitude`、`longitude`（可选 `country`、`admin1`），**不请求 `ipwho.is`**。启动时由主进程读入天气服务。
   - 否则请求 `https://ipwho.is/`，用返回的 `latitude` / `longitude` / `city` 与 `country_code`（`=== 'CN'` 判定中国）；城市名直接使用 IP 返回结果，不做反向地理编码。
   - 取数前写 `天气位置=手动：<城市>` / `天气位置=IP：<城市>` 日志。
+- 快捷城市：`electron/quick-cities.js` 读取打包的 `electron/data/quick-cities.json`（按 ISO 国家代码分组，城市含 `name`/`latitude`/`longitude`/`country`，中国城市另含 `admin1`）；`findQuickCities` 同时接受 Open-Meteo 的中文国家名与 ipwho.is 的英文国家名 / `country_code`。当前国家取手动城市的 `weatherCity.country`，自动模式取最近一次 IP 定位的 `country_code`（优先）或国家名；拿不到国家时不显示快捷城市。`sameCity` 用于把当前手动城市标成「已选」。
 - 手动选择城市：
-  - 点击天气卡片任意位置或标题右侧「更换城市 ›」，渲染层打开复用 `.picker-*` 样式的城市面板；列表首项固定为「自动（按 IP）」，其余为「城市名 · 省/州 · 国家」。
-  - 输入框经 `weather:searchCity` 调 `https://geocoding-api.open-meteo.com/v1/search?name=<q>&count=8&language=zh&format=json`；网络请求只在主进程。
+  - 点击天气卡片任意位置或标题右侧「更换城市 ›」，渲染层打开复用 `.picker-*` 样式的城市面板；列表首项固定为「自动（按 IP）」。
+  - 搜索框为空时，在「自动（按 IP）」下方显示小标题「常用城市」与该国快捷城市；当前手动城市标为「已选」并禁用。点击快捷城市与搜索结果走同一套 `weather:setCity` 逻辑：面板立即关闭、卡片显示「城市名 · 加载中…」，天气后台刷新。
+  - 输入内容后经 `weather:searchCity` 调 `https://geocoding-api.open-meteo.com/v1/search?name=<q>&count=8&language=zh&format=json`，显示「城市名 · 省/州 · 国家」；网络请求只在主进程。
   - 点击列表项后渲染层**立即关闭面板**并把天气卡片文字显示为「<城市名> · 加载中…」，不等网络；`weather:setCity` 写入 `preferences.weatherCity = { name, latitude, longitude, country?, admin1? }`（选「自动」则删除该键）后立即返回，主进程清理缓存并异步强制刷新，结果经 `weather:update` 推送。
 - `createWeatherService({ fetch, logger, now, setTimeout, clearTimeout, weatherCity })`：所有请求带 `User-Agent` 与 8 秒超时；结果缓存 30 分钟，失败也写入缓存时间，30 分钟内不重复请求；成功/失败分别写 info/warn 日志。`setCity` 会清空旧城市缓存并让进行中的旧请求失效。
 - 打开窗口时调用 `refreshWeather()`：缓存超过 30 分钟才重新请求；`setInterval` 每 30 分钟后台刷新一次，结果经 `weather:update` 推给渲染层。首次打开且无缓存时主进程会按 IP 或手动城市取一次。
 - 结果带 `emoji`（`weatherEmoji()` 按「雷 → 雪 → 雨 → 雾 → 阴 → 多云 → 晴」优先匹配；未知用 `🌡️`），渲染层显示 emoji、`17°` 与「城市 · 天气」。加载中显示「天气加载中…」或「城市 · 加载中…」，全部数据源失败统一显示「天气暂不可用」，不弹窗。CSP 仍为 `default-src 'self'`，不放开网络。
 - 不再请求 macOS 定位授权：没有 `navigator.geolocation`、定位权限处理器、`NSLocation*` 用途说明或原生定位依赖。
 
-**测试**：`tests/weather.test.js`（城市码表匹配与 admin1 回退、itboy 与 wttr.in 解析、URL 构造、IP 失败、坐标校验、地理编码结果解析、天气文字→emoji 映射、`weatherCity` 含 `country`/`admin1` 的读写/清除、有无手动城市的取位逻辑、itboy 失败回退、非中国直走 wttr.in、定位与来源日志文案、注入假 fetch 的缓存/失败路径与手动/自动切换）。
+**测试**：`tests/weather.test.js`（城市码表匹配与 admin1 回退、itboy 与 wttr.in 解析、URL 构造、IP 失败、坐标校验、地理编码结果解析、天气文字→emoji 映射、`weatherCity` 含 `country`/`admin1` 的读写/清除、有无手动城市的取位逻辑、手动/IP 国家来源、itboy 失败回退、非中国直走 wttr.in、定位与来源日志文案、注入假 fetch 的缓存/失败路径与手动/自动切换）；`tests/quick-cities.test.js`（清单结构、国家代码/中英文国家名匹配、已选城市判定）；`tests/ui-wiring.test.js`（空搜索时显示「常用城市」并走 `weather:quickCities`）。
 
 ## 相关文档
 

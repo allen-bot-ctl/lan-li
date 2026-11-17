@@ -45,6 +45,8 @@ let searchTimer = null;
 let weatherToken = 0;
 let weatherSearchToken = 0;
 let weatherSearchTimer = null;
+let weatherQuickCities = null;
+let weatherQuickToken = 0;
 let updateMode = null;
 let bannerMode = null;
 let checkStatusTimer = null;
@@ -461,7 +463,15 @@ function weatherRowButton(row) {
   name.className = 'picker-name';
   name.textContent = row.label;
 
-  button.append(name);
+  if (row.selected) {
+    button.disabled = true;
+    const tag = document.createElement('span');
+    tag.className = 'picker-zone';
+    tag.textContent = '已选';
+    button.append(name, tag);
+  } else {
+    button.append(name);
+  }
   button.addEventListener('click', () => {
     const city = row.auto
       ? null
@@ -489,10 +499,41 @@ function renderWeatherPicker(rows) {
   weatherList.replaceChildren();
   weatherList.append(weatherRowButton({ auto: true, label: '自动（按 IP）' }));
 
+  if (weatherSearch.value.trim() === '') {
+    const cities = weatherQuickCities && Array.isArray(weatherQuickCities.cities)
+      ? weatherQuickCities.cities
+      : [];
+    if (cities.length === 0) return;
+
+    const section = document.createElement('div');
+    section.className = 'picker-section-label';
+    section.textContent = '常用城市';
+    weatherList.append(section);
+    for (const row of cities) {
+      weatherList.append(weatherRowButton(row));
+    }
+    return;
+  }
+
   if (!Array.isArray(rows) || rows.length === 0) return;
   for (const row of rows) {
     weatherList.append(weatherRowButton(row));
   }
+}
+
+function loadQuickCities() {
+  const token = weatherQuickToken + 1;
+  weatherQuickToken = token;
+  api.getQuickCities().then((result) => {
+    if (token !== weatherQuickToken) return;
+    if (weatherSearch.value.trim() !== '') return;
+    weatherQuickCities = result && Array.isArray(result.cities) ? result : null;
+    renderWeatherPicker([]);
+  }).catch(() => {
+    if (token !== weatherQuickToken) return;
+    weatherQuickCities = null;
+    if (weatherSearch.value.trim() === '') renderWeatherPicker([]);
+  });
 }
 
 function runWeatherSearch() {
@@ -500,6 +541,14 @@ function runWeatherSearch() {
     clearTimeout(weatherSearchTimer);
     weatherSearchTimer = null;
   }
+
+  if (weatherSearch.value.trim() === '') {
+    weatherSearchToken += 1;
+    renderWeatherPicker([]);
+    loadQuickCities();
+    return;
+  }
+
   weatherSearchTimer = setTimeout(() => {
     weatherSearchTimer = null;
     const token = weatherSearchToken + 1;
@@ -517,7 +566,8 @@ function openWeatherPicker() {
   clearSettingsHighlight();
   weatherPicker.hidden = false;
   weatherSearch.value = '';
-  renderWeatherPicker([]);
+  weatherQuickCities = null;
+  weatherQuickToken += 1;
   runWeatherSearch();
   weatherSearch.focus();
 }
@@ -529,6 +579,8 @@ function closeWeatherPicker() {
     weatherSearchTimer = null;
   }
   weatherSearchToken += 1;
+  weatherQuickToken += 1;
+  weatherQuickCities = null;
   weatherList.replaceChildren();
 }
 
