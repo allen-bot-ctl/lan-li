@@ -55,9 +55,9 @@ ${M}月${D}日 ${HH}:${mm}:${ss}
 
 **城市目录与搜索**
 
-- `CITY_CATALOG` 是离线静态表，覆盖北京/上海、东京、首尔、新加坡、香港、台北、曼谷、新德里、迪拜、莫斯科、伦敦、巴黎、柏林、纽约、洛杉矶/旧金山、芝加哥、温哥华、多伦多、悉尼、奥克兰、圣保罗、UTC。
-- 一个 IANA id 可以对应多行标签：北京与上海都是 `Asia/Shanghai`，洛杉矶与旧金山都是 `America/Los_Angeles`。**去重按 IANA id**，但添加时保存用户点选那一行的 `label`。
-- `searchCatalog(query, { catalog, supportedValuesOf, addedIds })`：先匹配目录的中文标签、别名与 IANA id（下划线按空格处理）。目录无匹配且查询非空时，才用注入的 `Intl.supportedValuesOf('timeZone')` 按 id 或最后一段回退。结果带 `{ id, label, source, added }`；已添加的 id 仍显示但 `added: true`，渲染层禁用。
+- `CITY_CATALOG` 是离线静态表，覆盖北京（别名上海/中国）、东京、首尔、新加坡、香港、台北、曼谷、新德里、迪拜、莫斯科、伦敦、巴黎、柏林、纽约、洛杉矶/旧金山、芝加哥、温哥华、多伦多、悉尼、奥克兰、圣保罗、UTC。
+- 一个 IANA id 可以对应多行标签：洛杉矶与旧金山都是 `America/Los_Angeles`。**去重按 IANA id**，但添加时保存用户点选那一行的 `label`。
+- `searchCatalog(query, { catalog, supportedValuesOf, addedIds })`：先匹配目录的中文标签、别名与 IANA id（下划线按空格处理）。目录无匹配且查询非空时，才用注入的 `Intl.supportedValuesOf('timeZone')` 按 id 或最后一段回退。结果带 `{ id, label, source, added }`；已添加的 id 仍返回但 `added: true`，渲染层在候选列表中过滤掉，只在编辑面板下方「已添加城市」列出。
 - `isValidTimeZone(id, supportedValuesOf)` 以 `Intl.DateTimeFormat` 为准；这样 `Asia/Kolkata` 这类被 ICU 规范化为 `Asia/Calcutta` 的别名也能通过，输入列表不会放行未知 id。
 
 **格式化（`formatClock(now, timeZone)`）**
@@ -104,7 +104,7 @@ ${M}月${D}日 ${HH}:${mm}:${ss}
 - `calendar:onTick` 每秒发送 `{ almanac, clocks }`（窗口可见时），`clocks` 与菜单栏标题都按当前时刻重新计算。
 - 右栏「世界时钟」卡片常驻列出全部城市：城市名、相对时区小字、右侧 `HH:mm`；菜单栏显示中的城市带橙色「菜单栏」标签。`‹`/`›`、圆点、`+`/`×` 与滑动手势都已移除。
 - 标题右侧「编辑」打开编辑面板（覆盖整个面板的居中浮层）：上方搜索框沿用 `clocks:search`，下方列出已添加城市；每行「设为菜单栏」经 `clocks:setMenuBar` 持久化并立即刷新托盘标题，当前项禁用；「移除」经 `clocks:remove`，删除当前菜单栏时区时回退本地。
-- 编辑面板的搜索结果在面板内滚动，已添加项禁用；添加后不关闭面板，列表与搜索结果同步刷新。面板不新建窗口、不调用系统对话框、无网络、无定位。
+- 编辑面板的搜索结果在面板内滚动，已添加的时区直接过滤，不再显示「已添加」行；搜索框为空时不显示「没有匹配的时区」，只有输入内容且无结果时才显示。添加后不关闭面板，列表与搜索结果同步刷新。面板不新建窗口、不调用系统对话框、无网络、无定位。
 - 空列表显示「尚未添加城市」。`buildAlmanac` / `buildCells` / `isToday` 仍按系统本地时间，不受菜单栏显示时区影响。
 
 **测试**：`tests/world-clocks.test.js`（城市/别名/IANA 回退搜索、重复 id、共享时区标签、DST 冬夏墙上时间、半小时时区、UTC、`HH:mm` 格式化、相对时差「今天/昨天/明天 · ±N 小时」、列表增删/清洗、首次默认 vs 显式空列表）。
@@ -141,8 +141,8 @@ ${M}月${D}日 ${HH}:${mm}:${ss}
 
 **设置菜单（`electron/settings-menu.js` + `menu:openSettings`）**
 
-- 顶栏「⚙︎ 设置」把按钮右缘/下缘坐标经 preload `openSettings({ x, y })` → `menu:openSettings` 发给主进程；渲染层只负责高亮按钮。
-- 主进程用 `buildSettingsMenuTemplate({ version, openAtLogin }, actions)` 生成模板，再 `Menu.buildFromTemplate` + `menu.popup({ window, x, y })`。x 取按钮右缘减去约 250px 菜单宽度，菜单右对齐按钮下方；坐标缺失时退回光标位置。
+- 顶栏「⚙︎ 设置」把按钮左缘/下缘加 4px 的坐标经 preload `openSettings({ x, y })` → `menu:openSettings` 发给主进程；渲染层只负责高亮按钮。
+- 主进程用 `buildSettingsMenuTemplate({ version, openAtLogin }, actions)` 生成模板，再 `Menu.buildFromTemplate` + `menu.popup({ window, x, y })`。菜单左上角直接放在按钮左缘、下方 4px 处；超出窗口右侧时交给 macOS 自动调整。坐标缺失时退回光标位置。
 - 模板顺序固定：检查更新（`sublabel` 为 `formatVersionLabel(app.getVersion())`）、登录时打开（`type: 'checkbox'`，`checked` 来自 `getOpenAtLogin()`）、分隔线、编辑世界时钟…、更换天气城市…、分隔线、退出栏历（`accelerator: 'Cmd+Q'`）。
 - 检查更新直接调用 `performUpdateCheck()`（`updater.checkNow({ manual: true })`），不经过渲染层；结果仍走 `update:status`。
 - 「登录时打开」点击后用 Electron 回传的 `menuItem.checked` 调 `applyLoginItem()`，业务实现不变。
@@ -212,7 +212,7 @@ main.setupUpdates()
 | `clocks:add` | `addClock` | `{ id, label? }`；校验/去重后持久化，返回 `clocks` 快照 |
 | `clocks:remove` | `removeClock` | 删除当前时钟或 `{ id }`；若删掉菜单栏显示时区则回退本地并刷新托盘；持久化并返回快照 |
 | `clocks:setMenuBar` | `setMenuBarClock` | `{ id }`（省略时取当前显示时钟）；校验后将其设为菜单栏显示时区，持久化并刷新托盘标题，返回快照；无效/不在列表中为无操作 |
-| `clocks:search` | `searchClocks` | `{ query }`；返回目录 + IANA 回退结果，已添加项带 `added` |
+| `clocks:search` | `searchClocks` | `{ query }`；返回目录 + IANA 回退结果，已添加项带 `added`，由渲染层过滤 |
 
 **send（渲染 → 主）**
 
@@ -220,7 +220,7 @@ main.setupUpdates()
 | --- | --- | --- |
 | `pointer:enter` | `pointerEnter` | 取消关闭计时 |
 | `pointer:leave` | `pointerLeave` | 安排 200ms 关闭 |
-| `menu:openSettings` | `openSettings` | `{ x, y }` 为设置按钮右缘/下缘；主进程弹出原生设置菜单 |
+| `menu:openSettings` | `openSettings` | `{ x, y }` 为设置按钮左缘/下缘 + 4px；主进程把原生菜单左上角放在该点 |
 | `update:restart` | `restartToUpdate` | 就绪后重启更新（自更新） |
 | `update:openLatest` | `openLatestRelease` | 打开手动下载地址 |
 

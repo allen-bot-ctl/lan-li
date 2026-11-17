@@ -571,6 +571,9 @@ select {
   display: flex;
   width: 100%;
   flex-direction: column;
+  /* Buttons default to align-items:flex-start, which would shrink the header
+     and keep 「更换城市 ›」next to the title. Stretch it like a normal card. */
+  align-items: stretch;
   color: var(--text);
   font-family: inherit;
   text-align: left;

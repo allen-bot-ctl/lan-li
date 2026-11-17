@@ -200,7 +200,12 @@ function clearSearchTimer() {
 function renderSearchResults(rows) {
   clockSearchResults.replaceChildren();
 
-  if (!Array.isArray(rows) || rows.length === 0) {
+  const available = Array.isArray(rows)
+    ? rows.filter((row) => row && !row.added)
+    : [];
+
+  if (available.length === 0) {
+    if (clockSearch.value.trim() === '') return;
     const empty = document.createElement('div');
     empty.className = 'picker-empty';
     empty.textContent = '没有匹配的时区';
@@ -208,30 +213,22 @@ function renderSearchResults(rows) {
     return;
   }
 
-  for (const row of rows) {
+  for (const row of available) {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'picker-item';
     button.setAttribute('role', 'option');
-    button.disabled = Boolean(row.added);
-    button.setAttribute('aria-selected', row.added ? 'true' : 'false');
 
     const name = document.createElement('span');
     name.className = 'picker-name';
     name.textContent = row.label;
 
     const meta = document.createElement('span');
-    if (row.added) {
-      meta.className = 'picker-added';
-      meta.textContent = '已添加';
-    } else {
-      meta.className = 'picker-zone';
-      meta.textContent = row.id;
-    }
+    meta.className = 'picker-zone';
+    meta.textContent = row.id;
 
     button.append(name, meta);
     button.addEventListener('click', () => {
-      if (button.disabled) return;
       api.addClock({ id: row.id, label: row.label }).then(handleClockSnapshot).catch(() => {
         refreshState();
       });
@@ -398,8 +395,8 @@ settingsButton.addEventListener('click', () => {
   settingsButton.classList.add('is-open');
   settingsButton.setAttribute('aria-expanded', 'true');
   api.openSettings({
-    x: Math.round(rect.right),
-    y: Math.round(rect.bottom)
+    x: Math.round(rect.left),
+    y: Math.round(rect.bottom + 4)
   });
 });
 

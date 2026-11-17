@@ -26,12 +26,11 @@ const DEFAULT_WORLD_CLOCK = Object.freeze({
 const MAX_LABEL_LENGTH = 40;
 const MAX_SEARCH_RESULTS = 40;
 
-// Deliberately small and offline. Rows may share an IANA id (北京/上海,
-// 洛杉矶/旧金山): duplicates are rejected by id, while the label the user
-// picked is stored as-is.
+// Deliberately small and offline. Rows may share an IANA id (洛杉矶/旧金山):
+// duplicates are rejected by id, while the label the user picked is stored
+// as-is.
 const CITY_CATALOG = Object.freeze([
   { id: 'Asia/Shanghai', label: '北京', aliases: ['上海', '中国'] },
-  { id: 'Asia/Shanghai', label: '上海', aliases: [] },
   { id: 'Asia/Tokyo', label: '东京', aliases: [] },
   { id: 'Asia/Seoul', label: '首尔', aliases: ['韩国'] },
   { id: 'Asia/Singapore', label: '新加坡', aliases: [] },

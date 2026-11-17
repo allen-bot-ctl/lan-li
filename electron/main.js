@@ -65,9 +65,6 @@ const { createLoginItem } = require('./login-item');
 
 const WINDOW_WIDTH = 580;
 const WINDOW_HEIGHT = 400;
-// Native menu width used only to right-align the popup with the settings
-// button; Electron's popup takes the menu's left edge.
-const SETTINGS_MENU_WIDTH = 250;
 
 let tray = null;
 let calendarWindow = null;
@@ -468,14 +465,14 @@ function pointerInsideWindow() {
     point.y >= bounds.y && point.y < bounds.y + bounds.height;
 }
 
-// The renderer sends the settings button's right/bottom edge. Electron's
-// popup takes the menu's left edge, so right-align the ~250px menu under it.
+// The renderer sends the settings button's left edge and bottom + 4. Electron's
+// popup takes the menu's top-left corner, so use that point as-is.
 function settingsMenuAnchor(position) {
   const x = Number(position && position.x);
   const y = Number(position && position.y);
   if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
   return {
-    x: Math.max(0, Math.round(x - SETTINGS_MENU_WIDTH)),
+    x: Math.max(0, Math.round(x)),
     y: Math.round(y)
   };
 }

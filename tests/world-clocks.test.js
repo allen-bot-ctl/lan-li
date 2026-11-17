@@ -289,7 +289,7 @@ test('removing the last remaining clock leaves an explicit empty list', () => {
 
 test('searchCatalog finds Chinese labels and aliases first', () => {
   const shanghai = searchCatalog('上海', { supportedValuesOf: SUPPORTED });
-  assert.ok(shanghai.some((row) => row.label === '上海'));
+  assert.deepEqual(shanghai.map((row) => row.label), ['北京']);
   assert.ok(shanghai.every((row) => row.source === 'catalog'));
 
   const korea = searchCatalog('韩国', { supportedValuesOf: SUPPORTED });
@@ -299,7 +299,23 @@ test('searchCatalog finds Chinese labels and aliases first', () => {
     catalog: CITY_CATALOG,
     supportedValuesOf: SUPPORTED
   });
-  assert.ok(all.length >= 24);
+  assert.ok(all.length >= 23);
+});
+
+test('city catalog has no duplicate labels and keeps 上海 as a 北京 alias', () => {
+  const labels = CITY_CATALOG.map((row) => row.label);
+  assert.equal(new Set(labels).size, labels.length);
+  assert.equal(labels.includes('上海'), false);
+
+  const beijing = CITY_CATALOG.find((row) => row.label === '北京');
+  assert.ok(beijing.aliases.includes('上海'));
+  assert.deepEqual(
+    searchCatalog('上海', {
+      catalog: CITY_CATALOG,
+      supportedValuesOf: SUPPORTED
+    }).map((row) => row.label),
+    ['北京']
+  );
 });
 
 test('searchCatalog falls back to IANA ids and marks added zones', () => {
@@ -316,7 +332,7 @@ test('searchCatalog falls back to IANA ids and marks added zones', () => {
   }]);
 });
 
-test('searchCatalog shows shared-zone rows but marks both as added', () => {
+test('searchCatalog marks shared-zone rows added by IANA id', () => {
   const results = searchCatalog('洛杉矶', {
     supportedValuesOf: SUPPORTED,
     addedIds: ['America/Los_Angeles']
@@ -328,6 +344,7 @@ test('searchCatalog shows shared-zone rows but marks both as added', () => {
     supportedValuesOf: SUPPORTED,
     addedIds: ['Asia/Shanghai']
   });
+  assert.deepEqual(shanghai.map((row) => row.label), ['北京']);
   assert.equal(shanghai[0].added, true);
 });
 
