@@ -6,7 +6,7 @@
 npm test
 ```
 
-实际执行 `node --test tests/*.test.js`（Node 内置 test runner）。当前共 **97** 个测试，全部通过。测试不依赖 Electron 窗口，可在非 macOS 上运行；但 UI/更新行为仍需真机验收。
+实际执行 `node --test tests/*.test.js`（Node 内置 test runner）。当前共 **106** 个测试，全部通过。测试不依赖 Electron 窗口，可在非 macOS 上运行；但 UI/更新行为仍需真机验收。
 
 ## 测试文件与覆盖面
 
@@ -14,7 +14,8 @@ npm test
 | --- | --- |
 | `tests/calendar.test.js` | 节气（立冬/小雪）、2026-11-11 不显示「光棍节」、源码不含 `getOtherFestivals`、农历初一显示「十月」、初七、2026-11-16 黄历（丙午马年·十月、宜首项纳采、忌首项上梁、可见项数与完整 title）、42 格与周一起始/lead、今日/周末/补齐格/节日标记、菜单栏标题格式（本地语义保持不变） |
 | `tests/world-clocks.test.js` | 城市/别名/IANA 回退搜索、按 IANA id 去重与共享时区标签（北京/上海、洛杉矶/旧金山）、DST 按当前时刻的墙上时间（纽约冬夏）、半小时时区（新德里）、UTC 与 +8、`addClock`/`removeClock`/`nextClock`/`prevClock` 增删与绕回、`normalizeWorldClocks` 偏好清洗、首次默认北京 vs 显式空列表、非法 id/时刻拒绝；菜单栏显示时区 `resolveMenuBarTimeZone`（未设置/`null`/非法/未知→本地，仍在列表中→保留，`Asia/Kolkata`/`Asia/Calcutta` 别名等同）、删除所选时区后回退并清除持久化值 vs 删除其它时区保持选择、`formatMenuTitleInZone` 固定时刻下的格式/跨区日期翻转（上海次日、纽约前一日）与 UTC/+8、一致通过 `isValidMenuTitle`/`MENU_TITLE_PATTERN`；确认 `formatClock` 不再返回 `offsetText` / `dayRelation` |
-| `tests/weather.test.js` | WMO 天气代码中文映射与未知值、城市名 `city → locality → principalSubdivision`、ipwho.is 失败时忽略城市、坐标范围与空值校验、反向地理编码/Open-Meteo URL、`城市 · 天气 · X°C` 格式化与温度取整、注入假 `fetch` 的 30 分钟缓存与失败降级（不联网） |
+| `tests/weather.test.js` | WMO 天气代码中文映射与未知值、城市名 `city → locality → principalSubdivision`、ipwho.is 失败时忽略城市、坐标范围与空值校验、反向地理编码/Open-Meteo URL、`城市 · 天气 · X°C` 格式化与温度取整、定位来源文案（系统成功/失败/授权拒绝·受限/无 geolocation）、注入假 `fetch` 的 30 分钟缓存与失败降级（不联网） |
+| `tests/location-permission.test.js` | 授权决策纯函数（not determined → 申请、authorized → 系统、denied/restricted → IP、模块加载失败/未知 → 现有流程）；工厂 `createLocationPermission`（注入假原生模块）覆盖申请一次、轮询等待、超时回退、非 darwin/未打包跳过、require 失败不抛 |
 | `tests/login-item.test.js` | LaunchAgent plist 的固定 `Label`、`/usr/bin/open -a <当前 .app>` 参数、`RunAtLoad`、XML 转义、空路径拒绝；从 `execPath` 向上定位 `.app`、默认 plist 路径；临时目录下 `enable`/`isEnabled`/`disable` 全流程；非打包模式不写文件；找不到 `.app` 与写/删失败时返回原因并走 logger |
 | `tests/app-version.test.js` | `v` 前缀添加与去重、大小写、首尾空白、非法输入降级为空串、永不抛错 |
 | `tests/update-feed.test.js` | feed URL 拼接、owner/repo/server 覆盖、缺参数抛错、`204` → up-to-date、`200` payload → manual、其他状态 → error |

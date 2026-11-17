@@ -194,8 +194,9 @@ main.setupUpdates()
 
 | 频道 | preload API | 作用 |
 | --- | --- | --- |
-| `app:version` | `getVersion` | 返回 `formatVersionLabel(app.getVersion())`，如 `v0.1.12` |
-| `weather:get` | `getWeather` | 可选 `{ latitude, longitude }` 与定位来源 `location`（`{ source: 'system' }` / `{ source: 'system', error: { code, message } }` / `{ source: 'none' }`）；有坐标走反向地理编码 + Open-Meteo，无坐标先 IP 定位；返回 `{ ok, text, ... }`，30 分钟缓存 |
+| `app:version` | `getVersion` | 返回 `formatVersionLabel(app.getVersion())`，如 `v0.1.13` |
+| `weather:get` | `getWeather` | 可选 `{ latitude, longitude }` 与定位来源 `location`（`{ source: 'system' }` / `{ source: 'system', error: { code, message } }` / `{ source: 'ip', reason }` / `{ source: 'none' }`）；有坐标走反向地理编码 + Open-Meteo，无坐标先 IP 定位；返回 `{ ok, text, ... }`，30 分钟缓存 |
+| `weather:location` | `getWeatherLocation` | 返回定位模式 `{ mode: 'system' \| 'ip', reason? }`；主进程惰性执行定位授权申请（读状态、`not determined` 时申请一次并等待最多 30 秒），`denied`/`restricted` 返回 `ip` 让渲染层直接走 IP，其余返回 `system` |
 | `calendar:getState` | `getState` | 当前 `view`、`focus`、42 格、`almanac`、`clocks`（含 `menuBarTimeZone` 与 `current.isMenuBar`）、`openAtLogin` |
 | `calendar:setView` | `setView` | 校验并切换浏览年月/焦点日，返回新状态 |
 | `calendar:goToday` | `goToday` | 浏览年月与焦点日回到今天，返回新状态 |
@@ -226,7 +227,7 @@ main.setupUpdates()
 | `update:notice` | `onUpdateNotice` | `ready` / `manual` 横幅；打开窗口与加载完成时重发 |
 | `update:status` | `onUpdateStatus` | 短状态；**仅手动检查**时发送 |
 
-**preload API 全量（21 个）**：`getVersion`、`getState`、`setView`、`goToday`、`addClock`、`removeClock`、`selectClock`、`setMenuBarClock`、`searchClocks`、`getWeather`、`onWeatherUpdate`、`onTick`、`pointerEnter`、`pointerLeave`、`setLogin`、`quit`、`onUpdateNotice`、`checkForUpdate`、`onUpdateStatus`、`restartToUpdate`、`openLatestRelease`。
+**preload API 全量（22 个）**：`getVersion`、`getState`、`setView`、`goToday`、`addClock`、`removeClock`、`selectClock`、`setMenuBarClock`、`searchClocks`、`getWeather`、`getWeatherLocation`、`onWeatherUpdate`、`onTick`、`pointerEnter`、`pointerLeave`、`setLogin`、`quit`、`onUpdateNotice`、`checkForUpdate`、`onUpdateStatus`、`restartToUpdate`、`openLatestRelease`。
 
 **状态文案（`electron/update-status.js`）**
 
@@ -265,7 +266,8 @@ main.setupUpdates()
 
 - 纯函数：`describeWeatherCode`（WMO → 晴/多云/阴/雾/毛毛雨/雨/雪/阵雨/阵雪/雷暴等）、`pickCityName`（`city` → `locality` → `principalSubdivision`）、`pickIpCity`、`normalizeCoordinates`、`parseIpLocation`、`formatWeatherResult`（`城市 · 天气 · X°C`）、`describeLocationSource`（定位来源 → `定位来源=系统` / `定位来源=IP（…）` 文案）以及两个请求 URL 构造器。测试直接 require，不联网。
 - 网络顺序：
-  - 渲染层先 `navigator.geolocation.getCurrentPosition`，`timeout: 10000`；成功则把 `{ latitude, longitude }` 与定位来源 `{ source: 'system' }` 传给 `weather:get`；失败则带 `{ source: 'system', error: { code, message } }`；无 `navigator.geolocation` 则带 `{ source: 'none' }`。
+  - 首次刷新前，渲染层先经 `weather:location` 让主进程确认定位授权（见 [第 10 节](#10-定位授权electronlocation-permissionjs)）：`authorized` 走系统定位，`denied` / `restricted` 直接走 IP。
+  - 渲染层 `navigator.geolocation.getCurrentPosition`，`timeout: 10000`；成功则把 `{ latitude, longitude }` 与定位来源 `{ source: 'system' }` 传给 `weather:get`；失败则带 `{ source: 'system', error: { code, message } }`；授权被拒绝/受限则带 `{ source: 'ip', reason }`；无 `navigator.geolocation` 则带 `{ source: 'none' }`。
   - 无坐标、拒绝、失败或超时时，主进程请求 `https://ipwho.is/`，用返回的 `latitude` / `longitude` / `city`，并写 `定位来源=IP（…）` 日志。
   - 有坐标时请求 BigDataCloud 反向地理编码（`localityLanguage=zh`）取城市名；该请求失败只记 warn，天气仍按「当前位置」显示。
   - 最后请求 Open-Meteo `current=temperature_2m,weather_code&timezone=auto`。
@@ -275,6 +277,17 @@ main.setupUpdates()
 - 渲染层只显示一行；失败统一显示「天气暂不可用」，不弹窗。CSP 仍为 `default-src 'self'`，不放开网络。
 
 **测试**：`tests/weather.test.js`（WMO 映射、城市名优先级、IP 失败、坐标校验、URL、格式化、定位来源文案、注入假 fetch 的缓存/失败路径）。
+
+## 10. 定位授权（`electron/location-permission.js`）
+
+Electron 的 `navigator.geolocation` 在 macOS 上不会调用 `CLLocationManager` 的 `requestWhenInUseAuthorization`（electron/electron#29314、#45290），所以 ad-hoc 签名包虽然被系统登记为定位客户端，却从不弹授权框、只会超时。因此主进程用 `node-mac-permissions` 原生申请一次「使用时」授权。
+
+- 纯函数 `decideLocationAction(status)`：把授权状态映射成动作与日志文本——`not determined` → `request`（申请）；`authorized` → `system`（走系统定位）；`denied` / `restricted` → `ip`（直接走 IP，日志写明原因）；模块加载失败 / 未知状态 → `system`（照旧走现有流程，不崩溃、不申请）。
+- `createLocationPermission({ platform, isPackaged, requireModule, logger, now, setTimeout, clearTimeout })`：原生模块只在 `darwin` 上经注入的 `requireModule` 惰性加载，加载失败只记 warn 并返回「不可用」。`ensureAuthorized()` 读状态、写 `定位授权=<status>` 日志；`not determined` 时申请一次并写 `申请定位授权结果=<status>`，再轮询等待授权变化（最多 30 秒，`setTimeout` 轮询，不阻塞事件循环）。结果在主进程记忆，之后不再重复申请。
+- 开发态（`npm start`，未打包，Info.plist 无用途说明）跳过原生申请，避免 `requestWhenInUseAuthorization` 崩溃，走现有流程。
+- 依赖 `node-mac-permissions` 放在 `optionalDependencies`（`os: ["darwin"]`）：Linux 上 `npm ci` 自动跳过、`npm test` 不受影响；macOS CI 上用 `@electron/rebuild` 为 Electron 重建并打进 `app.asar.unpacked`（`build.asarUnpack` 包含其 `.node`），详见 [release.md](release.md)。
+
+**测试**：`tests/location-permission.test.js`（决策纯函数覆盖 not determined/authorized/denied/restricted/模块加载失败；工厂覆盖申请一次、轮询等待、超时回退、非 darwin/未打包跳过、require 失败不抛）。
 
 ## 相关文档
 

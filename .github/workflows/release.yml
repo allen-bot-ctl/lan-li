@@ -43,6 +43,17 @@ jobs:
           codesign -dv --verbose=2 "dist/mac/栏历.app" 2>&1 | tee /tmp/codesign.log
           grep -q "Signature=adhoc" /tmp/codesign.log
 
+      - name: Verify native location module is rebuilt for x86_64
+        run: |
+          set -euo pipefail
+          find "dist/mac/栏历.app" -name '*.node' -print > /tmp/native-modules.txt
+          if [ ! -s /tmp/native-modules.txt ]; then
+            echo "error: no native .node module found in the app bundle" >&2
+            exit 1
+          fi
+          cat /tmp/native-modules.txt | xargs file | tee /tmp/native-modules-file.txt
+          grep -q "x86_64" /tmp/native-modules-file.txt
+
       - name: Generate zip checksum for in-app update
         run: |
           cd dist

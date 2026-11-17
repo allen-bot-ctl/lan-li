@@ -63,6 +63,7 @@ function unavailableWeather() {
 // renderer sends a small descriptor alongside weather:get:
 //   { source: 'system' }                                   → system location ok
 //   { source: 'system', error: { code, message } }         → system location failed
+//   { source: 'ip', reason: 'denied' | 'restricted' }      → location auth denied/restricted → IP
 //   { source: 'none' }                                     → no navigator.geolocation
 // Coordinates themselves are never logged; only the source and, on failure, the
 // error code/message.
@@ -71,6 +72,13 @@ function describeLocationSource(location) {
 
   if (location.source === 'none') {
     return '定位来源=IP（无系统定位 API）';
+  }
+
+  if (location.source === 'ip') {
+    const reason = textValue(location.reason);
+    if (reason === 'denied') return '定位来源=IP（定位授权被拒绝）';
+    if (reason === 'restricted') return '定位来源=IP（定位授权受限）';
+    return '定位来源=IP（定位授权不可用）';
   }
 
   if (location.source === 'system') {

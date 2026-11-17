@@ -58,6 +58,7 @@ const {
   createWeatherService,
   unavailableWeather
 } = require('./weather');
+const { createLocationPermission } = require('./location-permission');
 const { createLoginItem } = require('./login-item');
 
 const WINDOW_WIDTH = 580;
@@ -74,6 +75,8 @@ let updateNotice = null;
 let weatherService = null;
 let weatherTimer = null;
 let loginItem = null;
+let locationPermission = null;
+let locationAuthPromise = null;
 
 const logger = createLogger();
 
@@ -422,9 +425,30 @@ function setupWeather() {
       warn: (message) => logger.warn('[栏历] 天气：' + message)
     }
   });
+  locationPermission = createLocationPermission({
+    platform: process.platform,
+    isPackaged: app.isPackaged,
+    logger: {
+      info: (message) => logger.info('[栏历] 天气：' + message),
+      warn: (message) => logger.warn('[栏历] 天气：' + message)
+    }
+  });
   weatherTimer = setInterval(() => {
     refreshWeather(true);
   }, WEATHER_REFRESH_MS);
+}
+
+// Native location authorization is requested once, lazily, before the first
+// weather refresh. The result is memoized so subsequent refreshes never prompt
+// again; denied/restricted settle to the IP path without re-asking.
+function ensureLocationAuthorized() {
+  if (!locationPermission) {
+    return Promise.resolve({ action: 'system', status: 'unavailable', log: '' });
+  }
+  if (!locationAuthPromise) {
+    locationAuthPromise = locationPermission.ensureAuthorized();
+  }
+  return locationAuthPromise;
 }
 
 function sendWeather(result) {
@@ -659,6 +683,18 @@ function registerIpc() {
   ipcMain.handle('weather:get', (_event, payload, location) => {
     if (!weatherService) return unavailableWeather();
     return weatherService.get(payload, location);
+  });
+
+  ipcMain.handle('weather:location', async () => {
+    try {
+      const decision = await ensureLocationAuthorized();
+      if (decision && decision.action === 'ip') {
+        return { mode: 'ip', reason: decision.status };
+      }
+      return { mode: 'system' };
+    } catch {
+      return { mode: 'system' };
+    }
   });
 
   ipcMain.handle('calendar:getState', () => buildState());

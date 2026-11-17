@@ -11,7 +11,7 @@
 | `README.md` | 标题 `# 栏历 X.Y.Z`、打包产物示例、`vX.Y.Z` 相关文案 |
 | `site/index.html` | `data-app-version` 的版本文本；如首页文案有「当前版本」也要同步 |
 
-当前版本：`0.1.12`。现有标签 `v0.1.0` 至 `v0.1.12` 均已存在。
+当前版本：`0.1.13`。现有标签 `v0.1.0` 至 `v0.1.13` 均已存在。
 
 ## 本地打包
 
@@ -22,10 +22,10 @@ npm run dist
 等价于 `electron-builder --mac`。`package.json` 的 `build.mac.target` 仍同时包含 dmg 与 zip 的 `x64`、`arm64`，`build.mac.identity` 为 `"-"`（ad-hoc 签名，`hardenedRuntime: false`），**不公证**。因此本地可能产出：
 
 ```text
-dist/LanLi-0.1.12-mac-x64.dmg
-dist/LanLi-0.1.12-mac-x64.zip
-dist/LanLi-0.1.12-mac-arm64.dmg
-dist/LanLi-0.1.12-mac-arm64.zip
+dist/LanLi-0.1.13-mac-x64.dmg
+dist/LanLi-0.1.13-mac-x64.zip
+dist/LanLi-0.1.13-mac-arm64.dmg
+dist/LanLi-0.1.13-mac-arm64.zip
 ```
 
 本地可校验 ad-hoc 签名：
@@ -41,8 +41,8 @@ codesign -dv --verbose=2 "dist/mac/栏历.app" 2>&1 | grep "Signature=adhoc"
 触发：推送 `v*` 标签，例如：
 
 ```bash
-git tag v0.1.12
-git push origin v0.1.12
+git tag v0.1.13
+git push origin v0.1.13
 ```
 
 > 本仓库禁止重写**已经有下载**的发布标签。发现问题时发新版本，不要删标签重推。
@@ -59,7 +59,7 @@ git push origin v0.1.12
    npx electron-builder --mac dmg zip --x64 --publish never
    ```
 
-   环境变量：`CSC_IDENTITY_AUTO_DISCOVERY: "false"`。`build.mac.identity` 为 `"-"`，产物为 ad-hoc 签名。
+   环境变量：`CSC_IDENTITY_AUTO_DISCOVERY: "false"`。`build.mac.identity` 为 `"-"`，产物为 ad-hoc 签名。electron-builder 会用 `@electron/rebuild` 把 `optionalDependencies` 里的 `node-mac-permissions`（`os: ["darwin"]`，原生模块）为 Electron 重建，并按 `build.asarUnpack` 把它解包到 `app.asar.unpacked`，供主进程定位授权使用。
 
 6. 校验 ad-hoc 签名（失败即中止）：
 
@@ -68,7 +68,15 @@ git push origin v0.1.12
    grep -q "Signature=adhoc" /tmp/codesign.log
    ```
 
-7. 生成 zip 校验和：
+7. 校验原生定位模块（失败即中止）：确认 `.app` 内存在 `node-mac-permissions` 的 `.node` 且为 x86_64：
+
+   ```bash
+   find "dist/mac/栏历.app" -name '*.node' -print | xargs file
+   ```
+
+   workflow 里该步骤先 `find ... -name '*.node'` 落到临时文件，若为空直接失败，再 `xargs file` 并 `grep -q "x86_64"`；不是 x86_64 也会失败。
+
+8. 生成 zip 校验和：
 
    ```bash
    cd dist
@@ -77,8 +85,8 @@ git push origin v0.1.12
    done
    ```
 
-8. 上传 artifact：`dist/LanLi-*-mac-x64.dmg`、`dist/LanLi-*-mac-x64.zip`、`dist/LanLi-*-mac-x64.zip.sha256`。
-9. `publish` job（`ubuntu-latest`）用 `softprops/action-gh-release@v2` 创建 Release，名称 `栏历 <tag>`，上传上述三类资产。
+9. 上传 artifact：`dist/LanLi-*-mac-x64.dmg`、`dist/LanLi-*-mac-x64.zip`、`dist/LanLi-*-mac-x64.zip.sha256`。
+10. `publish` job（`ubuntu-latest`）用 `softprops/action-gh-release@v2` 创建 Release，名称 `栏历 <tag>`，上传上述三类资产。
 
 正式资产只有：
 
@@ -90,7 +98,7 @@ git push origin v0.1.12
 
 ## 定位授权提示
 
-ad-hoc 签名后，应用能被 macOS 的定位服务登记，因此用户**首次打开**时可能看到「栏历想要使用您的位置」授权弹窗（用途说明来自 `Info.plist` 的 `NSLocationWhenInUseUsageDescription`）。允许后走系统定位，拒绝/超时则回退 IP 定位。
+ad-hoc 签名后应用能被 macOS 的定位服务登记为客户端，但 Electron 的 `navigator.geolocation` 不会主动申请授权。因此主进程在首次刷新天气前用 `node-mac-permissions` 原生调用 `CLLocationManager` 的 `requestWhenInUseAuthorization` 申请一次「使用时」授权（用途说明来自 `Info.plist` 的 `NSLocationWhenInUseUsageDescription`），用户**首次打开**时会看到「栏历想要使用您的位置」授权弹窗。允许后走系统定位，拒绝/受限则直接回退 IP 定位。
 
 由于每版 ad-hoc 签名都是新的临时身份，**更新到新版本后 macOS 可能要求重新授权**；这是 ad-hoc 签名的预期行为，不要当作回归问题。
 

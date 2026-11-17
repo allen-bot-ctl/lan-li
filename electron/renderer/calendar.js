@@ -371,11 +371,31 @@ function requestWeather(coordinates, location) {
   });
 }
 
-// Ask CoreLocation first; on refusal, failure or the 10s timeout the main
-// process falls back to IP location. The main process owns all network access.
-// The location descriptor tells the main process where the coordinates came
-// from, so it can log the source (系统 / IP) without logging coordinates.
-function refreshWeather() {
+// The main process requests native location authorization before the first
+// refresh. Ask it which path to take: when it already knows the permission is
+// denied/restricted, skip CoreLocation and go straight to IP; otherwise ask
+// CoreLocation first, and on refusal, failure or the 10s timeout the main
+// process falls back to IP. The main process owns all network access. The
+// location descriptor tells the main process where the coordinates came from,
+// so it can log the source (系统 / IP) without logging coordinates.
+async function refreshWeather() {
+  let mode = 'system';
+  let reason = '';
+  try {
+    const info = await api.getWeatherLocation();
+    if (info && info.mode === 'ip') {
+      mode = 'ip';
+      reason = info.reason;
+    }
+  } catch {
+    mode = 'system';
+  }
+
+  if (mode === 'ip') {
+    requestWeather(undefined, { source: 'ip', reason });
+    return;
+  }
+
   if (!navigator.geolocation) {
     requestWeather(undefined, { source: 'none' });
     return;

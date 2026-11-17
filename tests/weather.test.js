@@ -201,6 +201,18 @@ test('location source describes system success, failure and missing geolocation'
     describeLocationSource({ source: 'none' }),
     '定位来源=IP（无系统定位 API）'
   );
+  assert.equal(
+    describeLocationSource({ source: 'ip', reason: 'denied' }),
+    '定位来源=IP（定位授权被拒绝）'
+  );
+  assert.equal(
+    describeLocationSource({ source: 'ip', reason: 'restricted' }),
+    '定位来源=IP（定位授权受限）'
+  );
+  assert.equal(
+    describeLocationSource({ source: 'ip' }),
+    '定位来源=IP（定位授权不可用）'
+  );
   assert.equal(describeLocationSource(null), '');
   assert.equal(describeLocationSource(undefined), '');
   assert.equal(describeLocationSource({ source: 'unknown' }), '');
