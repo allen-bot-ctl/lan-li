@@ -429,6 +429,42 @@ select {
   opacity: 0.75;
 }
 
+/* 同一槽位叠放两段文字：默认显示前者，悬停/聚焦时交叉淡入后者。 */
+.card-swap {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: center;
+  min-width: 0;
+}
+
+.card-swap > * {
+  grid-area: 1 / 1;
+  transition: opacity 120ms ease;
+}
+
+.almanac-card .card-head {
+  gap: 4px;
+}
+
+.almanac-head-swap {
+  flex: 0 0 57px;
+  justify-items: end;
+}
+
+.term-countdown {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  opacity: 1;
+}
+
+.almanac-card:hover .term-countdown,
+.almanac-card:focus-within .term-countdown {
+  opacity: 0;
+}
+
 /* 卡片入口默认隐藏，悬停/聚焦所在卡片时再显示；保留占位以免卡片高度变化 */
 #almanac-customize,
 #clock-edit,
@@ -643,19 +679,33 @@ select {
 }
 
 .weather-city {
-  flex: 1 1 auto;
+  justify-self: stretch;   /* 占满弹性区，便于省略号 */
   min-width: 0;
   overflow: hidden;
   color: var(--muted);
   font-size: 10.5px;
   line-height: 18px;
+  text-align: right;
   text-overflow: ellipsis;
   white-space: nowrap;
+  opacity: 1;
+}
+
+.weather-swap {
+  flex: 1 1 auto;
+  justify-items: end;
 }
 
 .weather-change {
   flex: 0 0 auto;
+  justify-self: end;
   font-size: 10.5px;
+  line-height: 18px;
+}
+
+.weather-card:hover .weather-city,
+.weather-card:focus-visible .weather-city {
+  opacity: 0;
 }
 
 .pane-footer {

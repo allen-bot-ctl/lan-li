@@ -57,7 +57,10 @@
       <section class="card almanac-card" id="almanac-card" aria-label="黄历">
         <div class="card-head">
           <span class="card-title almanac-style-name" id="almanac-style-name">农历黄历</span>
-          <button class="card-link" id="almanac-customize" type="button">去定制 ›</button>
+          <span class="card-swap almanac-head-swap">
+            <span class="term-countdown" id="almanac-term-countdown"></span>
+            <button class="card-link" id="almanac-customize" type="button">去定制 ›</button>
+          </span>
         </div>
         <div class="almanac-focus-row">
           <span class="almanac-tag almanac-tag-yi">宜</span>
@@ -83,8 +86,10 @@
       <button class="card weather-card" id="weather-card" type="button" aria-label="更换天气城市">
         <span class="weather-emoji" id="weather-emoji">🌡️</span>
         <span class="weather-temp" id="weather-temp">—</span>
-        <span class="weather-city" id="weather-city">天气加载中…</span>
-        <span class="card-link weather-change">更换 ›</span>
+        <span class="card-swap weather-swap">
+          <span class="weather-city" id="weather-city">天气加载中…</span>
+          <span class="card-link weather-change">更换 ›</span>
+        </span>
       </button>
 
       <div class="pane-footer">

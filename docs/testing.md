@@ -6,7 +6,7 @@
 npm test
 ```
 
-实际执行 `node --test tests/*.test.js`（Node 内置 test runner）。当前共 **155** 个测试，全部通过。测试不依赖 Electron 窗口，可在非 macOS 上运行；但 UI/更新行为仍需真机验收。
+实际执行 `node --test tests/*.test.js`（Node 内置 test runner）。当前共 **164** 个测试，全部通过。测试不依赖 Electron 窗口，可在非 macOS 上运行；但 UI/更新行为仍需真机验收。
 
 ## 测试文件与覆盖面
 
@@ -18,6 +18,7 @@ npm test
 | `tests/world-clocks.test.js` | 城市/别名/IANA 回退搜索、目录无重复标签与「上海」只作为北京别名、按 IANA id 去重与共享时区标签（洛杉矶/旧金山）、已添加项按 IANA id 标记、DST 按当前时刻的墙上时间（纽约冬夏）、半小时时区（新德里）、UTC 与 +8、`HH:mm` 紧凑时间、相对本地时区的「今天/昨天/明天 · ±N 小时」文案、`addClock`/`removeClock` 增删与索引夹取、`normalizeWorldClocks` 偏好清洗、首次默认北京 vs 显式空列表、非法 id/时刻拒绝；菜单栏显示时区 `resolveMenuBarTimeZone`（未设置/`null`/非法/未知→本地，仍在列表中→保留，`Asia/Kolkata`/`Asia/Calcutta` 别名等同）、删除所选时区后回退并清除持久化值 vs 删除其它时区保持选择、`formatMenuTitleInZone` 固定时刻下的格式/跨区日期翻转（上海次日、纽约前一日）与 UTC/+8、一致通过 `isValidMenuTitle`/`MENU_TITLE_PATTERN` |
 | `tests/ui-wiring.test.js` | 设置菜单使用按钮左缘/下缘 + 4px 且不再做固定宽度相减、天气卡为单行且行尾是 `<span>`「更换 ›」（无 `.card-head` / `.weather-body` / 嵌套 `button`）、黄历焦点卡与「今日黄历」面板的 DOM id 齐全且旧 `#almanac-yi` / `#almanac-ji` 已移除、世界时钟候选项过滤已添加时区且空查询不显示「没有匹配的时区」、右栏底部「检查更新」按钮存在并经 `update:check` 复用主进程 `requestUpdateCheck()` |
 | `tests/card-entry-hover.test.js` | 解析 `calendar.css`：`#almanac-customize` / `#clock-edit` / `.weather-change` 默认 `opacity: 0` + `pointer-events: none` 且保留布局（无 `display:none` / `visibility`）、120ms opacity 过渡、三张卡片各自的 `:hover` / `:focus-within` / `:focus-visible` 显示规则齐全、`.pane-check-update` 不在这条隐藏规则内且始终可见 |
+| `tests/term-countdown.test.js` | `buildAlmanac` 的 `termCountdown`：第 2.2 节 18 行期望表、同日 00:00:01 与 23:59:59 及重复调用/5 种风格一致、1900-01-01–2100-12-31 全量扫描（文案正则、days 0–15、24 个节气名、与 `Date.UTC` 日期差一致、`days===0` 当且仅当当日节气）、节与气都参与、`.card-swap` 槽宽/间距/右对齐/120ms 交叉淡入、0.1.22 三条入口规则原样、DOM 叠放、preload 与 IPC 通道与 0.1.22 相同、不触网 |
 | `tests/settings-menu.test.js` | 设置菜单模板的项顺序与分隔线、检查更新右侧版本 sublabel、登录时打开 checkbox 的初始值与会话中回传值、编辑世界时钟/更换天气城市/退出动作分发、`Cmd+Q`、缺失版本与动作时不抛错 |
 | `tests/weather.test.js` | 城市码表匹配（精确/加「市」「区」「县」后缀/去后缀/admin1 回退/匹配不到）、无 `country` 旧数据只做精确匹配、itboy（`data.wendu` + `forecast[0].type`）与 wttr.in（`temp_C` + `lang_zh`/`weatherDesc`）解析、itboy/wttr.in/地理编码 URL、ipwho.is 失败时忽略城市、坐标范围与空值校验、地理编码结果解析、天气文字到 emoji 的映射（晴/多云/阴/雨/雪/雷/雾与未知降级）、`weatherCity`（含 `country`/`admin1`）读写与清除、手动城市优先的取位逻辑、itboy 失败回退 wttr.in、非中国直走 wttr.in、`城市 · 天气 · X°C` 格式化与温度取整、`天气位置=手动/IP` 与 `天气来源=itboy（城市 代码）/wttr.in` 日志文案、注入假 `fetch` 的 30 分钟缓存与失败降级、手动/自动切换（不联网） |
 | `tests/login-item.test.js` | LaunchAgent plist 的固定 `Label`、`/usr/bin/open -a <当前 .app>` 参数、`RunAtLoad`、XML 转义、空路径拒绝；从 `execPath` 向上定位 `.app`、默认 plist 路径；临时目录下 `enable`/`isEnabled`/`disable` 全流程；非打包模式不写文件；找不到 `.app` 与写/删失败时返回原因并走 logger |
@@ -93,6 +94,16 @@ npm test
 3. 键盘聚焦到入口时所在卡片也会显示入口；天气卡用 `:focus-visible`。
 4. 三个入口隐藏时仍保留占位：黄历卡约 118px、天气行约 40px，卡片高度与位置不变。
 5. 右栏底部「检查更新」始终可见，不受悬停规则影响；点击三个入口与「检查更新」的行为与 0.1.21 相同。
+
+## 0.1.23 节气倒计时与天气城市靠右真机确认项（Intel Mac）
+
+以下需在 0.1.23 安装包上逐项确认：
+
+1. 平时黄历卡右上角显示下一个节气倒计时，例如 11-17 是「小雪 5天后」；文字完整、不压住左侧风格名（最长「夏至 15天后」也不截断）。
+2. 鼠标移到黄历卡上，倒计时淡出、「去定制 ›」在原位淡入，移开后换回来；位置与右边缘不跳。键盘聚焦黄历卡时同样显示「去定制 ›」。
+3. 天气行城市名靠右；鼠标移上去城市名原位换成「更换 ›」，两者右边缘对齐；点整行或点「更换 ›」都能打开城市面板。加载中/失败的状态文字同样靠右，超长时行尾省略。
+4. 世界时钟的「编辑」和 0.1.22 一样，鼠标移到时钟卡上才出现。
+5. 三张卡大小和 0.1.22 一样；断网后倒计时照常显示，天气仍按 0.1.22 的加载/失败文案处理。
 
 ## 相关文档
 

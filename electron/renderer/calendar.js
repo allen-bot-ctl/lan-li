@@ -16,6 +16,7 @@ const grid = document.getElementById('grid');
 const almanacCard = document.getElementById('almanac-card');
 const almanacStyleName = document.getElementById('almanac-style-name');
 const almanacCustomize = document.getElementById('almanac-customize');
+const almanacTermCountdown = document.getElementById('almanac-term-countdown');
 const almanacFocusYi = document.getElementById('almanac-focus-yi');
 const almanacFocusJi = document.getElementById('almanac-focus-ji');
 const almanacQuote = document.getElementById('almanac-quote');
@@ -87,6 +88,7 @@ function renderAlmanac(almanac) {
   lunarSubtitle.textContent = `${almanac.ganZhiText} · ${almanac.lunarMonthText}`;
   almanacStyleName.textContent = almanac.styleName;
   almanacStyleName.title = `农历${almanac.lunarDayText}`;
+  almanacTermCountdown.textContent = almanac.termCountdown ? almanac.termCountdown.text : '';
 
   // CSSOM custom properties are the only per-style colours; inline style
   // attributes stay forbidden by the CSP.
