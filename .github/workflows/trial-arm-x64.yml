@@ -37,8 +37,8 @@ jobs:
           set -uo pipefail
           npm test 2>&1 | tee /tmp/tests.log
           status=${PIPESTATUS[0]}
-          pass=$(awk '/^ℹ pass /{print $3}' /tmp/tests.log | tail -n 1)
-          fail=$(awk '/^ℹ fail /{print $3}' /tmp/tests.log | tail -n 1)
+          pass=$(awk '/^(#|ℹ) pass /{print $3}' /tmp/tests.log | tail -n 1)
+          fail=$(awk '/^(#|ℹ) fail /{print $3}' /tmp/tests.log | tail -n 1)
           total=$(( ${pass:-0} + ${fail:-0} ))
           echo "TRIAL: tests=${pass:-?}/${total}"
           exit "$status"
@@ -138,6 +138,11 @@ jobs:
             fi
           }
 
+          arch_of_pid() {
+            vmmap -summary "$1" 2>/dev/null \
+              | awk -F: '/^Code Type:/{gsub(/^[ \t]+/, "", $2); print $2; exit}'
+          }
+
           fail() {
             echo "::error::$1"
             echo "--- app output ---"
@@ -148,7 +153,7 @@ jobs:
           }
 
           check_alive_x64() {
-            local phase="$1" pid alive=0 pids
+            local phase="$1" pid alive=0 found_x64=0 known=0 code pids
             pids=$(app_pids | tr '\n' ' ')
             for pid in $pids; do
               if kill -0 "$pid" 2>/dev/null; then
@@ -156,11 +161,35 @@ jobs:
               fi
             done
             [ "$alive" -eq 1 ] || fail "app is not running at ${phase}"
-            ps -o pid=,ppid=,arch=,comm= -p $pids || true
-            if ! ps -o arch= -p $pids | awk 'NF==1 && $1=="x86_64"{ok=1} END{exit ok?0:1}'; then
-              fail "no x86_64 process at ${phase}"
+            ps -o pid=,ppid=,comm= -p $pids || true
+            for pid in $pids; do
+              code=$(arch_of_pid "$pid" || true)
+              echo "pid=$pid code_type=${code:-unknown}"
+              case "$code" in
+                "")
+                  ;;
+                unknown)
+                  ;;
+                X86-64|x86_64|x86-64)
+                  known=1
+                  found_x64=1
+                  ;;
+                *)
+                  known=1
+                  ;;
+              esac
+            done
+            if [ "$found_x64" -eq 1 ]; then
+              echo "TRIAL: smoke=alive arch=x86_64 at=${phase}"
+            elif [ "$known" -eq 0 ]; then
+              if ! file "$main_bin" | grep -q 'x86_64'; then
+                fail "main binary is not x86_64 at ${phase}"
+              fi
+              echo "::warning::vmmap reported no code type; fell back to file for architecture"
+              echo "TRIAL: smoke=alive arch=file:x86_64 at=${phase}"
+            else
+              fail "process code type is not x86_64 at ${phase}"
             fi
-            echo "TRIAL: smoke=alive arch=x86_64 at=${phase}"
           }
 
           sleep 5
