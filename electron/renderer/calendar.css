@@ -168,10 +168,24 @@ select {
   display: block;
   width: 14px;
   height: 14px;
-  fill: currentColor;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
-.check-update.is-spinning .update-icon {
+.update-arc {
+  display: none;
+  transform-origin: 7px 7px;
+}
+
+.check-update.is-spinning .update-ring {
+  opacity: 0.25;
+}
+
+.check-update.is-spinning .update-arc {
+  display: inline;
   animation: topbar-spin 1s linear infinite;
 }
 
@@ -744,6 +758,10 @@ select {
   background: var(--red);
 }
 
+.almanac-tag-qian {
+  background: var(--muted-strong);
+}
+
 .almanac-focus-text {
   color: var(--text);
   font-size: 14px;
@@ -753,20 +771,22 @@ select {
 }
 
 .almanac-quote {
-  min-height: 15px;
-  margin-top: 7px;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
   color: var(--text);
   font-size: 11px;
-  line-height: 15px;
+  line-height: 16px;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.almanac-meta {
-  margin-top: 3px;
-  color: var(--muted);
-  font-size: 10px;
-  line-height: 13px;
-  white-space: nowrap;
+.almanac-quote-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  margin-top: 4px;
 }
 
 .world-clock-card {
@@ -887,6 +907,18 @@ select {
   font-size: 14px;
   font-weight: 600;
   line-height: 18px;
+}
+
+.weather-range {
+  flex: 0 0 auto;
+  color: var(--muted-strong);
+  font-size: 11px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.weather-range[hidden] {
+  display: none;
 }
 
 .weather-city {

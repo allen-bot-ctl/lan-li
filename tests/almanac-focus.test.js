@@ -579,7 +579,7 @@ test('10. focus text never needs truncation and old list markup is gone', () => 
   assert.match(focus, /white-space:\s*nowrap/);
   assert.equal(/text-overflow/.test(focus), false);
 
-  for (const selector of ['.almanac-quote', '.almanac-meta']) {
-    assert.equal(/text-overflow/.test(cssRule(css, selector)), false, selector);
-  }
+  const quote = cssRule(css, '.almanac-quote');
+  assert.match(quote, /text-overflow:\s*ellipsis/);
+  assert.equal(/\.almanac-meta\s*\{/.test(css), false);
 });

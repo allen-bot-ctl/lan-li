@@ -21,8 +21,10 @@
           type="button"
           aria-label="检查更新"
         >
-          <svg class="update-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-            <path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+          <svg class="update-icon" viewBox="0 0 14 14" aria-hidden="true" focusable="false">
+            <circle class="update-ring" cx="7" cy="7" r="5.75"/>
+            <path class="update-arc" d="M7 1.25A5.75 5.75 0 0 1 12.75 7"/>
+            <path class="update-arrow" d="M7 4v5.5M4.75 7.25 7 9.5l2.25-2.25"/>
           </svg>
           <span class="update-dot" aria-hidden="true"></span>
         </button>
@@ -102,8 +104,10 @@
           <span class="almanac-tag almanac-tag-ji">忌</span>
           <span class="almanac-focus-text" id="almanac-focus-ji">—</span>
         </div>
-        <div class="almanac-quote" id="almanac-quote"></div>
-        <div class="almanac-meta" id="almanac-meta"></div>
+        <div class="almanac-quote-row">
+          <span class="almanac-tag almanac-tag-qian">签</span>
+          <span class="almanac-quote" id="almanac-quote"></span>
+        </div>
       </section>
 
       <section class="card world-clock-card" aria-label="世界时钟">
@@ -118,6 +122,7 @@
       <button class="card weather-card" id="weather-card" type="button" aria-label="更换天气城市">
         <span class="weather-emoji" id="weather-emoji">🌡️</span>
         <span class="weather-temp" id="weather-temp">—</span>
+        <span class="weather-range" id="weather-range" hidden></span>
         <span class="card-swap weather-swap">
           <span class="weather-city" id="weather-city">天气加载中…</span>
           <span class="card-link weather-change">更换 ›</span>

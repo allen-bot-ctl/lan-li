@@ -23,7 +23,6 @@ const almanacCustomize = document.getElementById('almanac-customize');
 const almanacFocusYi = document.getElementById('almanac-focus-yi');
 const almanacFocusJi = document.getElementById('almanac-focus-ji');
 const almanacQuote = document.getElementById('almanac-quote');
-const almanacMeta = document.getElementById('almanac-meta');
 const clockList = document.getElementById('clock-list');
 const clockEmpty = document.getElementById('clock-empty');
 const clockEdit = document.getElementById('clock-edit');
@@ -35,6 +34,7 @@ const clockAddedList = document.getElementById('clock-added-list');
 const weatherCard = document.getElementById('weather-card');
 const weatherEmoji = document.getElementById('weather-emoji');
 const weatherTemp = document.getElementById('weather-temp');
+const weatherRange = document.getElementById('weather-range');
 const weatherCity = document.getElementById('weather-city');
 const updateToast = document.getElementById('update-toast');
 const updateToastMessage = document.getElementById('update-toast-message');
@@ -113,7 +113,6 @@ function renderAlmanac(almanac) {
   almanacFocusJi.textContent = almanac.focusJi.text;
   almanacFocusJi.title = almanac.focusJi.title;
   almanacQuote.textContent = almanac.quote;
-  almanacMeta.textContent = almanac.metaText;
 
   // The detail panel always shows the latest received almanac; only a date
   // change (a midnight tick) needs a redraw while it is open.
@@ -631,6 +630,9 @@ function renderWeather(result) {
   if (ok) {
     weatherEmoji.textContent = result.emoji || '🌡️';
     weatherTemp.textContent = `${Math.round(result.temperature)}°`;
+    const range = typeof result.rangeText === 'string' ? result.rangeText : '';
+    weatherRange.textContent = range;
+    weatherRange.hidden = !range;
     weatherCity.textContent = result.city;
     weatherCard.title = `${result.city} · ${result.weather}`;
     return;
@@ -641,6 +643,8 @@ function renderWeather(result) {
     : '天气暂不可用';
   weatherEmoji.textContent = result && result.emoji ? result.emoji : '🌡️';
   weatherTemp.textContent = '—';
+  weatherRange.textContent = '';
+  weatherRange.hidden = true;
   weatherCity.textContent = text;
   weatherCard.title = text;
 }

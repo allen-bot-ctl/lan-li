@@ -45,7 +45,6 @@ test('almanac focus card and detail panel replace the six-item lists', () => {
     'almanac-focus-yi',
     'almanac-focus-ji',
     'almanac-quote',
-    'almanac-meta',
     'almanac-detail',
     'almanac-detail-close'
   ]) {
