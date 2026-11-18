@@ -490,8 +490,9 @@ select {
   opacity: 0.9;
 }
 
-.cell.is-focus:not(.is-today) {
-  box-shadow: inset 0 0 0 1.5px var(--focus-ring);
+/* 0.1.30：选中日期 1.5px 强调色描边；今天保持橙色实底，不加描边。 */
+.cell.is-selected:not(.is-today) {
+  box-shadow: inset 0 0 0 1.5px var(--accent);
 }
 
 .cell:focus-visible {

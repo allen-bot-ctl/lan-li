@@ -66,6 +66,32 @@ let almanacStylesToken = 0;
 let pendingNotice = null;
 let pinned = false;
 let iconTooltipTimer = null;
+// 0.1.30：黄历跟随选中日期。selectedKey 为 null 表示跟随今天。
+let selectedKey = null;
+let selectedAlmanac = null;
+let todayAlmanac = null;
+let lastOpenSeq = null;
+let selectToken = 0;
+
+function cellKey(cell) {
+  return `${cell.year}-${String(cell.month).padStart(2, '0')}-${String(cell.day).padStart(2, '0')}`;
+}
+
+function clearSelection() {
+  selectedKey = null;
+  selectedAlmanac = null;
+  selectToken += 1;
+}
+
+function isTodayAlmanac(almanac) {
+  return !todayAlmanac || !almanac.dateKey || almanac.dateKey === todayAlmanac.dateKey;
+}
+
+// 卡片与详情显示选中那天；没有选中（或选中的那天已成为今天）时显示今天。
+function showAlmanac() {
+  if (selectedKey && todayAlmanac && selectedKey === todayAlmanac.dateKey) clearSelection();
+  renderAlmanac(selectedKey && selectedAlmanac ? selectedAlmanac : todayAlmanac);
+}
 
 function daysInMonth(year, month) {
   return new Date(year, month, 0).getDate();
@@ -85,7 +111,9 @@ function buildYearOptions() {
 function renderAlmanac(almanac) {
   if (!almanac) return;
   lastAlmanac = almanac;
-  almanacStyleName.textContent = almanac.styleName;
+  almanacStyleName.textContent = isTodayAlmanac(almanac)
+    ? almanac.styleName
+    : `${almanac.styleName.replace('黄历', '')} · ${almanac.solarText}`;
   almanacStyleName.title = `农历${almanac.lunarDayText}`;
 
   // CSSOM custom properties are the only per-style colours; inline style
@@ -104,9 +132,8 @@ function renderAlmanac(almanac) {
   almanacFocusJi.title = almanac.focusJi.title;
   almanacQuote.textContent = almanac.quote;
 
-  // The detail panel always shows the latest received almanac; only a date
-  // change (a midnight tick) needs a redraw while it is open.
-  if (!almanacDetail.hidden && almanac.lunarDayText !== detailDay) {
+  // 详情面板打开时，日期或风格变了就重画。
+  if (!almanacDetail.hidden && `${almanac.dateKey}|${almanac.styleId}` !== detailDay) {
     renderAlmanacDetail(almanac);
   }
 }
@@ -135,7 +162,9 @@ function focusLine(label, focus) {
 
 function renderAlmanacDetail(almanac = lastAlmanac) {
   if (!almanac) return;
-  almanacDetailTitle.textContent = `今日黄历 · ${almanac.lunarDayText}`;
+  almanacDetailTitle.textContent = isTodayAlmanac(almanac)
+    ? `今日黄历 · ${almanac.lunarDayText}`
+    : `黄历 · ${almanac.solarText} · ${almanac.lunarDayText}`;
   almanacDetailBody.replaceChildren();
 
   const detail = almanac.detail;
@@ -167,7 +196,7 @@ function renderAlmanacDetail(almanac = lastAlmanac) {
     [`${detail.pengZu[0]}；${detail.pengZu[1]}`]
   );
 
-  detailDay = almanac.lunarDayText;
+  detailDay = `${almanac.dateKey}|${almanac.styleId}`;
 }
 
 function renderClockList(snapshot) {
@@ -412,10 +441,8 @@ function renderCells(next) {
     if (cell.isWeekend) button.classList.add('is-weekend');
     if (cell.isFestival || cell.isJieQi) button.classList.add('is-festive');
     if (cell.isToday) button.classList.add('is-today');
-    if (next.focus.year === cell.year &&
-        next.focus.month === cell.month &&
-        next.focus.day === cell.day) {
-      button.classList.add('is-focus');
+    if (selectedKey && selectedKey === cellKey(cell) && !cell.isToday) {
+      button.classList.add('is-selected');
     }
 
     const dayText = document.createElement('span');
@@ -427,15 +454,7 @@ function renderCells(next) {
     secondaryText.textContent = cell.secondaryText;
 
     button.append(dayText, secondaryText);
-    button.addEventListener('click', () => {
-      requestView({
-        year: cell.year,
-        month: cell.month,
-        focusY: cell.year,
-        focusM: cell.month,
-        focusD: cell.day
-      });
-    });
+    button.addEventListener('click', () => selectCell(cell));
 
     grid.append(button);
   }
@@ -444,6 +463,11 @@ function renderCells(next) {
 function applyState(next) {
   if (!next || !Array.isArray(next.cells)) return;
   state = next;
+  if (next.openSeq !== lastOpenSeq) {
+    clearSelection();
+    lastOpenSeq = next.openSeq;
+  }
+  if (next.almanac) todayAlmanac = next.almanac;
 
   buildYearOptions();
   yearSelect.value = String(next.view.year);
@@ -451,7 +475,7 @@ function applyState(next) {
   renderViewSubtitle(next.viewSubtitle);
 
   renderCells(next);
-  renderAlmanac(next.almanac);
+  showAlmanac();
   renderClockList(next.clocks);
   renderPin(next.pinned);
   if (!clockPicker.hidden) renderClockEditor(next.clocks);
@@ -463,6 +487,28 @@ function refreshState() {
 
 function requestView(payload) {
   return api.setView(payload).then(applyState);
+}
+
+// 0.1.30：点格子选中那天，灰色格同时翻到那个月；点今天的格子等于回到今天。
+function selectCell(cell) {
+  if (cell.isToday) {
+    clearSelection();
+  } else {
+    selectedKey = cellKey(cell);
+    selectedAlmanac = null;
+    selectToken += 1;
+  }
+  const token = selectToken;
+  const key = selectedKey;
+  return Promise.all([
+    api.setView({ year: cell.year, month: cell.month, focusY: cell.year, focusM: cell.month, focusD: cell.day }),
+    key ? api.getAlmanacForDate(key) : Promise.resolve(null)
+  ]).then(([next, almanac]) => {
+    if (token !== selectToken) return;
+    if (key && !almanac) clearSelection();
+    else selectedAlmanac = almanac;
+    applyState(next);
+  });
 }
 
 function shiftMonth(delta) {
@@ -493,6 +539,7 @@ nextMonth.addEventListener('click', () => {
 });
 
 todayButton.addEventListener('click', () => {
+  clearSelection();
   api.goToday().then(applyState);
 });
 
@@ -853,7 +900,16 @@ function selectAlmanacStyle(row) {
 
   api.setAlmanacStyle(row.id).then((result) => {
     if (!result || result.ok !== true) return;
-    renderAlmanac(result.almanac);
+    todayAlmanac = result.almanac;
+    if (selectedKey) {
+      const token = selectToken;
+      api.getAlmanacForDate(selectedKey).then((almanac) => {
+        if (token !== selectToken || !almanac) return;
+        selectedAlmanac = almanac;
+        showAlmanac();
+      }).catch(() => {});
+    }
+    showAlmanac();
     closeAlmanacPicker();
   }).catch(() => {});
 }
@@ -1029,7 +1085,12 @@ window.addEventListener('focus', () => {
 
 api.onTick((payload) => {
   if (!payload) return;
-  renderAlmanac(payload.almanac);
+  if (Number.isInteger(payload.openSeq) && payload.openSeq !== lastOpenSeq) {
+    clearSelection();
+    lastOpenSeq = payload.openSeq;
+  }
+  if (payload.almanac) todayAlmanac = payload.almanac;
+  showAlmanac();
   renderViewSubtitle(payload.viewSubtitle);
   renderClockList(payload.clocks);
 });

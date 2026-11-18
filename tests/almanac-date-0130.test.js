@@ -41,3 +41,9 @@ test('0.1.30 C5 窗口从隐藏到显示时 openSeq 递增并随状态下发', (
   assert.match(main, /if \(!wasVisible\) \{\s*openSeq \+= 1;/);
   assert.match(main, /openSeq,\s*pinned\s*\}/);
 });
+
+test('0.1.30 C5 每秒 tick 也带 openSeq，窗口重新打开时渲染层立刻回到今天', () => {
+  const tick = main.match(/send\('calendar:onTick',\s*\{[\s\S]*?\}\);/);
+  assert.ok(tick);
+  assert.match(tick[0], /clocks: currentClockSnapshot\(now\),\s*openSeq\s*\}\);/);
+});

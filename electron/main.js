@@ -753,7 +753,8 @@ function updateClock() {
     calendarWindow.webContents.send('calendar:onTick', {
       almanac: buildAlmanac(now, almanacStyle),
       viewSubtitle: buildViewSubtitle(view.year, view.month, now),
-      clocks: currentClockSnapshot(now)
+      clocks: currentClockSnapshot(now),
+      openSeq
     });
   }
 }
