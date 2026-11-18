@@ -248,9 +248,23 @@ select {
 .month-title {
   position: relative;
   display: inline-block;
+  padding: 0 4px;
+  margin: 0 -4px;
+  border-radius: 6px;
   color: var(--text);
   cursor: pointer;
   white-space: nowrap;
+}
+
+.month-title:hover {
+  background: var(--chip-hover);
+}
+
+.month-title-caret {
+  margin-left: 4px;
+  color: var(--muted-strong);
+  font-size: 10px;
+  vertical-align: middle;
 }
 
 .month-title-text {
@@ -569,12 +583,22 @@ select {
 }
 
 .almanac-card .card-head {
+  position: relative;
   gap: 4px;
 }
 
+/* 0.1.30：「去定制 ›」改为叠放在标题行右端，不再占位，长标题（含日期）一行放下。 */
 .almanac-head-swap {
-  flex: 0 0 57px;
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
   justify-items: end;
+}
+
+.almanac-card:hover .almanac-style-name,
+.almanac-card:focus-within .almanac-style-name {
+  max-width: calc(100% - 50px);
 }
 
 /* 卡片入口默认隐藏，悬停/聚焦所在卡片时再显示；保留占位以免卡片高度变化 */
@@ -601,12 +625,21 @@ select {
   cursor: pointer;
 }
 
+.almanac-card:hover {
+  background: var(--chip-hover);
+}
+
 .almanac-style-name {
   min-width: 0;
   overflow: hidden;
   color: var(--almanac-accent-light, var(--muted));
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.almanac-style-name::after {
+  content: '›';
+  margin-left: 2px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -646,7 +679,13 @@ select {
 }
 
 .almanac-tag-qian {
-  background: var(--muted-strong);
+  background: var(--almanac-accent-light, var(--accent));
+}
+
+@media (prefers-color-scheme: dark) {
+  .almanac-tag-qian {
+    background: var(--almanac-accent-dark, var(--accent));
+  }
 }
 
 .almanac-focus-text {

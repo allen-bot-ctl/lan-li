@@ -159,7 +159,7 @@ function detailSection(parent, heading, lines) {
 
 function focusLine(label, focus) {
   const hint = focus.hint ? ` · ${focus.hint}` : '';
-  return `${label} ${focus.title}${hint}`;
+  return `${label} ${focus.text}${hint}`;
 }
 
 function renderAlmanacDetail(almanac = lastAlmanac) {
@@ -586,9 +586,10 @@ function hideIconTooltip() {
 // In-page bubble instead of a native title: 500ms hover delay, below the
 // hovered icon, right edges aligned, clamped so it never leaves the window.
 function showIconTooltip(button) {
-  iconTooltip.textContent = button === checkUpdate
-    ? ICON_TOOLTIP_CHECK
-    : (pinned ? ICON_TOOLTIP_PINNED : ICON_TOOLTIP_UNPINNED);
+  iconTooltip.textContent = button.dataset.tooltip ||
+    (button === checkUpdate
+      ? ICON_TOOLTIP_CHECK
+      : (pinned ? ICON_TOOLTIP_PINNED : ICON_TOOLTIP_UNPINNED));
   iconTooltip.hidden = false;
   const rect = button.getBoundingClientRect();
   const width = iconTooltip.offsetWidth;
@@ -597,7 +598,7 @@ function showIconTooltip(button) {
   let left = rect.right - width;
   left = Math.max(4, Math.min(left, window.innerWidth - width - 4));
   let top = rect.bottom + 6;
-  if (top + height > window.innerHeight - 4) {
+  if (button.dataset.tooltipPlace === 'above' || top + height > window.innerHeight - 4) {
     top = Math.max(4, rect.top - height - 6);
   }
 
@@ -619,6 +620,9 @@ function watchIconTooltip(button) {
 
 watchIconTooltip(pinButton);
 watchIconTooltip(checkUpdate);
+
+// 0.1.30：年月标题、翻月按钮、「今天」与黄历卡沿用同一个提示气泡，文字在 data-tooltip。
+for (const el of document.querySelectorAll('[data-tooltip]')) watchIconTooltip(el);
 
 pinButton.addEventListener('click', () => {
   hideIconTooltip();

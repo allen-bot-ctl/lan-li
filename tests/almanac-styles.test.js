@@ -151,7 +151,7 @@ test('missing keys and invalid values fall back to the original term', () => {
   );
 
   assert.deepEqual(mapped.items, ['拜一拜服务器', '祈福', '无']);
-  assert.equal(mapped.title, '拜一拜服务器（祭祀） 祈福（祈福） 无（无）');
+  assert.equal(mapped.title, '拜一拜服务器 祈福 无');
 });
 
 test('mapped duplicate text keeps only the first occurrence', () => {
@@ -161,7 +161,7 @@ test('mapped duplicate text keeps only the first occurrence', () => {
   );
 
   assert.deepEqual(mapped.items, ['同一文案', '另一文案']);
-  assert.equal(mapped.title, '同一文案（祭祀） 另一文案（求嗣）');
+  assert.equal(mapped.title, '同一文案 另一文案');
 });
 
 test('same date and style produce deeply equal results', () => {
@@ -216,13 +216,13 @@ test('four dates pick the same rare original term in all five styles', () => {
   }
 });
 
-test('2026-11-17 coder keeps the complete lists and original terms in titles', () => {
+test('2026-11-17 coder keeps the complete lists without original terms', () => {
   const almanac = almanacOn(2026, 11, 17, 'coder');
 
   assert.equal(almanac.yi.length, 13);
   assert.equal(almanac.detail.yiItems.length, 13);
-  assert.equal(almanac.detail.yiItems[0], '拜一拜服务器（祭祀）');
-  assert.equal(almanac.focusYi.title, '维护老项目（修坟）');
+  assert.equal(almanac.detail.yiItems[0], '拜一拜服务器');
+  assert.equal(almanac.focusYi.title, '年约20次');
   assert.equal(almanac.styleName, '程序猿黄历');
   assert.equal(almanac.lunarDayText, '十月初九');
 });

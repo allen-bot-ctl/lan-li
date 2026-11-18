@@ -64,7 +64,7 @@ test('黄历签语带「签」标签且去掉第二行', () => {
   assert.equal(html.includes('id="almanac-meta"'), false);
 
   assert.match(cssRule('.almanac-quote'), /text-overflow:\s*ellipsis/);
-  assert.match(cssRule('.almanac-tag-qian'), /var\(--muted-strong\)/);
+  assert.match(cssRule('.almanac-tag-qian'), /var\(--almanac-accent-light,\s*var\(--accent\)\)/);
 
   assert.equal(renderer.includes('almanacMeta'), false);
   assert.ok(renderer.includes('建除 · 值神 · 冲煞'));

@@ -367,8 +367,8 @@ test('4. seven dates produce the confirmed focus, quote and meta fields', () => 
   }
 
   const coder = almanacOn(2026, 11, 17, 'coder');
-  assert.equal(coder.focusYi.title, '维护老项目（修坟）');
-  assert.equal(coder.focusJi.title, '新人入职（进人口）');
+  assert.equal(coder.focusYi.title, '年约20次');
+  assert.equal(coder.focusJi.title, '年约7次');
   assert.equal(almanacOn(2026, 11, 17, 'lunar').focusYi.title, '修坟');
 
   const hints = {
@@ -392,7 +392,9 @@ test('4. seven dates produce the confirmed focus, quote and meta fields', () => 
   assert.equal(detail.tianShenLuck, '吉');
   assert.equal(detail.chongText, '冲牛（己丑）煞西');
   assert.deepEqual(detail.pengZu, ['乙不栽植千株不长', '未不服药毒气入肠']);
-  assert.equal(coder.detail.yiItems[0], '拜一拜服务器（祭祀）');
+  assert.equal(coder.detail.yiItems[0], '拜一拜服务器');
+  assert.equal([...coder.detail.yiItems, ...coder.detail.jiItems].some((t) => t.includes('（')), false);
+  assert.equal(almanacOn(2026, 11, 9, 'coder').focusJi.title, '');
 });
 
 test('5. the same date and style are deeply equal across repeated calls', () => {

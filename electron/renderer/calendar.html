@@ -63,16 +63,17 @@
       <main class="calendar-pane">
         <header class="toolbar">
           <div class="title-group">
-            <label class="month-title">
+            <label class="month-title" data-tooltip="选择年份">
               <span class="month-title-text" id="month-title">—</span>
+              <span class="month-title-caret" aria-hidden="true">⌄</span>
               <select class="year-select" id="year-select" aria-label="选择公历年份"></select>
             </label>
             <span class="lunar-subtitle" id="lunar-subtitle">—</span>
           </div>
           <nav class="month-nav" aria-label="月份导航">
-            <button class="nav-circle" id="prev-month" type="button" aria-label="上一月">‹</button>
-            <button class="nav-pill" id="today-button" type="button">今天</button>
-            <button class="nav-circle" id="next-month" type="button" aria-label="下一月">›</button>
+            <button class="nav-circle" id="prev-month" type="button" aria-label="上一月" data-tooltip="上个月">‹</button>
+            <button class="nav-pill" id="today-button" type="button" data-tooltip="回到今天">今天</button>
+            <button class="nav-circle" id="next-month" type="button" aria-label="下一月" data-tooltip="下个月">›</button>
           </nav>
         </header>
 
@@ -90,7 +91,7 @@
       </main>
 
     <aside class="now-pane" aria-label="黄历、世界时钟与天气">
-      <section class="card almanac-card" id="almanac-card" aria-label="黄历">
+      <section class="card almanac-card" id="almanac-card" aria-label="黄历" data-tooltip="查看黄历详情" data-tooltip-place="above">
         <div class="card-head">
           <span class="card-title almanac-style-name" id="almanac-style-name">农历黄历</span>
           <span class="card-swap almanac-head-swap">

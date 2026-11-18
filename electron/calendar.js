@@ -190,12 +190,9 @@ function buildViewSubtitle(viewYear, viewMonth, today) {
 function focusEntry(term, list, style) {
   const isLunar = style.definition.id === 'lunar';
   const text = isLunar ? term : mapTerm(term, style.map);
-  return {
-    term,
-    text,
-    title: isLunar ? term : `${text}（${term}）`,
-    hint: getFocusData().hint(list, term)
-  };
+  const hint = getFocusData().hint(list, term);
+  // 0.1.30：非农历风格悬停只保留稀有度提示，不再拼「（原词）」。
+  return { term, text, title: isLunar ? term : hint, hint };
 }
 
 // 0.1.30：渲染层按 YYYY-MM-DD 取某天黄历；格式或日期非法返回 null。

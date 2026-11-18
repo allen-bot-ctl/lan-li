@@ -142,7 +142,7 @@ function mapTerm(term, map) {
 }
 
 // Maps each term, then de-duplicates by mapped text, keeping first occurrence.
-// `labels` pairs every kept display text with its original term, while `title`
+// `labels` holds the kept display texts (0.1.30: no original term), while `title`
 // joins those pairs for the legacy full-list tooltip. `items` holds display
 // text only for the card's compact fields.
 function mapAlmanacTerms(terms, map) {
@@ -156,7 +156,7 @@ function mapAlmanacTerms(terms, map) {
     if (seen.has(text)) continue;
     seen.add(text);
     items.push(text);
-    labels.push(`${text}（${term}）`);
+    labels.push(text);
   }
 
   return { items, labels, title: labels.join(' ') };
