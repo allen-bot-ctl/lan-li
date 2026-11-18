@@ -102,15 +102,18 @@ test('C6 更新浮层弹出时月历与右栏卡片零位移', async () => {
 
   await emitStatus({ label: '正在检查…', busy: true });
   await expect(page.locator('#update-toast')).toBeVisible();
+  await page.waitForTimeout(250);
   expectSameRect(await rects(), baseline, 'busy');
 
   await emitStatus({ label: '已是最新', timed: true });
   await expect(page.locator('#update-toast')).toBeVisible();
+  await page.waitForTimeout(250);
   expectSameRect(await rects(), baseline, 'timed');
   await expect(page.locator('#update-toast')).toBeHidden();
 
   await emitNotice({ mode: 'ready' });
   await expect(page.locator('#update-toast')).toBeVisible();
+  await page.waitForTimeout(250);
   expectSameRect(await rects(), baseline, 'ready');
 
   await clearToast();
@@ -133,6 +136,7 @@ test('C7 浮层居中且距顶栏 8px；定时提示按时消失；ready 需手�
   await emitNotice({ mode: 'ready' });
   const toast = page.locator('#update-toast');
   await expect(toast).toBeVisible();
+  await page.waitForTimeout(250);
 
   const geo = await page.evaluate(() => {
     const t = document.querySelector('#update-toast').getBoundingClientRect();
@@ -165,6 +169,7 @@ test('C8 manual 提示单行且不超宽', async () => {
   await emitNotice({ mode: 'manual' });
   const toast = page.locator('#update-toast');
   await expect(toast).toBeVisible();
+  await page.waitForTimeout(250);
 
   const info = await page.evaluate(() => {
     const box = (sel) => document.querySelector(sel).getBoundingClientRect();
