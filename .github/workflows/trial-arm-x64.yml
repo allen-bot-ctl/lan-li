@@ -212,3 +212,11 @@ jobs:
             dist/LanLi-*-mac-x64.dmg
             dist/LanLi-*-mac-x64.zip
             dist/LanLi-*-mac-x64.zip.sha256
+
+      - name: Summarize trial
+        shell: bash
+        run: |
+          set -euo pipefail
+          ls -lh dist/LanLi-*-mac-x64.dmg dist/LanLi-*-mac-x64.zip dist/LanLi-*-mac-x64.zip.sha256
+          echo "TRIAL: upload=trial-macos-x64 retention=3d"
+          echo "TRIAL: result=pass"
