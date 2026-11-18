@@ -66,6 +66,8 @@ let almanacStylesToken = 0;
 let pendingNotice = null;
 let pinned = false;
 let iconTooltipTimer = null;
+// 指针是否已在窗口内：格子重建时 Chromium 会重复派发 mouseenter，只在真正进入时重取状态。
+let pointerInside = false;
 // 0.1.30：黄历跟随选中日期。selectedKey 为 null 表示跟随今天。
 let selectedKey = null;
 let selectedAlmanac = null;
@@ -1062,16 +1064,20 @@ window.addEventListener('blur', hideIconTooltip);
 document.documentElement.addEventListener('mouseenter', () => {
   clearSettingsHighlight();
   api.pointerEnter();
+  if (pointerInside) return;
+  pointerInside = true;
   refreshState();
 });
 
 document.documentElement.addEventListener('mouseleave', () => {
+  pointerInside = false;
   api.pointerLeave();
 });
 
 // The main process resets the browsing month whenever the panel moves from
 // hidden to visible. Pick that state up as soon as the window appears.
 document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') pointerInside = false;
   if (document.visibilityState === 'visible') {
     refreshState();
     refreshWeather();
