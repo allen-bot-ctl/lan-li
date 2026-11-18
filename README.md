@@ -1,4 +1,4 @@
-# 栏历 0.1.27
+# 栏历 0.1.28
 
 > 开发与协作文档：入口见 [AGENTS.md](AGENTS.md)，完整索引见 [docs/README.md](docs/README.md)。
 
