@@ -1088,6 +1088,7 @@ api.onTick((payload) => {
   if (Number.isInteger(payload.openSeq) && payload.openSeq !== lastOpenSeq) {
     clearSelection();
     lastOpenSeq = payload.openSeq;
+    refreshState();
   }
   if (payload.almanac) todayAlmanac = payload.almanac;
   showAlmanac();
