@@ -82,7 +82,7 @@ test.afterAll(async () => {
 test('C4 点 12 月灰色「2」格：翻到 12 月、2 号描边、卡片与详情都是 12 月 2 日', async () => {
   await cell(2026, 12, 2).click();
   await expect(monthTitle()).toHaveText('2026年12月');
-  await expect(title()).toHaveText('程序猿 · 12月2日');
+  await expect(title()).toHaveText('程序猿 · 十月廿四');
   const ring = await ringOf(2026, 12, 2);
   expect(ring.selected).toBe(true);
   expect(ring.shadow).toContain('inset');
@@ -92,7 +92,7 @@ test('C4 点 12 月灰色「2」格：翻到 12 月、2 号描边、卡片与详
 
   await page.click('#almanac-focus-yi');
   await expect(page.locator('#almanac-detail')).toBeVisible();
-  await expect(page.locator('#almanac-detail-title')).toHaveText(`黄历 · 12月2日 · ${expected.lunar}`);
+  await expect(page.locator('#almanac-detail-title')).toHaveText(`黄历 · ${expected.lunar}`);
   await expect(page.locator('#almanac-detail-body')).toContainText(expected.yi);
   await page.screenshot({ path: path.join(SHOTS, '20-almanac-date-0130.png') });
   await page.click('#almanac-detail-close');
@@ -102,7 +102,7 @@ test('C4 点 12 月灰色「2」格：翻到 12 月、2 号描边、卡片与详
 test('C5 翻月不改选中，点「今天」回到今天，收起再打开也回到今天', async () => {
   await page.click('#prev-month');
   await expect(monthTitle()).toHaveText('2026年11月');
-  await expect(title()).toHaveText('程序猿 · 12月2日');
+  await expect(title()).toHaveText('程序猿 · 十月廿四');
   await page.click('#next-month');
   await expect(monthTitle()).toHaveText('2026年12月');
   expect((await ringOf(2026, 12, 2)).selected).toBe(true);
@@ -116,7 +116,7 @@ test('C5 翻月不改选中，点「今天」回到今天，收起再打开也�
   expect(await page.locator('.cell.is-selected').count()).toBe(0);
 
   await cell(2026, 11, 20).click();
-  await expect(title()).toHaveText('程序猿 · 11月20日');
+  await expect(title()).toHaveText('程序猿 · 十月十二');
   // 收起窗口：指针停在中性位置后托盘移出（同 pin-and-polish 的 showUnpinned 做法）。
   await page.mouse.move(6, 220);
   await trayLeave();
@@ -128,7 +128,7 @@ test('C5 翻月不改选中，点「今天」回到今天，收起再打开也�
 
 test('C4b 点本月「25」格：25 号描边，标题与宜忌是 11 月 25 日', async () => {
   await cell(2026, 11, 25).click();
-  await expect(title()).toHaveText('程序猿 · 11月25日');
+  await expect(title()).toHaveText('程序猿 · 十月十七');
   expect((await ringOf(2026, 11, 25)).selected).toBe(true);
   const expected = await expectedFor(2026, 11, 25);
   expect(await cardText()).toEqual({ yi: expected.yi, ji: expected.ji, quote: expected.quote });
@@ -138,7 +138,7 @@ test('C4c 跨午夜：选中其他日期保持不变；选中今天跟到新的�
   // 接 C4b：选中 11 月 25 日，跨过 11-18 午夜后仍是 25 日。
   await setNow('2026-11-19T00:00:05');
   await page.waitForTimeout(300);
-  await expect(title()).toHaveText('程序猿 · 11月25日');
+  await expect(title()).toHaveText('程序猿 · 十月十七');
   const keep = await expectedFor(2026, 11, 25);
   expect((await cardText()).yi).toBe(keep.yi);
 
@@ -155,7 +155,7 @@ test('C4c 跨午夜：选中其他日期保持不变；选中今天跟到新的�
 
 test('C6 点今天的格子：只有橙色实底、无描边，标题是今天样式', async () => {
   await cell(2026, 11, 25).click();
-  await expect(title()).toHaveText('程序猿 · 11月25日');
+  await expect(title()).toHaveText('程序猿 · 十月十七');
   await cell(2026, 11, 18).click();
   await expect(title()).toHaveText('程序猿黄历');
   const today = await ringOf(2026, 11, 18);

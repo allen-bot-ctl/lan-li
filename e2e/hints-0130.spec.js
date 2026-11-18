@@ -171,13 +171,13 @@ test('C7 程序猿风格详情的焦点与宜忌、焦点词悬停不含「（�
   await useStyle('coder');
 });
 
-test('C8 「健身党 · 12月31日 ›」一行显示不截断', async () => {
+test('C8 「健身党 · 冬月廿三 ›」一行显示不截断', async () => {
   await useStyle('fitness');
   await page.click('#next-month');
   await expect(page.locator('#month-title')).toHaveText('2026年12月');
   await page.locator('.cell[aria-label^="2026年12月31日 "]').click();
   const name = page.locator('#almanac-style-name');
-  await expect(name).toHaveText('健身党 · 12月31日');
+  await expect(name).toHaveText('健身党 · 冬月廿三');
   await page.mouse.move(300, 300);
   await page.waitForTimeout(200);
   const m = await page.evaluate(() => {
@@ -200,7 +200,7 @@ test('C10 选中非今天时悬停不显示「去定制 ›」、标题完整；
   await page.click('#next-month');
   await expect(page.locator('#month-title')).toHaveText('2026年12月');
   await page.locator('.cell[aria-label^="2026年12月31日 "]').click();
-  await expect(page.locator('#almanac-style-name')).toHaveText('健身党 · 12月31日');
+  await expect(page.locator('#almanac-style-name')).toHaveText('健身党 · 冬月廿三');
   await page.mouse.move(300, 300);
   await page.hover('#almanac-quote');
   await page.waitForTimeout(1000);

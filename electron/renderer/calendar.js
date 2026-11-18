@@ -115,9 +115,9 @@ function renderAlmanac(almanac) {
   lastAlmanac = almanac;
   almanacStyleName.textContent = isTodayAlmanac(almanac)
     ? almanac.styleName
-    : `${almanac.styleName.replace('黄历', '')} · ${almanac.solarText}`;
+    : `${almanac.styleName.replace('黄历', '')} · ${almanac.lunarDayText}`;
   almanacCard.classList.toggle('is-dated', !isTodayAlmanac(almanac));
-  almanacStyleName.title = `农历${almanac.lunarDayText}`;
+  almanacStyleName.title = `公历${almanac.solarText}`;
 
   // CSSOM custom properties are the only per-style colours; inline style
   // attributes stay forbidden by the CSP.
@@ -167,7 +167,7 @@ function renderAlmanacDetail(almanac = lastAlmanac) {
   if (!almanac) return;
   almanacDetailTitle.textContent = isTodayAlmanac(almanac)
     ? `今日黄历 · ${almanac.lunarDayText}`
-    : `黄历 · ${almanac.solarText} · ${almanac.lunarDayText}`;
+    : `黄历 · ${almanac.lunarDayText}`;
   almanacDetailBody.replaceChildren();
 
   const detail = almanac.detail;
