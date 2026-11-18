@@ -23,6 +23,9 @@ const almanacCustomize = document.getElementById('almanac-customize');
 const almanacFocusYi = document.getElementById('almanac-focus-yi');
 const almanacFocusJi = document.getElementById('almanac-focus-ji');
 const almanacQuote = document.getElementById('almanac-quote');
+const almanacRedraw = document.getElementById('almanac-redraw');
+let drawnQuote = null;
+let drawnFor = '';
 const clockList = document.getElementById('clock-list');
 const clockEmpty = document.getElementById('clock-empty');
 const clockEdit = document.getElementById('clock-edit');
@@ -133,7 +136,12 @@ function renderAlmanac(almanac) {
   almanacFocusYi.title = almanac.focusYi.title;
   almanacFocusJi.textContent = almanac.focusJi.text;
   almanacFocusJi.title = almanac.focusJi.title;
-  almanacQuote.textContent = almanac.quote;
+  const drawKey = `${almanac.dateKey}|${almanac.styleId}`;
+  if (drawKey !== drawnFor) {
+    drawnQuote = null;
+    drawnFor = drawKey;
+  }
+  almanacQuote.textContent = drawnQuote || almanac.quote;
 
   // 详情面板打开时，日期或风格变了就重画。
   if (!almanacDetail.hidden && `${almanac.dateKey}|${almanac.styleId}` !== detailDay) {
@@ -1036,6 +1044,24 @@ weatherPickerClose.addEventListener('click', () => {
 weatherSearch.addEventListener('input', () => {
   runWeatherSearch();
 });
+
+almanacRedraw.addEventListener('click', (event) => {
+  event.stopPropagation();
+  if (!lastAlmanac) return;
+  const current = almanacQuote.textContent;
+  const pool = (lastAlmanac.quotePool || []).filter((q) => q !== current);
+  if (pool.length === 0) return;
+  drawnQuote = pool[Math.floor(Math.random() * pool.length)];
+  almanacQuote.textContent = drawnQuote;
+  almanacRedraw.classList.remove('is-shaking');
+  almanacQuote.classList.remove('is-fresh');
+  void almanacRedraw.offsetWidth;
+  almanacRedraw.classList.add('is-shaking');
+  almanacQuote.classList.add('is-fresh');
+});
+
+almanacRedraw.addEventListener('animationend', () => almanacRedraw.classList.remove('is-shaking'));
+almanacQuote.addEventListener('animationend', () => almanacQuote.classList.remove('is-fresh'));
 
 almanacCard.addEventListener('click', (event) => {
   if (event.target.closest('#almanac-customize')) return;

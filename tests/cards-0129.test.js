@@ -56,15 +56,17 @@ test('检查更新图标是圆环加下箭头，且只在加载时转弧线', ()
   }
 });
 
-test('黄历签语带「签」标签且去掉第二行', () => {
+test('签区去掉「签」标签、带重新抽签按钮且去掉第二行', () => {
   const row = html.match(/<div class="almanac-quote-row">[\s\S]*?<\/div>/);
   assert.ok(row, '.almanac-quote-row should exist');
-  assert.match(row[0], /class="almanac-tag almanac-tag-qian">签</);
+  assert.equal(/almanac-tag-qian/.test(row[0]), false);
+  assert.match(row[0], /id="almanac-redraw"[^>]*aria-label="重新抽签"/);
   assert.match(row[0], /id="almanac-quote"/);
   assert.equal(html.includes('id="almanac-meta"'), false);
 
   assert.match(cssRule('.almanac-quote'), /text-overflow:\s*ellipsis/);
-  assert.match(cssRule('.almanac-tag-qian'), /var\(--almanac-accent-light,\s*var\(--accent\)\)/);
+  assert.match(cssRule('.almanac-redraw'), /var\(--almanac-accent-light,\s*var\(--accent\)\)/);
+  assert.match(cssRule('.almanac-quote-row'), /border-top:\s*1px solid/);
 
   assert.equal(renderer.includes('almanacMeta'), false);
   assert.ok(renderer.includes('建除 · 值神 · 冲煞'));

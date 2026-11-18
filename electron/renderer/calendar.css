@@ -685,13 +685,47 @@ select {
   background: var(--red);
 }
 
-.almanac-tag-qian {
-  background: var(--almanac-accent-light, var(--accent));
+.almanac-redraw {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--almanac-accent-light, var(--accent));
+  cursor: pointer;
+}
+
+.almanac-redraw:hover {
+  background: var(--chip-hover);
+}
+
+.almanac-redraw.is-shaking svg {
+  animation: almanac-shake 0.3s ease-in-out;
+}
+
+.almanac-quote.is-fresh {
+  animation: almanac-fade 0.3s ease-out;
+}
+
+@keyframes almanac-shake {
+  0%, 100% { transform: rotate(0); }
+  25% { transform: rotate(-14deg); }
+  75% { transform: rotate(14deg); }
+}
+
+@keyframes almanac-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 @media (prefers-color-scheme: dark) {
-  .almanac-tag-qian {
-    background: var(--almanac-accent-dark, var(--accent));
+  .almanac-redraw {
+    color: var(--almanac-accent-dark, var(--accent));
   }
 }
 
@@ -708,18 +742,24 @@ select {
   min-width: 0;
   overflow: hidden;
   color: var(--text);
-  font-size: 11px;
-  line-height: 16px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: 13px;
+  line-height: 18px;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .almanac-quote-row {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   min-width: 0;
-  margin-top: 4px;
+  min-height: 28px;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--pane-line);
 }
 
 .world-clock-card {

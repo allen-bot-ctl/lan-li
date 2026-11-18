@@ -39,6 +39,9 @@ function createUnavailableData() {
     },
     quote() {
       return '';
+    },
+    quotePool() {
+      return [];
     }
   };
 }
@@ -81,6 +84,14 @@ function createFocusData(parsed) {
       const lunarQuotes = isPlainObject(quotes.lunar) ? quotes.lunar : null;
       const lunarValue = lunarQuotes ? lunarQuotes[zhiXing] : undefined;
       return typeof lunarValue === 'string' && lunarValue.length > 0 ? lunarValue : '';
+    },
+    // Every non-empty quote of a style, for redrawing; falls back to lunar.
+    quotePool(styleId) {
+      const pick = (table) => (isPlainObject(table)
+        ? Object.values(table).filter((v) => typeof v === 'string' && v.length > 0)
+        : []);
+      const own = pick(quotes[styleId]);
+      return own.length > 0 ? own : pick(quotes.lunar);
     }
   };
 }

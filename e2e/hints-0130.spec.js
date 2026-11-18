@@ -94,18 +94,72 @@ function tagColors() {
   });
 }
 
-test('C1 程序猿与农历风格下「签」是风格主色实底白字，与「宜」等大', async () => {
-  const coder = await tagColors();
-  expect(coder.bg).toBe('rgb(112, 72, 232)');
-  expect(coder.color).toBe('rgb(255, 255, 255)');
-  expect(coder.size[0]).toBe(coder.size[2]);
-  expect(coder.size[1]).toBe(coder.size[3]);
+test('C1 无「签」标签，宜忌与签之间有 1px 分割线，签筒按钮 24px 用风格主色', async () => {
+  const m = await page.evaluate(() => {
+    const btn = document.getElementById('almanac-redraw');
+    const r = btn.getBoundingClientRect();
+    return {
+      tags: document.querySelectorAll('.almanac-tag-qian').length,
+      border: getComputedStyle(document.querySelector('.almanac-quote-row')).borderTopWidth,
+      color: getComputedStyle(btn).color,
+      size: [r.width, r.height],
+      label: btn.getAttribute('aria-label')
+    };
+  });
+  expect(m.tags).toBe(0);
+  expect(m.border).toBe('1px');
+  expect(m.color).toBe('rgb(112, 72, 232)');
+  expect(m.size).toEqual([24, 24]);
+  expect(m.label).toBe('重新抽签');
+});
 
-  await useStyle('lunar');
-  const lunar = await tagColors();
-  expect(lunar.bg).toBe(lunar.expected);
-  expect(lunar.color).toBe('rgb(255, 255, 255)');
-  await useStyle('coder');
+test('C11 点签筒：签语换成本风格 12 句里不同的一句，宜忌不变，详情不打开', async () => {
+  const before = await page.evaluate(() => ({
+    quote: document.getElementById('almanac-quote').textContent,
+    yi: document.getElementById('almanac-focus-yi').textContent,
+    ji: document.getElementById('almanac-focus-ji').textContent
+  }));
+  for (let i = 0; i < 3; i += 1) {
+    const prev = await page.locator('#almanac-quote').textContent();
+    await page.click('#almanac-redraw');
+    const after = await page.evaluate(() => ({
+      quote: document.getElementById('almanac-quote').textContent,
+      pool: lastAlmanac.quotePool,
+      yi: document.getElementById('almanac-focus-yi').textContent,
+      ji: document.getElementById('almanac-focus-ji').textContent
+    }));
+    expect(after.pool.length).toBe(12);
+    expect(after.pool).toContain(after.quote);
+    expect(after.quote).not.toBe(prev);
+    expect(after.yi).toBe(before.yi);
+    expect(after.ji).toBe(before.ji);
+  }
+  await expect(page.locator('#almanac-detail')).toBeHidden();
+});
+
+test('C12 换日期后签语回到那天的默认签语', async () => {
+  await page.click('#almanac-redraw');
+  await page.click('#next-month');
+  await page.locator('.cell[aria-label^="2026年12月2日 "]').click();
+  const m = await page.evaluate(() => ({
+    shown: document.getElementById('almanac-quote').textContent,
+    expected: lastAlmanac.quote
+  }));
+  expect(m.shown).toBe(m.expected);
+  await page.click('#today-button');
+});
+
+test('C13 最长签语两行内完整显示，右栏不超出窗口', async () => {
+  const m = await page.evaluate(() => {
+    const el = document.getElementById('almanac-quote');
+    const old = el.textContent;
+    el.textContent = '春种秋收 宜收不宜放';
+    const fits = el.scrollHeight <= el.clientHeight + 1;
+    el.textContent = old;
+    return { fits, over: document.documentElement.scrollHeight - window.innerHeight };
+  });
+  expect(m.fits).toBe(true);
+  expect(m.over).toBeLessThanOrEqual(0);
 });
 
 test('C2 标题末尾有「›」；悬停卡片变 --chip-hover，600ms 内出「查看黄历详情」且在窗口内', async () => {

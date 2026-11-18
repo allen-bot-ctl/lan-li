@@ -100,7 +100,7 @@ test('C1 检查中外圈弧旋转、箭头不动', async () => {
   await clearToast();
 });
 
-test('C2 黄历签语带「签」标签、卡上无干支冲煞，详情仍有建除 · 值神 · 冲煞', async () => {
+test('C2 黄历签语无「签」标签、卡上无干支冲煞，详情仍有建除 · 值神 · 冲煞', async () => {
   await trayEnter();
   const card = await page.evaluate(() => ({
     tag: document.querySelector('.almanac-quote-row .almanac-tag-qian')?.textContent,
@@ -108,7 +108,7 @@ test('C2 黄历签语带「签」标签、卡上无干支冲煞，详情仍有�
     meta: document.getElementById('almanac-meta') !== null,
     text: document.querySelector('.almanac-card').innerText
   }));
-  expect(card.tag).toBe('签');
+  expect(card.tag).toBeUndefined();
   expect(card.quoteInRow).toBe(true);
   expect(card.meta).toBe(false);
   expect(/冲.煞/.test(card.text)).toBe(false);

@@ -251,6 +251,7 @@ function buildAlmanac(date, styleId = 'lunar') {
     focusYi: focusEntry(focusYiTerm, 'yi', style),
     focusJi: focusEntry(focusJiTerm, 'ji', style),
     quote: data.quote(style.definition.id, zhiXing),
+    quotePool: data.quotePool(style.definition.id),
     metaText,
     detail: {
       yiItems: isLunar ? rawYi.slice() : mappedYi.labels.slice(),

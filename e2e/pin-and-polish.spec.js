@@ -498,7 +498,7 @@ test('C7 月历格子、三张卡与版本行相对 0.1.24 整体下移 32px（0
     height: BASELINE.viewport.height + 32
   });
 
-  const ALMANAC_SHRINK = 18; // 0.1.29 黄历卡去掉干支冲煞行
+  const ALMANAC_SHRINK = 18 - 29; // 0.1.29 黄历卡去掉干支冲煞行（-18）；0.1.33 签区加分割线、签语两行（+29）
   for (const [name, before] of Object.entries(BASELINE.elements)) {
     const after = measured[name];
     const shrink = name === 'almanacCard' ? ALMANAC_SHRINK : 0;

@@ -18,11 +18,10 @@ function cssRule(selector) {
   return match[1];
 }
 
-test('0.1.30 C1 签标签用风格主色实底白字，取不到时用 --accent', () => {
-  const rule = cssRule('.almanac-tag-qian');
-  assert.match(rule, /background:\s*var\(--almanac-accent-light,\s*var\(--accent\)\)/);
-  assert.equal(/muted-strong/.test(rule), false);
-  assert.match(css, /prefers-color-scheme: dark\)\s*\{\s*\.almanac-tag-qian\s*\{\s*background:\s*var\(--almanac-accent-dark,\s*var\(--accent\)\)/);
+test('0.1.33 签筒按钮用风格主色，取不到时用 --accent', () => {
+  const rule = cssRule('.almanac-redraw');
+  assert.match(rule, /color:\s*var\(--almanac-accent-light,\s*var\(--accent\)\)/);
+  assert.match(css, /prefers-color-scheme: dark\)\s*\{\s*\.almanac-redraw\s*\{\s*color:\s*var\(--almanac-accent-dark,\s*var\(--accent\)\)/);
 });
 
 test('0.1.30 C2 黄历卡标题后常驻 ›，悬停变 --chip-hover 并带「查看黄历详情」气泡', () => {
