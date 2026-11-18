@@ -109,17 +109,23 @@ test('C5 钉住按钮有 500ms 页内气泡，文案与定位满足契约', () =
   assert.match(pinButton[0], /class="pin-icon pin-icon-pin"/);
   assert.match(pinButton[0], /class="pin-icon pin-icon-close"/);
 
-  assert.match(HTML, /<div class="pin-tooltip" id="pin-tooltip" role="tooltip" hidden>钉住窗口，移开鼠标也不隐藏<\/div>/);
-  assert.match(RENDERER, /const PIN_TOOLTIP_UNPINNED = '钉住窗口，移开鼠标也不隐藏';/);
-  assert.match(RENDERER, /const PIN_TOOLTIP_PINNED = '取消钉住并关闭';/);
-  assert.match(RENDERER, /pinTooltipTimer = setTimeout\(\(\) => \{[\s\S]*?\}, 500\);/);
-  // 0.1.25 moved the pin to the top-left, so the bubble is left-aligned now.
-  assert.match(RENDERER, /let left = rect\.left;/);
-  assert.equal(/let left = rect\.right - width;/.test(RENDERER), false);
-  assert.match(RENDERER, /Math\.min\(left, window\.innerWidth - width - 4\)/);
-  assert.match(RENDERER, /pinButton\.addEventListener\('mouseleave', hidePinTooltip\)/);
+  // SVG 元素没有 .hidden 这个 IDL 属性，图形切换必须切内容属性。
+  assert.match(RENDERER, /pinIconPin\.toggleAttribute\('hidden', pinned\)/);
+  assert.match(RENDERER, /pinIconClose\.toggleAttribute\('hidden', !pinned\)/);
+  assert.match(RENDERER, /pinButton\.classList\.toggle\('is-pinned', pinned\)/);
+  assert.match(ruleFor('.pin-button.is-pinned').body, /color:\s*var\(--accent\)/);
 
-  const tip = ruleFor('.pin-tooltip');
+  assert.match(HTML, /<div class="icon-tooltip" id="icon-tooltip" role="tooltip" hidden>钉住窗口，移开鼠标也不隐藏<\/div>/);
+  assert.match(RENDERER, /const ICON_TOOLTIP_UNPINNED = '钉住窗口，移开鼠标也不隐藏';/);
+  assert.match(RENDERER, /const ICON_TOOLTIP_PINNED = '取消钉住并关闭';/);
+  assert.match(RENDERER, /iconTooltipTimer = setTimeout\(\(\) => \{[\s\S]*?\}, 500\);/);
+  // 0.1.27 把图钉移到右上，气泡改为按按钮右缘对齐并钳在窗口内。
+  assert.match(RENDERER, /let left = rect\.right - width;/);
+  assert.equal(/let left = rect\.left;/.test(RENDERER), false);
+  assert.match(RENDERER, /Math\.min\(left, window\.innerWidth - width - 4\)/);
+  assert.match(RENDERER, /button\.addEventListener\('mouseleave', hideIconTooltip\)/);
+
+  const tip = ruleFor('.icon-tooltip');
   assert.match(tip.body, /position:\s*fixed/);
   assert.match(tip.body, /font-size:\s*11px/);
   assert.match(tip.body, /white-space:\s*nowrap/);
@@ -220,20 +226,30 @@ test('C8 三个卡片入口统一以 › 结尾', () => {
   assert.equal(/>编辑<\/button>/.test(HTML), false);
 });
 
-test('C9 检查更新与版本号同为 10px，颜色 --muted、悬停 --link', () => {
+test('C9 右栏底部只剩 10px 版本号，更新提示改成不占布局的浮层', () => {
   assert.match(ruleFor('.app-version').body, /font-size:\s*10px/);
 
-  const update = ruleFor('.pane-check-update');
-  assert.match(update.body, /font-size:\s*10px/);
-  assert.match(update.body, /color:\s*var\(--muted\)/);
+  const footer = HTML.match(/<div class="pane-footer">[\s\S]*?<\/div>/);
+  assert.ok(footer, 'pane footer should exist');
+  assert.match(footer[0], /id="app-version"/);
+  assert.equal(/check-update|pane-footer-sep/.test(footer[0]), false);
 
-  const hover = ruleFor('.pane-check-update:hover');
-  assert.match(hover.body, /color:\s*var\(--link\)/);
+  assert.equal(/id="update-banner"/.test(HTML), false, 'the banner row is gone');
+  assert.match(HTML, /<div class="toast" id="update-toast" role="status" hidden>/);
+  assert.match(HTML, /id="update-toast-action"/);
+  assert.match(HTML, /id="update-toast-close"/);
 
-  // The new rule must win over the generic .card-link size/link colour.
-  const linkIndex = ALL_RULES.findIndex((rule) => rule.selectors.includes('.card-link'));
-  const updateIndex = ALL_RULES.findIndex((rule) => rule.selectors.includes('.pane-check-update'));
-  assert.ok(linkIndex >= 0 && updateIndex > linkIndex);
+  const toast = ruleFor('.toast');
+  assert.match(toast.body, /position:\s*absolute/);
+  assert.match(toast.body, /top:\s*40px/);
+  assert.match(toast.body, /left:\s*50%/);
+  assert.match(toast.body, /max-width:\s*360px/);
+  assert.match(toast.body, /height:\s*32px/);
+  assert.match(toast.body, /backdrop-filter:\s*blur\(12px\)/);
+  assert.match(toast.body, /transition:\s*opacity 120ms ease-in, transform 120ms ease-in/);
+  assert.match(ruleFor('.toast.is-visible').body, /transition:\s*opacity 160ms ease-out, transform 160ms ease-out/);
+  assert.match(ruleFor('.toast[hidden]').body, /display:\s*none/);
+  assert.match(ruleFor('.toast-message').body, /white-space:\s*nowrap/);
 });
 
 test('C10 product.md 与 README 去掉节气倒计时并补上钉住说明', () => {

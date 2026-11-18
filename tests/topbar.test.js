@@ -51,27 +51,34 @@ function calendarPaneHtml() {
   return match[0];
 }
 
-test('C2 通栏顶栏：32px、图钉在左上、栏历在其右、设置胶囊在右上最后', () => {
+test('C2 通栏顶栏：32px、左上是应用图标＋栏历、右上检查更新→钉住→设置，设置最后', () => {
   const topbar = topbarHtml();
   const left = topbar.match(/<div class="topbar-left">([\s\S]*?)<\/div>/);
   const right = topbar.match(/<div class="topbar-right">([\s\S]*?)<\/div>\s*<\/header>/);
   assert.ok(left, 'left group should exist');
   assert.ok(right, 'right group should exist');
 
-  const pinIndex = left[1].indexOf('id="pin-button"');
+  const iconIndex = left[1].indexOf('class="topbar-app-icon"');
   const titleIndex = left[1].indexOf('class="topbar-title"');
-  assert.ok(pinIndex >= 0, 'pin button belongs to the topbar left group');
-  assert.ok(titleIndex > pinIndex, '栏历 text must follow the pin button');
-  assert.match(left[1], /class="topbar-title">栏历<\/span>/);
-
-  const actionsIndex = right[1].indexOf('class="topbar-actions"');
-  const settingsIndex = right[1].indexOf('id="settings-button"');
-  assert.ok(actionsIndex >= 0, 'reserved container for future entries should exist');
-  assert.ok(settingsIndex > actionsIndex, 'settings must be the rightmost entry');
+  assert.ok(iconIndex >= 0, 'the brand icon leads the left group');
+  assert.ok(titleIndex > iconIndex, '栏历 text must follow the icon');
   assert.match(
-    right[1],
-    /<div class="topbar-actions" id="topbar-actions"><\/div>/
+    left[1],
+    /<img class="topbar-app-icon" src="\.\.\/assets\/icon\.png" width="16" height="16" alt="">/
   );
+  assert.match(left[1], /class="topbar-title">栏历<\/span>/);
+  assert.equal(/<button/.test(left[1]), false, 'the left group holds no buttons');
+
+  const checkIndex = right[1].indexOf('id="check-update"');
+  const pinIndex = right[1].indexOf('id="pin-button"');
+  const settingsIndex = right[1].indexOf('id="settings-button"');
+  assert.ok(checkIndex >= 0, 'the check-update icon belongs to the right group');
+  assert.ok(pinIndex > checkIndex, '钉住 sits 4px right of 检查更新');
+  assert.ok(settingsIndex > pinIndex, '设置 sits 8px right of 钉住');
+  assert.match(right[1], /class="topbar-icon check-update"/);
+  assert.match(right[1], /aria-label="检查更新"/);
+  assert.match(right[1], /class="topbar-icon pin-button"/);
+  assert.equal(/topbar-actions/.test(right[1]), false, 'no empty actions slot');
 
   const settings = topbar.match(/<button[\s\S]*?id="settings-button"[\s\S]*?<\/button>/);
   assert.ok(settings, 'settings button should exist');
@@ -95,19 +102,27 @@ test('C2 通栏顶栏：32px、图钉在左上、栏历在其右、设置胶囊�
   assert.match(ruleFor('.topbar-left').body, /gap:\s*6px/);
   assert.match(ruleFor('.topbar-title').body, /font-size:\s*13px/);
   assert.match(ruleFor('.topbar-title').body, /font-weight:\s*600/);
+  assert.match(ruleFor('.topbar-app-icon').body, /width:\s*16px/);
+  assert.match(ruleFor('.topbar-app-icon').body, /height:\s*16px/);
 
   const pill = ruleFor('.nav-pill');
   assert.match(pill.body, /height:\s*26px/);
   assert.match(pill.body, /font-size:\s*12px/);
 
-  const actions = ruleFor('.topbar-actions');
-  assert.match(actions.body, /flex-direction:\s*row-reverse/);
-  assert.match(actions.body, /gap:\s*6px/);
+  // Functional icons: 24px circles, transparent at rest, chip on hover, and
+  // the exact 4px / 8px rhythm in front of the settings pill.
+  const icon = ruleFor('.topbar-icon');
+  assert.match(icon.body, /width:\s*24px/);
+  assert.match(icon.body, /height:\s*24px/);
+  assert.match(icon.body, /border-radius:\s*50%/);
+  assert.match(icon.body, /background:\s*transparent/);
+  assert.match(ruleFor('.topbar-icon:hover').body, /background:\s*var\(--chip-hover\)/);
+  assert.match(ruleFor('.check-update').body, /margin-right:\s*4px/);
+  assert.match(ruleFor('.pin-button').body, /margin-right:\s*8px/);
 
-  const action = ruleFor('.topbar-action');
-  assert.match(action.body, /width:\s*24px/);
-  assert.match(action.body, /height:\s*24px/);
-  assert.match(action.body, /border-radius:\s*50%/);
+  const pinned = ruleFor('.pin-button.is-pinned');
+  assert.match(pinned.body, /color:\s*var\(--accent\)/);
+  assert.match(pinned.body, /color-mix\(in srgb, var\(--accent\) 16%, transparent\)/);
 });
 
 test('C3 月历顶栏只剩年月、副标题与 ‹ 今天 ›', () => {
@@ -124,19 +139,22 @@ test('C3 月历顶栏只剩年月、副标题与 ‹ 今天 ›', () => {
   assert.match(pane, /id="lunar-subtitle"/);
 });
 
-test('C4 图钉气泡在按钮下方左对齐并钳在窗口内，交互与 0.1.24 一致', () => {
-  assert.match(RENDERER, /const PIN_TOOLTIP_UNPINNED = '钉住窗口，移开鼠标也不隐藏';/);
-  assert.match(RENDERER, /const PIN_TOOLTIP_PINNED = '取消钉住并关闭';/);
-  assert.match(RENDERER, /pinTooltipTimer = setTimeout\(\(\) => \{[\s\S]*?\}, 500\);/);
-  assert.match(RENDERER, /let left = rect\.left;/);
-  assert.equal(/let left = rect\.right - width;/.test(RENDERER), false);
+test('C4 功能图标气泡在按钮下方右对齐并钳在窗口内，交互与 0.1.24 一致', () => {
+  assert.match(RENDERER, /const ICON_TOOLTIP_UNPINNED = '钉住窗口，移开鼠标也不隐藏';/);
+  assert.match(RENDERER, /const ICON_TOOLTIP_PINNED = '取消钉住并关闭';/);
+  assert.match(RENDERER, /const ICON_TOOLTIP_CHECK = '检查更新';/);
+  assert.match(RENDERER, /iconTooltipTimer = setTimeout\(\(\) => \{[\s\S]*?\}, 500\);/);
+  assert.match(RENDERER, /let left = rect\.right - width;/);
+  assert.equal(/let left = rect\.left;/.test(RENDERER), false);
   assert.match(RENDERER, /Math\.min\(left, window\.innerWidth - width - 4\)/);
   assert.match(RENDERER, /let top = rect\.bottom \+ 6;/);
-  assert.match(RENDERER, /pinButton\.addEventListener\('mouseleave', hidePinTooltip\)/);
+  assert.match(RENDERER, /watchIconTooltip\(pinButton\);/);
+  assert.match(RENDERER, /watchIconTooltip\(checkUpdate\);/);
+  assert.match(RENDERER, /button\.addEventListener\('mouseleave', hideIconTooltip\)/);
   assert.match(RENDERER, /pinButton\.addEventListener\('click',/);
-  assert.match(HTML, /id="pin-tooltip" role="tooltip" hidden>钉住窗口，移开鼠标也不隐藏<\/div>/);
+  assert.match(HTML, /id="icon-tooltip" role="tooltip" hidden>钉住窗口，移开鼠标也不隐藏<\/div>/);
 
-  const tip = ruleFor('.pin-tooltip');
+  const tip = ruleFor('.icon-tooltip');
   assert.match(tip.body, /position:\s*fixed/);
   assert.match(tip.body, /font-size:\s*11px/);
   assert.match(tip.body, /white-space:\s*nowrap/);
@@ -151,7 +169,7 @@ test('C5 设置胶囊把左缘与下方 4px 交给原生菜单', () => {
 
 const SOURCE_MAIN = source('electron/main.js');
 
-test('C9 README、产品文档与落地页统一为新顶栏位置', () => {
+test('C9 README、产品文档与落地页不再描述旧顶栏元素', () => {
   for (const doc of [README, PRODUCT, SITE]) {
     assert.equal(/顶栏最右/.test(doc), false);
     assert.equal(/顶栏右侧的齿轮|顶栏右侧齿轮/.test(doc), false);
@@ -159,18 +177,14 @@ test('C9 README、产品文档与落地页统一为新顶栏位置', () => {
     assert.equal(/右对齐按钮/.test(doc), false);
   }
 
-  assert.match(README, /左上角的图钉/);
   assert.match(README, /右上角的「⚙︎ 设置」/);
   assert.match(README, /580×432/);
   assert.equal(/580×400/.test(README), false);
 
-  assert.match(PRODUCT, /## 当前功能（0\.1\.25）/);
   assert.match(PRODUCT, /通栏顶栏/);
-  assert.match(PRODUCT, /左上角是图钉圆钮/);
   assert.match(PRODUCT, /右上角「⚙︎ 设置」/);
   assert.match(PRODUCT, /580×432/);
   assert.equal(/580×400/.test(PRODUCT), false);
 
   assert.match(SITE, /右上角的「⚙︎ 设置」/);
-  assert.match(SITE, /左上角的图钉/);
 });

@@ -13,7 +13,7 @@ const nextMonth = document.getElementById('next-month');
 const todayButton = document.getElementById('today-button');
 const settingsButton = document.getElementById('settings-button');
 const pinButton = document.getElementById('pin-button');
-const pinTooltip = document.getElementById('pin-tooltip');
+const iconTooltip = document.getElementById('icon-tooltip');
 const pinIconPin = pinButton.querySelector('.pin-icon-pin');
 const pinIconClose = pinButton.querySelector('.pin-icon-close');
 const grid = document.getElementById('grid');
@@ -36,9 +36,12 @@ const weatherCard = document.getElementById('weather-card');
 const weatherEmoji = document.getElementById('weather-emoji');
 const weatherTemp = document.getElementById('weather-temp');
 const weatherCity = document.getElementById('weather-city');
-const updateBanner = document.getElementById('update-banner');
-const updateMessage = document.getElementById('update-message');
-const updateAction = document.getElementById('update-action');
+const updateToast = document.getElementById('update-toast');
+const updateToastMessage = document.getElementById('update-toast-message');
+const updateToastAction = document.getElementById('update-toast-action');
+const updateToastClose = document.getElementById('update-toast-close');
+const toastGlyphBusy = updateToast.querySelector('.toast-glyph-busy');
+const toastGlyphDone = updateToast.querySelector('.toast-glyph-done');
 const appVersion = document.getElementById('app-version');
 const checkUpdate = document.getElementById('check-update');
 const weatherPicker = document.getElementById('weather-picker');
@@ -67,10 +70,12 @@ let weatherQuickCities = null;
 let weatherQuickToken = 0;
 let almanacStylesToken = 0;
 let updateMode = null;
-let bannerMode = null;
+let toastMode = null;
 let checkStatusTimer = null;
+let toastExitTimer = null;
+let pendingNotice = null;
 let pinned = false;
-let pinTooltipTimer = null;
+let iconTooltipTimer = null;
 
 function daysInMonth(year, month) {
   return new Date(year, month, 0).getDate();
@@ -517,57 +522,68 @@ function clearSettingsHighlight() {
   settingsButton.setAttribute('aria-expanded', 'false');
 }
 
-const PIN_TOOLTIP_UNPINNED = '钉住窗口，移开鼠标也不隐藏';
-const PIN_TOOLTIP_PINNED = '取消钉住并关闭';
+const ICON_TOOLTIP_UNPINNED = '钉住窗口，移开鼠标也不隐藏';
+const ICON_TOOLTIP_PINNED = '取消钉住并关闭';
+const ICON_TOOLTIP_CHECK = '检查更新';
 
 function renderPin(nextPinned) {
   pinned = Boolean(nextPinned);
-  pinButton.setAttribute('aria-label', pinned ? PIN_TOOLTIP_PINNED : '钉住窗口');
+  pinButton.setAttribute('aria-label', pinned ? ICON_TOOLTIP_PINNED : '钉住窗口');
   pinButton.setAttribute('aria-pressed', pinned ? 'true' : 'false');
-  pinIconPin.hidden = pinned;
-  pinIconClose.hidden = !pinned;
-  pinTooltip.textContent = pinned ? PIN_TOOLTIP_PINNED : PIN_TOOLTIP_UNPINNED;
+  // SVG elements do not implement the HTML `hidden` IDL attribute, so the
+  // graphic swap has to toggle the content attribute itself.
+  pinIconPin.toggleAttribute('hidden', pinned);
+  pinIconClose.toggleAttribute('hidden', !pinned);
+  pinButton.classList.toggle('is-pinned', pinned);
 }
 
-function hidePinTooltip() {
-  if (pinTooltipTimer) {
-    clearTimeout(pinTooltipTimer);
-    pinTooltipTimer = null;
+function hideIconTooltip() {
+  if (iconTooltipTimer) {
+    clearTimeout(iconTooltipTimer);
+    iconTooltipTimer = null;
   }
-  pinTooltip.hidden = true;
+  iconTooltip.hidden = true;
 }
 
-// In-page bubble instead of a native title: 500ms hover delay, below the pin
-// button, left edges aligned, clamped so it always stays inside the window.
-function showPinTooltip() {
-  pinTooltip.hidden = false;
-  const rect = pinButton.getBoundingClientRect();
-  const width = pinTooltip.offsetWidth;
-  const height = pinTooltip.offsetHeight;
+// In-page bubble instead of a native title: 500ms hover delay, below the
+// hovered icon, right edges aligned, clamped so it never leaves the window.
+function showIconTooltip(button) {
+  iconTooltip.textContent = button === checkUpdate
+    ? ICON_TOOLTIP_CHECK
+    : (pinned ? ICON_TOOLTIP_PINNED : ICON_TOOLTIP_UNPINNED);
+  iconTooltip.hidden = false;
+  const rect = button.getBoundingClientRect();
+  const width = iconTooltip.offsetWidth;
+  const height = iconTooltip.offsetHeight;
 
-  let left = rect.left;
+  let left = rect.right - width;
   left = Math.max(4, Math.min(left, window.innerWidth - width - 4));
   let top = rect.bottom + 6;
   if (top + height > window.innerHeight - 4) {
     top = Math.max(4, rect.top - height - 6);
   }
 
-  pinTooltip.style.left = `${Math.round(left)}px`;
-  pinTooltip.style.top = `${Math.round(top)}px`;
+  iconTooltip.style.left = `${Math.round(left)}px`;
+  iconTooltip.style.top = `${Math.round(top)}px`;
 }
 
-pinButton.addEventListener('mouseenter', () => {
-  hidePinTooltip();
-  pinTooltipTimer = setTimeout(() => {
-    pinTooltipTimer = null;
-    showPinTooltip();
-  }, 500);
-});
+function watchIconTooltip(button) {
+  button.addEventListener('mouseenter', () => {
+    hideIconTooltip();
+    iconTooltipTimer = setTimeout(() => {
+      iconTooltipTimer = null;
+      showIconTooltip(button);
+    }, 500);
+  });
 
-pinButton.addEventListener('mouseleave', hidePinTooltip);
+  button.addEventListener('mouseleave', hideIconTooltip);
+}
+
+watchIconTooltip(pinButton);
+watchIconTooltip(checkUpdate);
 
 pinButton.addEventListener('click', () => {
-  hidePinTooltip();
+  hideIconTooltip();
   api.togglePin().then((result) => {
     if (result) renderPin(result.pinned);
   }).catch(() => {});
@@ -585,7 +601,7 @@ settingsButton.addEventListener('click', () => {
 
 function renderVersion(label) {
   const text = typeof label === 'string' ? label : '';
-  appVersion.textContent = text ? `栏历 ${text}` : '栏历';
+  appVersion.textContent = text;
   appVersion.setAttribute('aria-label', text ? `当前版本 ${text}` : '当前版本');
 }
 
@@ -595,9 +611,15 @@ function loadVersion() {
   });
 }
 
-// The footer button is a second entry to the same main-process check as the
-// settings menu; feedback still arrives through update:status.
+// The top-bar icon is a second entry to the same main-process check as the
+// settings menu; feedback still arrives through update:status. When an update
+// is already waiting, the icon re-opens its notice instead of re-checking.
 checkUpdate.addEventListener('click', () => {
+  hideIconTooltip();
+  if (pendingNotice) {
+    showUpdateNotice(pendingNotice);
+    return;
+  }
   api.checkUpdate();
 });
 
@@ -865,65 +887,110 @@ function clearCheckStatusTimer() {
   }
 }
 
-function hideStatusBanner() {
-  if (bannerMode !== 'status') return;
-  bannerMode = null;
+function setToastGlyph(kind) {
+  toastGlyphBusy.toggleAttribute('hidden', kind !== 'busy');
+  toastGlyphDone.toggleAttribute('hidden', kind === 'busy');
+  updateToast.classList.toggle('is-accent', kind === 'accent');
+}
+
+function showToast() {
+  if (toastExitTimer) {
+    clearTimeout(toastExitTimer);
+    toastExitTimer = null;
+  }
+  updateToast.hidden = false;
+  // The enter transition needs a frame with the element laid out first.
+  requestAnimationFrame(() => updateToast.classList.add('is-visible'));
+}
+
+// Exit runs the 120ms reverse transition before the element leaves the DOM.
+function hideToast() {
+  updateToast.classList.remove('is-visible');
+  if (toastExitTimer) clearTimeout(toastExitTimer);
+  toastExitTimer = setTimeout(() => {
+    toastExitTimer = null;
+    if (!updateToast.classList.contains('is-visible')) updateToast.hidden = true;
+  }, 120);
+}
+
+function hideStatusToast() {
+  if (toastMode !== 'status') return;
+  toastMode = null;
   updateMode = null;
-  updateBanner.hidden = true;
-  updateMessage.textContent = '';
+  clearCheckStatusTimer();
+  checkUpdate.classList.remove('is-spinning');
+  setToastGlyph('done');
+  updateToastMessage.textContent = '';
+  hideToast();
 }
 
 function showUpdateNotice(notice) {
-  if (!notice || !updateBanner) return;
+  if (!notice) return;
 
   clearCheckStatusTimer();
   clearSettingsHighlight();
-  bannerMode = 'notice';
+  pendingNotice = notice;
+  toastMode = 'notice';
   updateMode = notice.mode === 'ready' ? 'ready' : 'manual';
-  if (updateMode === 'ready') {
-    updateMessage.textContent = '新版本已就绪';
-    updateAction.textContent = '重启更新';
-  } else {
-    updateMessage.textContent = '无法自动更新，请手动下载';
-    updateAction.textContent = '下载新版';
-  }
-  updateAction.hidden = false;
-  updateBanner.hidden = false;
+  checkUpdate.classList.remove('is-spinning');
+  // An available update keeps its orange dot until it is installed.
+  checkUpdate.classList.toggle('has-update', updateMode === 'ready');
+  setToastGlyph(updateMode === 'ready' ? 'accent' : 'done');
+  updateToastMessage.textContent = updateMode === 'ready'
+    ? '新版本已就绪'
+    : '无法自动更新，请手动下载';
+  updateToastAction.textContent = updateMode === 'ready' ? '重启更新' : '下载新版';
+  updateToastAction.hidden = false;
+  updateToastClose.hidden = false;
+  showToast();
 }
 
-// Manual check results use the same banner area as update notices. Notices win
-// so a pending download/restart prompt is never replaced by a status line.
+// Manual check results share the toast with update notices. Notices win so a
+// pending download/restart prompt is never replaced by a status line.
 function applyCheckStatus(status) {
   if (!status) return;
   clearCheckStatusTimer();
 
   const label = typeof status.label === 'string' ? status.label : '';
   if (!label) {
-    if (bannerMode === 'status') hideStatusBanner();
+    if (toastMode === 'status') hideStatusToast();
     return;
   }
-  if (bannerMode === 'notice') return;
+  if (toastMode === 'notice') return;
 
-  bannerMode = 'status';
+  toastMode = 'status';
   updateMode = null;
-  updateMessage.textContent = label;
-  updateAction.hidden = true;
-  updateBanner.hidden = false;
+  updateToastMessage.textContent = label;
+  updateToastAction.hidden = true;
+  updateToastClose.hidden = true;
+  const busy = status.busy === true;
+  checkUpdate.classList.toggle('is-spinning', busy);
+  setToastGlyph(busy ? 'busy' : 'done');
+  showToast();
 
   if (status.timed) {
     checkStatusTimer = setTimeout(() => {
       checkStatusTimer = null;
-      hideStatusBanner();
-    }, 2600);
+      hideStatusToast();
+    }, 2500);
   }
 }
 
-updateAction.addEventListener('click', () => {
+updateToastAction.addEventListener('click', () => {
   if (updateMode === 'ready') {
     api.restartToUpdate();
   } else if (updateMode === 'manual') {
     api.openLatestRelease();
   }
+});
+
+// Dismissing the toast never clears the orange dot: the update is still there.
+updateToastClose.addEventListener('click', () => {
+  clearCheckStatusTimer();
+  toastMode = null;
+  updateMode = null;
+  checkUpdate.classList.remove('is-spinning');
+  hideToast();
 });
 
 api.onUpdateNotice(showUpdateNotice);
@@ -980,9 +1047,9 @@ api.onOpenPanel((panel) => {
 });
 
 document.addEventListener('pointerdown', clearSettingsHighlight, true);
-document.addEventListener('pointerdown', hidePinTooltip, true);
+document.addEventListener('pointerdown', hideIconTooltip, true);
 window.addEventListener('blur', clearSettingsHighlight);
-window.addEventListener('blur', hidePinTooltip);
+window.addEventListener('blur', hideIconTooltip);
 
 document.documentElement.addEventListener('mouseenter', () => {
   clearSettingsHighlight();

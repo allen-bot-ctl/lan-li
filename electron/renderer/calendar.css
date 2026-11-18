@@ -23,9 +23,6 @@
   --input-bg: rgba(0, 0, 0, 0.04);
   --input-border: rgba(0, 0, 0, 0.11);
   --focus-ring: rgba(0, 0, 0, 0.22);
-  --banner-bg: rgba(255, 244, 230, 0.94);
-  --banner-border: rgba(224, 120, 47, 0.26);
-  --banner-text: #8a4a12;
   --scroll: rgba(0, 0, 0, 0.16);
   --body-bg: linear-gradient(135deg, #eaf0fb 0%, #f7f3ee 48%, #fbe7d6 100%);
 }
@@ -53,9 +50,6 @@
     --input-bg: rgba(255, 255, 255, 0.07);
     --input-border: rgba(255, 255, 255, 0.13);
     --focus-ring: rgba(255, 255, 255, 0.32);
-    --banner-bg: rgba(88, 56, 26, 0.86);
-    --banner-border: rgba(255, 154, 85, 0.3);
-    --banner-text: #ffc799;
     --scroll: rgba(255, 255, 255, 0.2);
     --body-bg: linear-gradient(135deg, #262a32 0%, #232326 52%, #2d2621 100%);
   }
@@ -98,8 +92,8 @@ select {
   background: transparent;
 }
 
-/* Full-width top bar: pin + name on the left, future entries + settings on
-   the right. It owns the 32px the window grew by; the two panes below keep
+/* Full width top bar: brand on the left, functional icons + settings on the
+   right. It owns the 32px the window grew by; the two panes below keep
    their 0.1.24 internal heights and spacing. */
 
 .topbar {
@@ -121,6 +115,12 @@ select {
   gap: 6px;
 }
 
+.topbar-app-icon {
+  display: block;
+  width: 16px;
+  height: 16px;
+}
+
 .topbar-title {
   color: var(--text);
   font-size: 13px;
@@ -133,23 +133,12 @@ select {
   display: flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: 6px;
 }
 
-/* Future entries go here, to the left of 设置, laid out right to left. Each
-   one is a 24px icon circle with a .pin-tooltip bubble. */
-.topbar-actions {
-  display: flex;
-  flex-direction: row-reverse;
-  align-items: center;
-  gap: 6px;
-}
-
-.topbar-actions:empty {
-  display: none;
-}
-
-.topbar-action {
+/* Functional entries sit left of 设置: 检查更新 → 4px → 钉住 → 8px → 设置.
+   Each is a 24px circle with a transparent resting background so it reads
+   apart from the always-chipped 设置 pill. */
+.topbar-icon {
   position: relative;
   display: flex;
   width: 24px;
@@ -159,15 +148,52 @@ select {
   padding: 0;
   border: none;
   border-radius: 50%;
-  background: var(--chip);
+  background: transparent;
   color: var(--muted-strong);
   font-size: 16px;
   line-height: 1;
   cursor: pointer;
 }
 
-.topbar-action:hover {
+.topbar-icon:hover,
+.topbar-icon:focus-visible {
   background: var(--chip-hover);
+}
+
+.check-update {
+  margin-right: 4px;
+}
+
+.update-icon {
+  display: block;
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+}
+
+.check-update.is-spinning .update-icon {
+  animation: topbar-spin 1s linear infinite;
+}
+
+@keyframes topbar-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.update-dot {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  display: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.check-update.has-update .update-dot {
+  display: block;
 }
 
 .app-body {
@@ -305,12 +331,23 @@ select {
 
 .pin-button {
   position: relative;
+  margin-right: 8px;
+}
+
+.pin-button.is-pinned {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.pin-button.is-pinned:hover,
+.pin-button.is-pinned:focus-visible {
+  background: color-mix(in srgb, var(--accent) 26%, transparent);
 }
 
 .pin-icon {
   display: block;
-  width: 13px;
-  height: 13px;
+  width: 14px;
+  height: 14px;
   fill: currentColor;
 }
 
@@ -325,7 +362,7 @@ select {
   display: none;
 }
 
-.pin-tooltip {
+.icon-tooltip {
   position: fixed;
   z-index: 30;
   padding: 5px 8px;
@@ -340,7 +377,7 @@ select {
   pointer-events: none;
 }
 
-.pin-tooltip[hidden] {
+.icon-tooltip[hidden] {
   display: none;
 }
 
@@ -448,50 +485,118 @@ select {
   outline-offset: -1.5px;
 }
 
-.update-banner {
+/* Update feedback floats above the panes instead of owning a row: absolute,
+   so every state leaves the grid and the right column untouched. */
+.toast {
+  position: absolute;
+  top: 40px;
+  left: 50%;
+  z-index: 15;
   display: flex;
-  flex: 0 0 25px;
+  max-width: 360px;
+  height: 32px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border: 1px solid var(--sheet-border);
+  border-radius: 16px;
+  background: var(--sheet-bg);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+  opacity: 0;
+  transform: translate(-50%, -6px);
+  transition: opacity 120ms ease-in, transform 120ms ease-in;
+}
+
+.toast.is-visible {
+  opacity: 1;
+  transform: translate(-50%, 0);
+  transition: opacity 160ms ease-out, transform 160ms ease-out;
+}
+
+.toast[hidden] {
+  display: none;
+}
+
+.toast-status {
+  display: flex;
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
   align-items: center;
   justify-content: center;
-  gap: 7px;
-  height: 25px;
-  margin-top: 2px;
-  padding: 0 8px;
-  overflow: hidden;
-  border: 1px solid var(--banner-border);
-  border-radius: 9px;
-  background: var(--banner-bg);
-  color: var(--banner-text);
-  font-size: 11px;
+  color: var(--muted-strong);
+}
+
+.toast.is-accent .toast-status {
+  color: var(--accent);
+}
+
+.toast-glyph {
+  display: block;
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+}
+
+.toast-glyph[hidden] {
+  display: none;
+}
+
+.toast-glyph-busy {
+  animation: topbar-spin 1s linear infinite;
+}
+
+.toast-message {
+  flex: 0 1 auto;
   white-space: nowrap;
 }
 
-.update-banner[hidden] {
-  display: none;
-}
-
-.update-message {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.update-action {
+.toast-action {
   flex: 0 0 auto;
-  padding: 1px 7px;
-  border: 1px solid var(--banner-border);
-  border-radius: 7px;
-  background: transparent;
-  color: var(--banner-text);
-  font-size: 10.5px;
+  height: 22px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 11px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
   cursor: pointer;
 }
 
-.update-action[hidden] {
+.toast-action[hidden] {
   display: none;
 }
 
-.update-action:hover {
-  background: rgba(255, 255, 255, 0.32);
+.toast-close {
+  display: flex;
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted-strong);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.toast-close[hidden] {
+  display: none;
+}
+
+.toast-close:hover {
+  background: var(--chip-hover);
 }
 
 /* Right column */
@@ -830,25 +935,6 @@ select {
   line-height: 1;
   white-space: nowrap;
   cursor: default;
-}
-
-.pane-footer-sep {
-  color: var(--faint);
-  font-size: 10px;
-  line-height: 1;
-}
-
-/* Version-adjacent secondary action: same size as the version, one step
-   darker than --faint so it still reads as clickable. */
-.pane-check-update {
-  color: var(--muted);
-  font-size: 10px;
-  line-height: 1;
-}
-
-.pane-check-update:hover {
-  color: var(--link);
-  opacity: 1;
 }
 
 /* Panels */

@@ -61,18 +61,18 @@ test('each card reveals only its own entry on hover or focus', () => {
   assert.deepEqual([...shown.selectors].sort(), [...SHOWN].sort());
 });
 
-test('footer 检查更新 stays visible and outside the hide rule', () => {
+test('顶栏功能图标常驻可见，不在卡片入口的隐藏规则里', () => {
   const hidden = findRule(
     (rule) =>
       /(?:^|;)\s*opacity:\s*0(?:;|$)/.test(rule.body) &&
       /(?:^|;)\s*pointer-events:\s*none(?:;|$)/.test(rule.body)
   );
 
-  assert.equal(hidden.selectors.some((selector) => selector.includes('.pane-check-update')), false);
+  assert.equal(hidden.selectors.some((selector) => selector.includes('.topbar-icon')), false);
   assert.equal(
     allRules.some(
       (rule) =>
-        rule.selectors.some((selector) => selector.includes('.pane-check-update')) &&
+        rule.selectors.some((selector) => selector.includes('.topbar-icon')) &&
         /opacity:\s*0(?:[;\s]|$)/.test(rule.body)
     ),
     false

@@ -79,16 +79,21 @@ test('weather picker lists quick cities when the search box is empty', () => {
   assert.match(main, /ipcMain\.handle\('weather:quickCities'/);
 });
 
-test('footer 检查更新 sits beside the version and calls the update check IPC', () => {
+test('检查更新图标在右上顶栏并调用同一个更新检查 IPC', () => {
   const html = source('electron/renderer/calendar.html');
   const renderer = source('electron/renderer/calendar.js');
   const preload = source('electron/preload.js');
 
+  const topbar = html.match(/<header class="topbar">[\s\S]*?<\/header>/);
+  assert.ok(topbar, 'topbar should exist');
+  assert.match(topbar[0], /class="topbar-icon check-update"[\s\S]*?id="check-update"/);
+  assert.match(topbar[0], /aria-label="检查更新"/);
+  assert.match(html, /<div class="pane-footer">[\s\S]*?id="app-version"[\s\S]*?<\/div>/);
+  assert.equal(/id="check-update"/.test(html.match(/<div class="pane-footer">[\s\S]*?<\/div>/)[0]), false);
   assert.match(
-    html,
-    /<div class="pane-footer">[\s\S]*id="app-version"[\s\S]*>·<\/span>[\s\S]*<button class="[^"]*\bcard-link\b[^"]*" id="check-update" type="button">检查更新<\/button>/
+    renderer,
+    /checkUpdate\.addEventListener\('click', \(\) => \{[\s\S]*?api\.checkUpdate\(\);[\s\S]*?\}\);/
   );
-  assert.match(renderer, /checkUpdate\.addEventListener\('click',\s*\(\)\s*=>\s*\{\s*api\.checkUpdate\(\);\s*\}\);/);
   assert.match(preload, /checkUpdate:\s*\(\)\s*=>\s*ipcRenderer\.send\('update:check'\)/);
 });
 

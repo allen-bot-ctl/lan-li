@@ -139,7 +139,7 @@ test('C1 窗口实际为 580×432；未钉住时托盘 mouse-leave 后隐藏', a
   expect(await isVisible()).toBe(false);
 });
 
-test('C2 顶栏 32px 全宽：左上是图钉＋栏历，右上最后是带文字「设置」', async () => {
+test('C2 顶栏 32px 全宽：左上是应用图标＋栏历，右上检查更新→钉住→设置', async () => {
   await showUnpinned();
 
   const layout = await page.evaluate(() => {
@@ -150,24 +150,36 @@ test('C2 顶栏 32px 全宽：左上是图钉＋栏历，右上最后是带文�
     const topbar = document.querySelector('.topbar');
     const left = document.querySelector('.topbar-left');
     const right = document.querySelector('.topbar-right');
-    const pin = document.getElementById('pin-button');
+    const appIcon = left.querySelector('.topbar-app-icon');
     const title = document.querySelector('.topbar-title');
+    const pin = document.getElementById('pin-button');
+    const check = document.getElementById('check-update');
     const settings = document.getElementById('settings-button');
-    const pinRect = rectOf(pin);
+    const iconRect = rectOf(appIcon);
     const titleRect = rectOf(title);
+    const checkRect = rectOf(check);
+    const pinRect = rectOf(pin);
+    const settingsRect = rectOf(settings);
     return {
       viewportWidth: window.innerWidth,
       topbar: rectOf(topbar),
-      pin: pinRect,
-      title: titleRect,
-      settings: rectOf(settings),
-      leftFirstIsPin: left.firstElementChild === pin,
-      titleFollowsPin: titleRect.left >= pinRect.right,
+      leftFirstIsAppIcon: left.firstElementChild === appIcon,
+      leftHasButton: left.querySelector('button') !== null,
+      appIconSize: { width: iconRect.width, height: iconRect.height },
+      titleText: title.textContent,
+      titleFollowsIcon: titleRect.left >= iconRect.right,
+      rightOrder: [...right.children].map((el) => el.id),
       rightLastIsSettings: right.lastElementChild === settings,
+      checkToPinGap: pinRect.left - checkRect.right,
+      pinToSettingsGap: settingsRect.left - pinRect.right,
+      settings: settingsRect,
       settingsText: settings.textContent.replace(/\s+/g, ''),
       settingsHeight: getComputedStyle(settings).height,
       topbarPaddingLeft: getComputedStyle(topbar).paddingLeft,
-      pinSize: { width: pin.getBoundingClientRect().width, height: pin.getBoundingClientRect().height }
+      iconSizes: {
+        check: { width: checkRect.width, height: checkRect.height },
+        pin: { width: pinRect.width, height: pinRect.height }
+      }
     };
   });
 
@@ -175,13 +187,21 @@ test('C2 顶栏 32px 全宽：左上是图钉＋栏历，右上最后是带文�
   expect(layout.topbar.width).toBe(layout.viewportWidth);
   expect(layout.topbar.top).toBe(0);
   expect(layout.topbarPaddingLeft).toBe('15px');
-  expect(layout.leftFirstIsPin).toBe(true);
-  expect(layout.titleFollowsPin).toBe(true);
+  expect(layout.leftFirstIsAppIcon).toBe(true);
+  expect(layout.leftHasButton).toBe(false);
+  expect(layout.appIconSize).toEqual({ width: 16, height: 16 });
+  expect(layout.titleText).toBe('栏历');
+  expect(layout.titleFollowsIcon).toBe(true);
+  expect(layout.rightOrder).toEqual(['check-update', 'pin-button', 'settings-button']);
   expect(layout.rightLastIsSettings).toBe(true);
+  expect(layout.checkToPinGap).toBe(4);
+  expect(layout.pinToSettingsGap).toBe(8);
   expect(layout.settingsText).toContain('设置');
   expect(layout.settingsHeight).toBe('26px');
-  expect(layout.pinSize).toEqual({ width: 24, height: 24 });
-  expect(layout.pin.left).toBeGreaterThanOrEqual(14.5);
+  expect(layout.iconSizes).toEqual({
+    check: { width: 24, height: 24 },
+    pin: { width: 24, height: 24 }
+  });
   expect(layout.settings.right).toBeLessThanOrEqual(layout.viewportWidth - 14.5);
 });
 
@@ -258,9 +278,9 @@ test('C4 已钉住按 Esc 隐藏并回到未钉住', async () => {
   await expect(page.locator('#pin-button')).toHaveAttribute('aria-label', '钉住窗口');
 });
 
-test('C4 悬停 500ms 气泡在按钮下方左对齐，文案正确且完全在窗口内', async () => {
+test('C4 悬停 500ms 气泡在按钮下方右对齐，文案正确且完全在窗口内', async () => {
   await showUnpinned();
-  const tip = page.locator('#pin-tooltip');
+  const tip = page.locator('#icon-tooltip');
   await expect(tip).toBeHidden();
 
   await page.hover('#pin-button');
@@ -284,8 +304,8 @@ test('C4 悬停 500ms 气泡在按钮下方左对齐，文案正确且完全在�
   expect(tipBox.x + tipBox.width).toBeLessThanOrEqual(viewport.width);
   expect(tipBox.y + tipBox.height).toBeLessThanOrEqual(viewport.height);
   expect(tipBox.y).toBeGreaterThanOrEqual(button.y + button.height);
-  // Left edges are aligned, as the contract asks for the new top-left spot.
-  expect(Math.abs(tipBox.x - button.x)).toBeLessThan(1.5);
+  // Right edges are aligned now that the icons live in the top-right corner.
+  expect(Math.abs((tipBox.x + tipBox.width) - (button.x + button.width))).toBeLessThan(1.5);
 
   await page.screenshot({ path: path.join(SHOTS, '03-topbar-pin-tooltip.png') });
 });
@@ -534,36 +554,42 @@ test('C10 三张卡片入口文字统一带 ›', async () => {
   });
 });
 
-test('C10 检查更新与版本号同为 10px，颜色 --muted，悬停 --link', async () => {
+test('C10 版本号 10px，检查更新是右上 24px 透明底图标、悬停 --chip-hover', async () => {
   await showUnpinned();
   const styles = await page.evaluate(() => {
-    const resolve = (value) => {
-      const probe = document.createElement('span');
-      probe.style.color = value;
-      document.body.append(probe);
-      const color = getComputedStyle(probe).color;
-      probe.remove();
-      return color;
-    };
     const root = getComputedStyle(document.documentElement);
+    const check = document.getElementById('check-update');
+    const chipHover = (() => {
+      const probe = document.createElement('span');
+      probe.style.backgroundColor = root.getPropertyValue('--chip-hover');
+      document.body.append(probe);
+      const value = getComputedStyle(probe).backgroundColor;
+      probe.remove();
+      return value;
+    })();
     return {
       versionFont: getComputedStyle(document.getElementById('app-version')).fontSize,
-      updateFont: getComputedStyle(document.getElementById('check-update')).fontSize,
-      updateColor: getComputedStyle(document.getElementById('check-update')).color,
-      muted: resolve(root.getPropertyValue('--muted')),
-      link: resolve(root.getPropertyValue('--link'))
+      checkSize: {
+        width: check.getBoundingClientRect().width,
+        height: check.getBoundingClientRect().height
+      },
+      checkBackground: getComputedStyle(check).backgroundColor,
+      checkInTopbar: Boolean(check.closest('.topbar-right')),
+      chipHover
     };
   });
 
   expect(styles.versionFont).toBe('10px');
-  expect(styles.updateFont).toBe('10px');
-  expect(styles.updateColor).toBe(styles.muted);
+  expect(styles.checkSize).toEqual({ width: 24, height: 24 });
+  expect(styles.checkInTopbar).toBe(true);
+  expect(styles.checkBackground).toBe('rgba(0, 0, 0, 0)');
 
   await page.hover('#check-update');
-  const hoverColor = await page.locator('#check-update').evaluate(
-    (el) => getComputedStyle(el).color
+  const hoverBackground = await page.locator('#check-update').evaluate(
+    (el) => getComputedStyle(el).backgroundColor
   );
-  expect(hoverColor).toBe(styles.link);
+  expect(hoverBackground).toBe(styles.chipHover);
+  await page.mouse.move(6, 220);
 });
 
 test('C10 页面与代码中不再有节气倒计时', async () => {

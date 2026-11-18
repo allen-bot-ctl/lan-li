@@ -33,8 +33,7 @@ test('capture 0.1.24 baseline layout metrics', async () => {
       worldClockCard: rect('.world-clock-card'),
       weatherCard: rect('.weather-card'),
       paneFooter: rect('.pane-footer'),
-      appVersion: rect('#app-version'),
-      checkUpdate: rect('#check-update')
+      appVersion: rect('#app-version')
     };
   });
 

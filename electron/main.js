@@ -1043,6 +1043,14 @@ function registerE2eHooks() {
       }
       e2eSettingsMenu = null;
       return true;
+    },
+    emitUpdateStatus(status) {
+      sendUpdateStatus(status);
+      return true;
+    },
+    emitUpdateNotice(notice) {
+      showUpdateNotice(notice);
+      return true;
     }
   };
 }

@@ -22,7 +22,7 @@ xvfb-run -a npm run e2e   # Linux；macOS 直接 npm run e2e
 
 ### Playwright `_electron` 端到端（`e2e/`）
 
-`npm run e2e` 启动真实 Electron，主进程只在 `LANLI_E2E=1` 时注册 `globalThis.__lanliTest`（模拟托盘进入/离开、查询窗口可见、`BrowserWindow.blur()`、查询钉住状态）；正式运行不暴露。`e2e/pin-and-polish.spec.js` 覆盖：
+`npm run e2e` 启动真实 Electron，主进程只在 `LANLI_E2E=1` 时注册 `globalThis.__lanliTest`（模拟托盘进入/离开、查询窗口可见、`BrowserWindow.blur()`、查询钉住状态、注入 `update:status` / `update:notice` 浮层消息）；正式运行不暴露。`e2e/pin-and-polish.spec.js` 覆盖：
 
 | 用例 | 覆盖 |
 | --- | --- |
@@ -40,6 +40,8 @@ xvfb-run -a npm run e2e   # Linux；macOS 直接 npm run e2e
 | C9 | 检查更新与版本号计算字号同为 10px，颜色为 `--muted`，悬停 `--link` |
 
 截图写入 `e2e/screenshots/`：未钉住、已钉住、钉住提示、黄历卡、世界时钟悬停、底部版本区、最长副标题。CI 作为 artifact 上传并附到 Release；C6 的宽度以 macOS CI 为准，本机 Linux 只作逻辑回归。
+
+`e2e/brand-toolbar-toast.spec.js`（C6–C9，通过 `__lanliTest.emitUpdateStatus` / `emitUpdateNotice` 注入）：浮层出现时 `#grid` 与右栏三卡 rect 逐项 0px 不变；浮层水平居中且 top − 顶栏 bottom = 8px、「已是最新」2.3–2.9 秒消失、ready 10 秒后仍在且真实点 × 后 `#check-update` 保留 `has-update`；manual 提示宽 ≤ 360px、消息/按钮/× 同一行且消息不溢出；页面无 `#update-banner`、`#app-version` 为 `v` + package.json 版本。
 | `tests/pin-and-polish.test.js` | 钉住守卫顺序与不持久化、×/Esc 都清回未钉住、500ms 气泡文案与固定/右对齐/11px、1900–2100 每一天副标题扫描确认最宽为「干支年 · 闰X月」且 2025年8月 可真实翻月显示、viewSubtitle 由主进程下发且 `renderAlmanac` 不再写副标题、已删倒计时 DOM/代码/样式/测试、三条入口文案、检查更新 10px `--muted`/悬停 `--link`、顶栏顺序与齿轮 24px 圆钮、product.md 与 README 同步 |
 | `tests/settings-menu.test.js` | 设置菜单模板的项顺序与分隔线、检查更新右侧版本 sublabel、登录时打开 checkbox 的初始值与会话中回传值、编辑世界时钟/更换天气城市/退出动作分发、`Cmd+Q`、缺失版本与动作时不抛错 |
 | `tests/weather.test.js` | 城市码表匹配（精确/加「市」「区」「县」后缀/去后缀/admin1 回退/匹配不到）、无 `country` 旧数据只做精确匹配、itboy（`data.wendu` + `forecast[0].type`）与 wttr.in（`temp_C` + `lang_zh`/`weatherDesc`）解析、itboy/wttr.in/地理编码 URL、ipwho.is 失败时忽略城市、坐标范围与空值校验、地理编码结果解析、天气文字到 emoji 的映射（晴/多云/阴/雨/雪/雷/雾与未知降级）、`weatherCity`（含 `country`/`admin1`）读写与清除、手动城市优先的取位逻辑、itboy 失败回退 wttr.in、非中国直走 wttr.in、`城市 · 天气 · X°C` 格式化与温度取整、`天气位置=手动/IP` 与 `天气来源=itboy（城市 代码）/wttr.in` 日志文案、注入假 `fetch` 的 30 分钟缓存与失败降级、手动/自动切换（不联网） |
