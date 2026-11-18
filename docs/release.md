@@ -11,7 +11,7 @@
 | `README.md` | 标题 `# 栏历 X.Y.Z`、打包产物示例、`vX.Y.Z` 相关文案 |
 | `site/index.html` | `data-app-version` 的版本文本；如首页文案有「当前版本」也要同步 |
 
-当前版本：`0.1.13`。现有标签 `v0.1.0` 至 `v0.1.13` 均已存在。
+当前版本：`0.1.29`。现有标签 `v0.1.0` 至 `v0.1.29` 均已存在。
 
 ## 本地打包
 
@@ -22,10 +22,10 @@ npm run dist
 等价于 `electron-builder --mac`。`package.json` 的 `build.mac.target` 仍同时包含 dmg 与 zip 的 `x64`、`arm64`，`build.mac.identity` 为 `"-"`（ad-hoc 签名，`hardenedRuntime: false`），**不公证**。因此本地可能产出：
 
 ```text
-dist/LanLi-0.1.13-mac-x64.dmg
-dist/LanLi-0.1.13-mac-x64.zip
-dist/LanLi-0.1.13-mac-arm64.dmg
-dist/LanLi-0.1.13-mac-arm64.zip
+dist/LanLi-0.1.29-mac-x64.dmg
+dist/LanLi-0.1.29-mac-x64.zip
+dist/LanLi-0.1.29-mac-arm64.dmg
+dist/LanLi-0.1.29-mac-arm64.zip
 ```
 
 本地可校验 ad-hoc 签名：
@@ -41,8 +41,8 @@ codesign -dv --verbose=2 "dist/mac/栏历.app" 2>&1 | grep "Signature=adhoc"
 触发：推送 `v*` 标签，例如：
 
 ```bash
-git tag v0.1.13
-git push origin v0.1.13
+git tag v0.1.29
+git push origin v0.1.29
 ```
 
 > 本仓库禁止重写**已经有下载**的发布标签。发现问题时发新版本，不要删标签重推。

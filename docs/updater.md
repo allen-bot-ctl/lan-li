@@ -29,7 +29,7 @@ https://update.electronjs.org/allen-bot-ctl/lan-li/${platform}-${arch}/${version
 - 首次检查：启动约 **10 秒**后；之后每 **6 小时**。
 - 探测超时：**15 秒**（`FEED_TIMEOUT_MS`）。
 - 自动检查无更新时**完全静默**：`updater` 会产出状态，但 `main.js` 只把 `manual === true` 的状态发给渲染进程。
-- 自动检查若下载到新版本，仍会通过 `update:notice` 在窗口打开时显示 ready 横幅。
+- 自动检查若下载到新版本，仍会通过 `update:notice` 在窗口打开时用 `showToast` 显示「新版本已就绪」提示。
 
 ## 探测结果语义
 
@@ -125,14 +125,14 @@ $1 pid  $2 当前 .app  $3 新 .app  $4 备份路径  $5 暂存目录
 
 ## 失败回退
 
-- 任一环节失败：记录原因，横幅切到「无法自动更新，请手动下载」，「下载新版」打开**同版本**的 `.dmg` 直链：
+- 任一环节失败：记录原因，通用提示切到「无法自动更新，请手动下载」，「下载新版」打开**同版本**的 `.dmg` 直链：
 
   ```text
   https://github.com/allen-bot-ctl/lan-li/releases/download/v<ver>/LanLi-<ver>-mac-x64.dmg
   ```
 
 - 只有版本号完全无法推导时才打开 `https://github.com/allen-bot-ctl/lan-li/releases/latest`。
-- 手动下载横幅按版本去重（偏好文件 `updateNotifications`，键形如 `manual:<name>`）；同一版本只提醒一次。手动检查的短状态（如「需手动下载」）仍会照常返回。
+- 手动下载提示按版本去重（偏好文件 `updateNotifications`，键形如 `manual:<name>`）；同一版本只提醒一次。手动检查的短状态（如「需手动下载」）仍会照常返回。
 - 以下情况不尝试自更新，直接走手动 `.dmg` / Release：
   - AppTranslocation 路径；
   - 当前 `.app` 或其父目录不可写（`accessSync(W_OK)` 失败）；

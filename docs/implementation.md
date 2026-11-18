@@ -206,7 +206,7 @@ main.setupUpdates()
 - 首次检查在启动约 10 秒后，之后每 6 小时；探测超时 15 秒。
 - 自动检查无更新时静默；只有 `manual === true` 的状态才会经 `update:status` 发给渲染进程。
 - 手动检查日志：`manual check start`；结束状态为 `up-to-date` / `manual` / `error` 时写 `manual check result: <state>`（`ready` 不在此列）。进入 probe-only 时写 `macOS 未正式签名，使用 probe-only`。
-- 下载成功：渲染层横幅「新版本已就绪 / 重启更新」。当前 macOS 只有自更新路径，「重启更新」调 `selfUpdater.installReady()`。
+- 下载成功：渲染层经 `showToast` 显示「新版本已就绪 / 立即重启」。当前 macOS 只有自更新路径，「立即重启」调 `selfUpdater.installReady()`。
 - 失败回退：`fallbackManualUrl` 能从版本号推导时直接给同版本 `.dmg` 直链，否则 `RELEASES_LATEST_URL`。同一版本的手动下载提醒只出现一次（偏好文件 `updateNotifications` 去重）。
 - 完整行为与边界见 [updater.md](updater.md)。
 
@@ -232,7 +232,7 @@ main.setupUpdates()
 
 | 频道 | preload API | 作用 |
 | --- | --- | --- |
-| `app:version` | `getVersion` | 返回 `formatVersionLabel(app.getVersion())`，如 `v0.1.13` |
+| `app:version` | `getVersion` | 返回 `formatVersionLabel(app.getVersion())`，如 `v0.1.29` |
 | `weather:get` | `getWeather` | 返回当前天气结果；有 `preferences.weatherCity` 时直接用其城市名与坐标，否则按 IP 定位；30 分钟缓存 |
 | `weather:searchCity` | `searchCity` | `query`；主进程请求 Open-Meteo 地理编码，返回最多 8 条 `{ name, admin1, country, latitude, longitude, label }`，`label` 为「城市名 · 省/州 · 国家」；空查询返回空数组 |
 | `weather:quickCities` | `getQuickCities` | 无参数；按手动城市 `weatherCity.country` 或自动模式的 IP 国家，从内置 `electron/data/quick-cities.json` 返回 `{ country, countryCode, cities: [{ name, latitude, longitude, country?, admin1?, label, selected }] }`；无法确定国家或该国不在清单时 `cities` 为空 |
@@ -266,7 +266,7 @@ main.setupUpdates()
 | `calendar:onTick` | `onTick` | 每秒发送 `{ almanac, viewSubtitle, clocks }`（窗口可见时），`clocks`、黄历与 `viewSubtitle` 都按当前时刻与当前显示月份重新计算 |
 | `weather:update` | `onWeatherUpdate` | 后台或打开窗口刷新后的天气结果；失败同样下发 `{ ok: false, text: '天气暂不可用', emoji: '🌡️' }` |
 | `ui:openPanel` | `onOpenPanel` | `'almanac'`、`'clocks'` 或 `'weather'`；由设置菜单触发，渲染层打开对应面板 |
-| `update:notice` | `onUpdateNotice` | `ready` / `manual` 横幅；打开窗口与加载完成时重发 |
+| `update:notice` | `onUpdateNotice` | `ready` / `manual` 通用提示；打开窗口与加载完成时重发 |
 | `update:status` | `onUpdateStatus` | 短状态；**仅手动检查**时发送 |
 | `pin:state` | `onPinState` | 主进程钉住状态变化（取消钉住、隐藏）时发送 `{ pinned }` |
 
@@ -284,7 +284,7 @@ main.setupUpdates()
 | `disabled` | 开发态不检查更新 | false | true |
 | `error` | 检查失败 | false | true |
 
-未知或空状态按 `error` 处理（fail closed）。`ready` 的横幅文案在渲染层：「新版本已就绪」「重启更新」；手动失败横幅：「无法自动更新，请手动下载」「下载新版」。`timed` 状态由渲染层约 2600ms 后隐藏状态横幅；更新就绪/手动下载横幅优先，不会被短状态覆盖。
+未知或空状态按 `error` 处理（fail closed）。`ready` 的提示文案在渲染层经 `showToast` 展示：「新版本已就绪」「立即重启」（sticky，不自动消失）；手动失败：「发现新版本」「无法自动更新，请手动下载」「下载新版」（sticky）。info/success 约 3 秒后隐藏（悬停暂停）；进行中的提示只被下一状态替换，30 秒无结果转为「检查失败」。就绪/手动下载的 sticky 提示优先，不会被短状态覆盖。
 
 ## 7. 登录项与平台限制
 
@@ -301,7 +301,7 @@ main.setupUpdates()
 ## 8. 版本号（`electron/app-version.js`）
 
 - `formatVersionLabel`：去首尾空白；已有 `v`/`V` 前缀去重；必须以数字开头且只含 `0-9A-Za-z.+-`；否则返回 `''`。
-- 渲染层 `loadVersion()` → `app:version`，在右栏底部居中显示为「栏历 vX.Y.Z」；`app:version` 仍返回 `formatVersionLabel()` 的 `vX.Y.Z`，渲染层只在前面加产品名。0.1.27 起「检查更新」移到顶栏右上角的圆形图标，经 `update:check` 复用设置菜单的更新检查，右栏底部不再有文字按钮。版本号不会被检查状态文案覆盖，也不会因设置菜单的 sublabel 重复占位。
+- 渲染层 `loadVersion()` → `app:version`，在右栏底部居中只显示 `formatVersionLabel()` 返回的版本号（如 `vX.Y.Z`），不再加产品名。0.1.27 起「检查更新」移到顶栏右上角的圆形图标，经 `update:check` 复用设置菜单的更新检查，右栏底部不再有文字按钮。版本号不会被检查状态文案覆盖，也不会因设置菜单的 sublabel 重复占位。
 
 **测试**：`tests/app-version.test.js`。
 

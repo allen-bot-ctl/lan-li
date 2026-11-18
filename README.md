@@ -40,7 +40,7 @@ npm run e2e    # Playwright _electron 端到端；Linux 无头机用 xvfb-run -a
 
 `npm test` 使用 Node 内置 test runner，覆盖格子次要文字、42 格网格、今日/周末/节日标记、菜单栏标题格式、黄历干支生肖年与农历月、百年稀有度焦点选词（7 个固定日期、平局与特殊词、2026 全年相邻不重复）、签语结构与降级、世界时钟的城市搜索与 IANA 回退、时区格式化（含 DST 与半小时时区的墙上时间）、`HH:mm` 紧凑时间与「本地 / 快 N 小时 / 慢 N 小时 / 时间相同」相对时差文案（跨天加「明天 · 」「昨天 · 」，纽约本地 2026-11-18 02:22 与 23:00 固定时刻用例）、时区列表增删与清洗、偏好数据清洗、天气的城市码表匹配（精确/加后缀/去后缀/admin1 回退）/itboy 与 wttr.in 解析（含今日最低/最高气温）/itboy 失败回退 wttr.in/坐标校验/地理编码结果解析/天气文字到 emoji 的映射/`weatherCity`（含 `country` 与 `admin1`）读写与清除/手动城市优先的取位逻辑/结果格式化与 30 分钟缓存、设置菜单模板的项顺序与版本 sublabel/「登录时打开」勾选/动作分发、自动更新 feed URL 的拼接、「检查更新」状态文案的映射、版本号标签 `formatVersionLabel` 的格式化（`v` 前缀、首尾空白与非法输入降级）、顶栏右上角的检查更新图标与 `update:check` 的接线（复用 `requestUpdateCheck`），以及更新器在 `setFeedURL` 抛异常时进入仅探测模式、204/200/网络失败三种探测结果、并发手动检查共享一次请求、Squirrel 报错后的 probe 回落。未签名包自更新另有独立测试：更新 URL 校验、semver 比较、DMG 直链推导、sha256 文件解析与校验失败、plist 版本不匹配、AppTranslocation / 不可写目录拒绝、已验证暂存复用、同一时间只跑一个任务，以及安装脚本的等待与回滚内容。文件日志的 ISO 时间戳与 `main.old.log` 轮转也在此覆盖。
 
-`npm run e2e` 在真实 Electron 进程中覆盖 C1–C10：窗口 580×432、32px 通栏顶栏的左右分组、月历顶栏只剩翻月、钉住后的托盘离开/失焦、× 与 Esc、500ms 气泡、设置菜单锚点、1900–2100 最长副标题的宽度、内容相对 0.1.24 只整体下移 32px、三个卡片入口文案、底部字号与颜色；截图写入 `e2e/screenshots/`，CI 会作为 artifact 上传。主进程只在 `LANLI_E2E=1` 时注册托盘/窗口测试钩子。
+`npm run e2e` 在真实 Electron 进程中覆盖：`e2e/pin-and-polish.spec.js`（窗口 580×432、32px 通栏顶栏、月历顶栏只剩翻月、钉住后的托盘离开/失焦、× 与 Esc、500ms 气泡、设置菜单锚点、最长副标题宽度、内容相对 0.1.24 整体下移、三张卡片入口文案、底部版本号字号与颜色）；`e2e/brand-toolbar-toast.spec.js`（确认没有 `update-banner`、页脚版本与 package.json 一致）；`e2e/toast-0129.spec.js`（通用提示组件五种类型、居中且距顶栏 8px、宽 320px、自动消失与悬停暂停、progress 30 秒超时、sticky 关闭后橙点保留、同时只有一条）；`e2e/cards-0129.spec.js`（检查中外圈弧旋转而箭头不动、黄历「签」标签与卡上无冲煞、天气气温区间）。截图写入 `e2e/screenshots/`，CI 会作为 artifact 上传。主进程只在 `LANLI_E2E=1` 时注册托盘/窗口测试钩子。
 
 ## 打包
 
@@ -52,11 +52,11 @@ npm run dist
 
 `electron-builder` 会生成未签名的 dmg 与 zip，包含 x64 和 arm64：
 
-- `dist/LanLi-0.1.11-mac-x64.dmg`
-- `dist/LanLi-0.1.11-mac-x64.zip`
-- `dist/LanLi-0.1.11-mac-x64.zip.sha256`（由发布工作流生成）
-- `dist/LanLi-0.1.11-mac-arm64.dmg`
-- `dist/LanLi-0.1.11-mac-arm64.zip`
+- `dist/LanLi-0.1.29-mac-x64.dmg`
+- `dist/LanLi-0.1.29-mac-x64.zip`
+- `dist/LanLi-0.1.29-mac-x64.zip.sha256`（由发布工作流生成）
+- `dist/LanLi-0.1.29-mac-arm64.dmg`
+- `dist/LanLi-0.1.29-mac-arm64.zip`
 
 本轮 `build.mac.identity` 为 `null`，不做代码签名与公证。GitHub Actions 的 Release 工作流只构建并发布 macOS Intel（x64）的 dmg、zip 与 zip 的 sha256 校验文件；本地执行 `npm run dist` 仍可能同时打出 x64 和 arm64。自动更新服务读取 Release 里的 `LanLi-<version>-mac-x64.zip`，不需要额外上传 `latest-mac.yml`。
 
