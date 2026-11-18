@@ -174,7 +174,7 @@ ${M}月${D}日 ${HH}:${mm}:${ss}
 - 右上角「⚙︎ 设置」胶囊把按钮左缘/下缘加 4px 的坐标经 preload `openSettings({ x, y })` → `menu:openSettings` 发给主进程；渲染层只负责高亮按钮。
 - 主进程用 `buildSettingsMenuTemplate({ version, openAtLogin }, actions)` 生成模板，再 `Menu.buildFromTemplate` + `menu.popup({ window, x, y })`。菜单左上角直接放在按钮左缘、下方 4px 处；超出窗口右侧时交给 macOS 自动调整。坐标缺失时退回光标位置。
 - 模板顺序固定：检查更新（`sublabel` 为 `formatVersionLabel(app.getVersion())`）、登录时打开（`type: 'checkbox'`，`checked` 来自 `getOpenAtLogin()`）、分隔线、黄历风格…、编辑世界时钟…、更换天气城市…、分隔线、退出栏历（`accelerator: 'Cmd+Q'`）。
-- 检查更新（设置菜单的项与右栏底部的文字链接）都调用 `requestUpdateCheck()` → `performUpdateCheck()`（`updater.checkNow({ manual: true })`）；底部入口经 `update:check` 到达主进程，结果仍走 `update:status`，不另写更新逻辑。
+- 检查更新（设置菜单的项与顶栏右上角的检查更新图标）都调用 `requestUpdateCheck()` → `performUpdateCheck()`（`updater.checkNow({ manual: true })`）；底部入口经 `update:check` 到达主进程，结果仍走 `update:status`，不另写更新逻辑。
 - 「登录时打开」点击后用 Electron 回传的 `menuItem.checked` 调 `applyLoginItem()`，业务实现不变。
 - 面板动作经 `ui:openPanel`（`almanac` / `clocks` / `weather`）通知渲染层打开对应面板。菜单打开期间 `scheduleClose()` 暂停；选择面板/检查更新后窗口保持可见，其它方式关闭菜单且指针在窗口外时按原 200ms 逻辑收起。
 
@@ -255,7 +255,7 @@ main.setupUpdates()
 | `pointer:enter` | `pointerEnter` | 取消关闭计时 |
 | `pointer:leave` | `pointerLeave` | 安排 200ms 关闭 |
 | `menu:openSettings` | `openSettings` | `{ x, y }` 为设置按钮左缘/下缘 + 4px；主进程把原生菜单左上角放在该点 |
-| `update:check` | `checkUpdate` | 右栏底部「检查更新」；主进程复用 `requestUpdateCheck()`，结果仍经 `update:status` |
+| `update:check` | `checkUpdate` | 顶栏右上角的检查更新图标；主进程复用 `requestUpdateCheck()`，结果仍经 `update:status` |
 | `update:restart` | `restartToUpdate` | 就绪后重启更新（自更新） |
 | `update:openLatest` | `openLatestRelease` | 打开手动下载地址 |
 
@@ -301,7 +301,7 @@ main.setupUpdates()
 ## 8. 版本号（`electron/app-version.js`）
 
 - `formatVersionLabel`：去首尾空白；已有 `v`/`V` 前缀去重；必须以数字开头且只含 `0-9A-Za-z.+-`；否则返回 `''`。
-- 渲染层 `loadVersion()` → `app:version`，在右栏底部居中显示为「栏历 vX.Y.Z」；`app:version` 仍返回 `formatVersionLabel()` 的 `vX.Y.Z`，渲染层只在前面加产品名。右侧以「·」分隔「检查更新」文字按钮，点击经 `update:check` 复用设置菜单的更新检查；该按钮不属于三张卡片的隐藏选择器，始终可见。版本号不会被检查状态文案覆盖，也不会因设置菜单的 sublabel 重复占位。
+- 渲染层 `loadVersion()` → `app:version`，在右栏底部居中显示为「栏历 vX.Y.Z」；`app:version` 仍返回 `formatVersionLabel()` 的 `vX.Y.Z`，渲染层只在前面加产品名。0.1.27 起「检查更新」移到顶栏右上角的圆形图标，经 `update:check` 复用设置菜单的更新检查，右栏底部不再有文字按钮。版本号不会被检查状态文案覆盖，也不会因设置菜单的 sublabel 重复占位。
 
 **测试**：`tests/app-version.test.js`。
 
