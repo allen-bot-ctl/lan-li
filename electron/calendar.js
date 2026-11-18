@@ -168,6 +168,25 @@ function getFocusData() {
   return focusData;
 }
 
+// 干支生肖年与农历月：黄历卡片标题与月历顶栏副标题共用这一处计算。
+function lunarHeader(lunar) {
+  return {
+    ganZhiText: `${lunar.getYearInGanZhi()}${lunar.getYearShengXiao()}年`,
+    lunarMonthText: `${lunar.getMonthInChinese()}月`
+  };
+}
+
+// 月历顶栏副标题按所显示的月份计算：显示月是本月时取今天（跨午夜随
+// tick 更新），其他月取该月 1 号；闰月照旧由库里带出「闰六月」。
+function buildViewSubtitle(viewYear, viewMonth, today) {
+  const current = normalizeToday(today);
+  const solar = viewYear === current.year && viewMonth === current.month
+    ? Solar.fromYmd(current.year, current.month, current.day)
+    : Solar.fromYmd(viewYear, viewMonth, 1);
+  const header = lunarHeader(solar.getLunar());
+  return `${header.ganZhiText} · ${header.lunarMonthText}`;
+}
+
 function focusEntry(term, list, style) {
   const isLunar = style.definition.id === 'lunar';
   const text = isLunar ? term : mapTerm(term, style.map);
@@ -191,8 +210,7 @@ function buildAlmanac(date, styleId = 'lunar') {
   const isLunar = style.definition.id === 'lunar';
   const yi = mappedYi.items;
   const ji = mappedJi.items;
-  const ganZhiText = `${lunar.getYearInGanZhi()}${lunar.getYearShengXiao()}年`;
-  const lunarMonthText = `${lunar.getMonthInChinese()}月`;
+  const { ganZhiText, lunarMonthText } = lunarHeader(lunar);
 
   const data = getFocusData();
   const focusYiTerm = pickFocus(rawYi, 'yi', (term) => data.score('yi', term));
@@ -247,5 +265,6 @@ module.exports = {
   configureAlmanacStyles,
   configureAlmanacFocus,
   mapAlmanacTerms,
-  buildAlmanac
+  buildAlmanac,
+  buildViewSubtitle
 };

@@ -8,6 +8,7 @@ const {
   buildCell,
   buildCells,
   buildAlmanac,
+  buildViewSubtitle,
   formatMenuTitle,
   isValidMenuTitle
 } = require('../electron/calendar');
@@ -95,6 +96,28 @@ test('almanac keeps the 闰 prefix in a leap lunar month', () => {
   const almanac = buildAlmanac(new Date(2025, 7, 1));
   assert.equal(almanac.ganZhiText, '乙巳蛇年');
   assert.equal(almanac.lunarMonthText, '闰六月');
+});
+
+test('view subtitle follows the displayed month: this month uses today', () => {
+  const today = { year: 2026, month: 11, day: 15 };
+  assert.equal(buildViewSubtitle(2026, 11, today), '丙午马年 · 十月');
+  // A Date works the same way as the main process call sites.
+  assert.equal(buildViewSubtitle(2026, 11, TODAY), '丙午马年 · 十月');
+  // Inside the displayed month only the day of month may shift the text.
+  assert.equal(
+    buildViewSubtitle(2026, 11, { year: 2026, month: 11, day: 9 }),
+    '丙午马年 · 十月'
+  );
+});
+
+test('view subtitle for another month uses that month\'s day one', () => {
+  const today = { year: 2026, month: 11, day: 15 };
+  // 2025-07-01 is 六月初七, not the 闰六月 that starts on 2025-07-25.
+  assert.equal(buildViewSubtitle(2025, 7, today), '乙巳蛇年 · 六月');
+  // 2025-08-01 still sits inside 闰六月, so the prefix stays.
+  assert.equal(buildViewSubtitle(2025, 8, today), '乙巳蛇年 · 闰六月');
+  // Same displayed month, later local date: still day one of 2024-11.
+  assert.equal(buildViewSubtitle(2024, 11, today), '甲辰龙年 · 十月');
 });
 
 test('November 2026 grid has 42 cells, starts on Monday and follows lead', () => {

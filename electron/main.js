@@ -28,7 +28,8 @@ const {
   buildCells,
   configureAlmanacStyles,
   configureAlmanacFocus,
-  buildAlmanac
+  buildAlmanac,
+  buildViewSubtitle
 } = require('./calendar');
 const {
   isStyleId,
@@ -207,6 +208,8 @@ function buildState() {
     focus: { year: focus.year, month: focus.month, day: focus.day },
     cells: buildCells(view.year, view.month, now),
     almanac: buildAlmanac(now, almanacStyle),
+    // 0.1.26：副标题跟随所显示的月份，与黄历卡（仍按今天）分开下发。
+    viewSubtitle: buildViewSubtitle(view.year, view.month, now),
     clocks: currentClockSnapshot(now),
     pinned
   };
@@ -738,6 +741,7 @@ function updateClock() {
   if (calendarWindow && !calendarWindow.isDestroyed() && calendarWindow.isVisible()) {
     calendarWindow.webContents.send('calendar:onTick', {
       almanac: buildAlmanac(now, almanacStyle),
+      viewSubtitle: buildViewSubtitle(view.year, view.month, now),
       clocks: currentClockSnapshot(now)
     });
   }

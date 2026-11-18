@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const { buildAlmanac } = require('../electron/calendar');
+const { buildViewSubtitle } = require('../electron/calendar');
 
 const ROOT = path.join(__dirname, '..');
 
@@ -126,32 +126,83 @@ test('C5 钉住按钮有 500ms 页内气泡，文案与定位满足契约', () =
   assert.match(tip.body, /pointer-events:\s*none/);
 });
 
-test('C6 1900–2100 副标题的最长宽度就是测试写死的 2025 年 7 月文案', () => {
-  const concrete = { year: 2025, month: 7, text: '乙巳蛇年 · 闰六月' };
-  let widest = 0;
-  let matches = 0;
-  let concreteSeen = false;
+test('C6 1900–2100 每一天的副标题最宽就是 10 字符，且能真实翻月显示', () => {
+  // 字符宽度估算：CJK 记 2 列，其余记 1 列；精确宽度交给 e2e 实测。
+  function textWidth(text) {
+    return [...text].reduce(
+      (width, ch) => width + (ch.codePointAt(0) > 0x2e7f ? 2 : 1),
+      0
+    );
+  }
 
-  // Same string the renderer builds: ganZhiText + ' · ' + lunarMonthText.
+  const widestText = '乙巳蛇年 · 闰六月';
+  const widestWidth = textWidth(widestText);
+  let widest = 0;
+  let todayCandidates = 0;
+
+  // S4：1900-01-01 到 2100-12-31 的每一天都能成为「本月」，按当天生成副标题。
   for (let year = 1900; year <= 2100; year += 1) {
     for (let month = 1; month <= 12; month += 1) {
       const last = new Date(year, month, 0).getDate();
-      for (const day of [1, 15, last]) {
-        const almanac = buildAlmanac(new Date(year, month - 1, day), 'lunar');
-        const text = `${almanac.ganZhiText} · ${almanac.lunarMonthText}`;
+      for (let day = 1; day <= last; day += 1) {
+        const text = buildViewSubtitle(year, month, { year, month, day });
         assert.match(text, /^\S{4} · \S{1,3}$/, text);
-        widest = Math.max(widest, [...text].length);
-        if ([...text].length === [...concrete.text].length) matches += 1;
-        if (year === concrete.year && month === concrete.month && text === concrete.text) {
+        const width = textWidth(text);
+        if (width > widest) widest = width;
+        if (width === widestWidth) todayCandidates += 1;
+      }
+    }
+  }
+
+  assert.equal(widest, widestWidth);
+  assert.ok(todayCandidates > 0, 'some day really renders the widest subtitle');
+
+  // S4：显示其他月时副标题取该月 1 号。找真实可翻到的最宽月份：今天取一个
+  // 与被扫月不同的固定日期即可（除 2000-01 本身外都走「该月 1 号」分支）。
+  const realPath = { year: 2026, month: 11, day: 15 };
+  let realCandidates = 0;
+  let concreteSeen = false;
+  for (let year = 1900; year <= 2100; year += 1) {
+    for (let month = 1; month <= 12; month += 1) {
+      const text = buildViewSubtitle(year, month, realPath);
+      if (textWidth(text) === widestWidth) {
+        realCandidates += 1;
+        if (year === 2025 && month === 8 && text === widestText) {
           concreteSeen = true;
         }
       }
     }
   }
 
-  assert.equal(widest, [...concrete.text].length);
-  assert.ok(matches > 0);
-  assert.equal(concreteSeen, true, '2025-07 must really produce the hardcoded subtitle');
+  // 2025-08-01 仍在 2025 年的闰六月内，翻月即可显示最宽文案，无需注入。
+  assert.ok(realCandidates > 0, 'a navigable month shows the widest subtitle');
+  assert.equal(concreteSeen, true, '2025-08 must show 乙巳蛇年 · 闰六月 via day one');
+});
+
+test('C6 副标题由主进程 viewSubtitle 下发，renderAlmanac 不再写它', () => {
+  const renderer = source('electron/renderer/calendar.js');
+
+  const renderAlmanac = RENDERER.match(
+    /function renderAlmanac\(almanac\) \{[\s\S]*?\n\}/
+  );
+  assert.ok(renderAlmanac, 'renderAlmanac should exist');
+  assert.equal(
+    /lunarSubtitle/.test(renderAlmanac[0]),
+    false,
+    'renderAlmanac must not touch the subtitle'
+  );
+
+  // 渲染层只写入主进程算好的 viewSubtitle，不自行计算农历。
+  assert.match(RENDERER, /function renderViewSubtitle\(subtitle\) \{/);
+  assert.match(RENDERER, /renderViewSubtitle\(next\.viewSubtitle\)/);
+  assert.match(RENDERER, /renderViewSubtitle\(payload\.viewSubtitle\)/);
+
+  // 主进程在 state 与每秒 tick 里都带 viewSubtitle；黄历卡仍按今天。
+  assert.match(functionBody('buildState'), /viewSubtitle:\s*buildViewSubtitle\(view\.year,\s*view\.month,\s*now\)/);
+  const tick = MAIN.match(/send\('calendar:onTick',\s*\{[\s\S]*?\}\);/);
+  assert.ok(tick, 'tick payload should exist');
+  assert.match(tick[0], /viewSubtitle:\s*buildViewSubtitle\(view\.year,\s*view\.month,\s*now\)/);
+  assert.match(tick[0], /almanac:\s*buildAlmanac\(now,\s*almanacStyle\)/);
 });
 
 test('C7 节气倒计时的 DOM、代码、样式与测试全部删除', () => {

@@ -8,13 +8,17 @@ const SHOTS = path.join(__dirname, 'screenshots');
 const BASELINE = JSON.parse(
   fs.readFileSync(path.join(__dirname, 'fixtures', 'layout-0.1.24.json'), 'utf8')
 );
-const LONGEST_SUBTITLE_MONTH = { year: 2025, month: 7 };
-// One-off scan (every day from 1900-01-01 through 2100-12-31) of
-// `${ganZhiText} · ${lunarMonthText}` found the maximum rendered width at
-// 10 characters, shared by 148 Gregorian months that contain a leap lunar
-// month. 2025-07 is one of them; its subtitle is 「乙巳蛇年 · 闰六月」.
-// No other generated subtitle is wider than this one.
+// 0.1.26：副标题按所显示的月份计算——本月取今天，其他月取该月 1 号。
+// 最宽文案是「干支年 · 闰X月」（10 字符）；2025-08-01 仍在 2025 年的闰六月
+// 内，真实翻月到 2025年8月 即可显示，无需注入。2025年7月 的 1 号是
+// 六月初七，副标题为少一个字的「乙巳蛇年 · 六月」。
+const SUBTITLE_MONTH = { year: 2025, month: 7 };
+const SUBTITLE_TEXT = '乙巳蛇年 · 六月';
+const LONGEST_SUBTITLE_MONTH = { year: 2025, month: 8 };
 const LONGEST_SUBTITLE = '乙巳蛇年 · 闰六月';
+// S2 用：2024-07-01 是五月廿六，副标题按该月 1 号。
+const S2_YEAR = 2024;
+const S2_TEXT = '甲辰龙年 · 五月';
 
 let app = null;
 let page = null;
@@ -72,6 +76,28 @@ function box(rect) {
     width: rect.width,
     height: rect.height
   };
+}
+
+// 真实翻月路径：先回今天，再用年份下拉（月份不变）加月份箭头走到目标月。
+// 每步都等标题到位，避免 IPC 往返期间的连点落在旧 state 上。
+async function navigateTo(year, month) {
+  await page.click('#today-button');
+  const now = new Date();
+  const startMonth = now.getMonth() + 1;
+  await expect(page.locator('#month-title')).toHaveText(
+    `${now.getFullYear()}年${startMonth}月`
+  );
+  await page.selectOption('#year-select', String(year));
+  const delta = month - startMonth;
+  if (delta === 0) return;
+  const button = delta < 0 ? '#prev-month' : '#next-month';
+  const step = Math.sign(delta);
+  for (let i = 0; i < Math.abs(delta); i += 1) {
+    await page.click(button);
+    await expect(page.locator('#month-title')).toHaveText(
+      `${year}年${startMonth + step * (i + 1)}月`
+    );
+  }
 }
 
 test.describe.configure({ mode: 'serial' });
@@ -289,22 +315,13 @@ test('C5 点「设置」弹出原生菜单，锚点为按钮左缘、下方 4px'
   await page.screenshot({ path: path.join(SHOTS, '04-topbar-settings.png') });
 });
 
-test('C6 最长闰月副标题不省略、顶栏单行且按钮不重叠', async () => {
+test('C6 真实翻月显示最宽副标题：不省略、顶栏单行且按钮不重叠', async () => {
   await showUnpinned();
-  // Drive the real year selector and month arrows: 2026-11 → 2025-11 → 2025-07.
-  await page.selectOption('#year-select', String(LONGEST_SUBTITLE_MONTH.year));
-  await expect(page.locator('#month-title')).toHaveText(
-    `${LONGEST_SUBTITLE_MONTH.year}年11月`
-  );
-  for (let month = 11; month > LONGEST_SUBTITLE_MONTH.month; month -= 1) {
-    await page.click('#prev-month');
-  }
-  await expect(page.locator('#month-title')).toHaveText(
-    `${LONGEST_SUBTITLE_MONTH.year}年${LONGEST_SUBTITLE_MONTH.month}月`
-  );
-  await page.evaluate((text) => {
-    document.getElementById('lunar-subtitle').textContent = text;
-  }, LONGEST_SUBTITLE);
+  // 真实翻月：2025-08-01 仍在 2025 年的闰六月内，副标题即最宽文案；
+  // 最宽文案总能通过翻月显示（任何「闰X月」所在公历月的 1 号都是它），
+  // 因此不再需要注入 #lunar-subtitle。
+  await navigateTo(LONGEST_SUBTITLE_MONTH.year, LONGEST_SUBTITLE_MONTH.month);
+  await expect(page.locator('#lunar-subtitle')).toHaveText(LONGEST_SUBTITLE);
 
   const metrics = await page.evaluate(() => {
     const rectOf = (el) => {
@@ -360,7 +377,7 @@ test('C6 最长闰月副标题不省略、顶栏单行且按钮不重叠', async
     };
   });
 
-  expect(metrics.titleText).toBe('2025年7月');
+  expect(metrics.titleText).toBe('2025年8月');
   expect(metrics.subtitleText).toBe(LONGEST_SUBTITLE);
   expect(metrics.subtitleScroll).toBeLessThanOrEqual(metrics.subtitleClient);
   expect(metrics.titleScroll).toBeLessThanOrEqual(metrics.titleClient);
@@ -376,6 +393,60 @@ test('C6 最长闰月副标题不省略、顶栏单行且按钮不重叠', async
   expect(metrics.toolbarRect.top).toBeGreaterThanOrEqual(metrics.topbarRect.bottom);
 
   await page.screenshot({ path: path.join(SHOTS, '07-topbar-longest-subtitle.png') });
+});
+
+test('S1 翻到 2025年7月按 1 号算，等 tick 不被今天覆盖，翻回本月回到今天', async () => {
+  await showUnpinned();
+  const now = new Date();
+  const todayTitle = `${now.getFullYear()}年${now.getMonth() + 1}月`;
+  // 上一条用例可能停在别的月份且窗口未隐藏，显式回今天并等 state 落地。
+  await page.click('#today-button');
+  await expect(page.locator('#month-title')).toHaveText(todayTitle);
+  const todaySubtitle = await page.locator('#lunar-subtitle').textContent();
+
+  await navigateTo(SUBTITLE_MONTH.year, SUBTITLE_MONTH.month);
+  await expect(page.locator('#lunar-subtitle')).toHaveText(SUBTITLE_TEXT);
+  // 跨过至少两次每秒 tick：副标题仍按所显示的月份，不被今天的值覆盖。
+  await page.waitForTimeout(2100);
+  await expect(page.locator('#lunar-subtitle')).toHaveText(SUBTITLE_TEXT);
+
+  // 翻回本月：年份下拉选回今天年份，再用箭头走回今天月份。
+  await navigateTo(now.getFullYear(), now.getMonth() + 1);
+  await expect(page.locator('#month-title')).toHaveText(todayTitle);
+  await expect(page.locator('#lunar-subtitle')).toHaveText(todaySubtitle);
+  await page.waitForTimeout(2100);
+  await expect(page.locator('#lunar-subtitle')).toHaveText(todaySubtitle);
+});
+
+test('S2 年份下拉直接选到别的年份，副标题按该月 1 号更新', async () => {
+  await showUnpinned();
+  await navigateTo(SUBTITLE_MONTH.year, SUBTITLE_MONTH.month);
+  await expect(page.locator('#lunar-subtitle')).toHaveText(SUBTITLE_TEXT);
+
+  // 不点任何月份箭头：2025-07 → 2024-07，副标题换成 2024-07-01 的值。
+  await page.selectOption('#year-select', String(S2_YEAR));
+  await expect(page.locator('#month-title')).toHaveText(`${S2_YEAR}年7月`);
+  await expect(page.locator('#lunar-subtitle')).toHaveText(S2_TEXT);
+});
+
+test('S3 点「今天」回到本月，副标题为今天的值', async () => {
+  await showUnpinned();
+  const now = new Date();
+  const todayTitle = `${now.getFullYear()}年${now.getMonth() + 1}月`;
+  // 上一条用例可能停在别的月份且窗口未隐藏，显式回今天并等 state 落地。
+  await page.click('#today-button');
+  await expect(page.locator('#month-title')).toHaveText(todayTitle);
+  const todaySubtitle = await page.locator('#lunar-subtitle').textContent();
+
+  await navigateTo(SUBTITLE_MONTH.year, SUBTITLE_MONTH.month);
+  await expect(page.locator('#lunar-subtitle')).toHaveText(SUBTITLE_TEXT);
+
+  await page.click('#today-button');
+  await expect(page.locator('#month-title')).toHaveText(todayTitle);
+  await expect(page.locator('#lunar-subtitle')).toHaveText(todaySubtitle);
+  // 之后每秒 tick 也保持今天的值。
+  await page.waitForTimeout(2100);
+  await expect(page.locator('#lunar-subtitle')).toHaveText(todaySubtitle);
 });
 
 test('C7 月历格子、三张卡与版本行相对 0.1.24 只整体下移 32px', async () => {

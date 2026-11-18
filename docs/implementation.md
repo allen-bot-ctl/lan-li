@@ -42,7 +42,8 @@ ${M}月${D}日 ${HH}:${mm}:${ss}
 **右侧「黄历」（`buildAlmanac`）**
 
 - 右栏顶部为黄历卡片，高度 118px（内容四行）；卡内不再重复大字干支年。标题行右侧为固定 57px 的占位槽：平时留空，悬停/聚焦时显示「去定制 ›」并 120ms 淡入。
-- `ganZhiText`：`` `${lunar.getYearInGanZhi()}${lunar.getYearShengXiao()}年` ``，如 `丙午马年`；`lunarMonthText` 为 `getMonthInChinese() + '月'`，闰月自然带出 `闰六月`。两者用于月历顶栏的灰色小字「丙午马年 · 十月」。
+- `ganZhiText`：`` `${lunar.getYearInGanZhi()}${lunar.getYearShengXiao()}年` ``，如 `丙午马年`；`lunarMonthText` 为 `getMonthInChinese() + '月'`，闰月自然带出 `闰六月`。两者由 `lunarHeader(lunar)` 一处计算，供黄历卡与 `buildViewSubtitle` 复用。
+- **月历顶栏副标题（`buildViewSubtitle(viewYear, viewMonth, today)`，0.1.26）**：按**所显示的月份**计算——显示月是本月时取今天（跨午夜随 tick 更新），其他月取该月 1 号，文案为「干支生肖年 · 农历月」，闰月照旧「闰六月」。主进程在 `buildState` 与每秒 `calendar:onTick` 里都以 `viewSubtitle` 字段下发；渲染层 `renderViewSubtitle` 只把它写入 `#lunar-subtitle`，`renderAlmanac` 不再写副标题。右侧黄历卡不变，仍只按今天计算，不随翻月变化。
 - `lunarDayText`：`` `${lunar.getMonthInChinese()}月${lunar.getDayInChinese()}` ``，如 `十月初九`，作为卡片标题行风格名的悬停 title（前缀「农历」）与「今日黄历」面板标题。
 - `rawYi` / `rawJi` 保存 `lunar.getDayYi()` / `getDayJi()` 的完整原词数组（`.map(String)`，不传 `sect`）。`yi` / `ji` 是逐词映射并按映射后文案去重后的完整列表，规则与 0.1.20 相同。
 - 焦点词 `focusYi` / `focusJi`：各为 `{ term, text, title, hint }`。`term` 是按百年稀有度选出的原词（只对原词计算，与风格无关，算法见下文「焦点数据」）；`text` 为风格文案（`lunar` 即原词）；`title` 为 `lunar` 的原词，其它风格为「文案（原词）」；`hint` 为面板用稀有度提示（特殊词或数据不可用时为空串）。
@@ -56,7 +57,7 @@ ${M}月${D}日 ${HH}:${mm}:${ss}
 - 偏好键 `preferences.json` 顶层 `almanacStyle`：只接受 5 个风格 id；缺失、类型不对或未知值一律按 `lunar` 处理，且不回写。仅在用户选中非当前风格时写入，保留其它键。
 - 渲染层「黄历」卡片显示四行：宜行 / 忌行（`#almanac-focus-yi`、`#almanac-focus-ji`，14px 加粗、单行、不设 `text-overflow`）、签语行 `#almanac-quote`、底注行 `#almanac-meta`。标题行只保留 `#almanac-customize`（去定制 ›），沿用 0.1.22 的默认 `opacity: 0` + `pointer-events: none` 与悬停/聚焦显示规则、120ms opacity 过渡，槽宽 `flex: 0 0 57px`、`justify-items: end`，平时留空。点击整张卡片（`#almanac-customize` 除外）打开「今日黄历」面板；「去定制 ›」仍打开黄历风格面板。
 
-**测试**：`tests/calendar.test.js`（节气、初七、2026-11-16 黄历「丙午马年 / 十月 / 十月初八 / 纳采 / 上梁」、42 格与 lead、今日/周末/节日标记、菜单栏标题、禁用 `getOtherFestivals`）；`tests/almanac-styles.test.js`（114 词表与四份映射完全相等、文件 schema、兜底、去重、确定性、默认兼容、偏好清洗、4 个日期 × 5 种风格选词一致）；`tests/almanac-focus.test.js`（数据 sha256/结构、36525 天稀有度复算、60 条签语、7 个固定日期、确定性、2026 相邻不重复、特殊词与平局、降级、不联网、不截断）；`tests/pin-and-polish.test.js`（钉住守卫与不持久化、×/Esc 复位、500ms 气泡、1900–2100 副标题宽度上限、三条入口文案、检查更新字号/颜色、文档同步、已删倒计时）。
+**测试**：`tests/calendar.test.js`（节气、初七、2026-11-16 黄历「丙午马年 / 十月 / 十月初八 / 纳采 / 上梁」、42 格与 lead、今日/周末/节日标记、副标题「本月取今天、其他月取 1 号」与闰月前缀、菜单栏标题、禁用 `getOtherFestivals`）；`tests/almanac-styles.test.js`（114 词表与四份映射完全相等、文件 schema、兜底、去重、确定性、默认兼容、偏好清洗、4 个日期 × 5 种风格选词一致）；`tests/almanac-focus.test.js`（数据 sha256/结构、36525 天稀有度复算、60 条签语、7 个固定日期、确定性、2026 相邻不重复、特殊词与平局、降级、不联网、不截断）；`tests/pin-and-polish.test.js`（钉住守卫与不持久化、×/Esc 复位、500ms 气泡、1900–2100 每一天副标题宽度扫描与 viewSubtitle 走读、三条入口文案、检查更新字号/颜色、文档同步、已删倒计时）。
 
 **焦点数据（`electron/data/almanac-focus.json`，`electron/almanac-focus.js`）**
 
@@ -182,7 +183,7 @@ ${M}月${D}日 ${HH}:${mm}:${ss}
 - 唯一入口是「设置」菜单的「退出栏历」（`Cmd+Q`）→ 主进程 `app.quit()`；不再有底栏按钮或 `app:quit` IPC。
 - 单实例锁：拿不到锁直接退出；第二实例不弹窗（`second-instance` 为空处理）。
 
-**测试**：Node 单测覆盖关闭计时/钉住守卫的源码约束、通栏顶栏结构与窗口定位纯函数；`e2e/pin-and-polish.spec.js` 在真实 Electron 进程中模拟托盘进入/离开与失焦，覆盖窗口 580×432、顶栏分组、月历顶栏精简、钉住、×/Esc、气泡、设置菜单锚点、最长副标题、相对 0.1.24 的整体下移 32px。`LANLI_E2E=1` 时主进程额外注册 `globalThis.__lanliTest` 钩子，正式运行不暴露。
+**测试**：Node 单测覆盖关闭计时/钉住守卫的源码约束、通栏顶栏结构与窗口定位纯函数；`e2e/pin-and-polish.spec.js` 在真实 Electron 进程中模拟托盘进入/离开与失焦，覆盖窗口 580×432、顶栏分组、月历顶栏精简、钉住、×/Esc、气泡、设置菜单锚点、真实翻月显示的最长副标题与副标题跟随显示月份（S1–S3）、相对 0.1.24 的整体下移 32px。`LANLI_E2E=1` 时主进程额外注册 `globalThis.__lanliTest` 钩子，正式运行不暴露。
 
 ## 4. 更新（`electron/updater.js` + `electron/mac-self-update.js` + `electron/update-feed.js`）
 
@@ -238,7 +239,7 @@ main.setupUpdates()
 | `weather:setCity` | `setCity` | `{ name, latitude, longitude, country?, admin1? }` 或 `null`；校验后写入/删除 `preferences.weatherCity` 并立即返回（不等待网络），后台强制刷新，结果经 `weather:update` 异步推送 |
 | `almanac:getStyles` | `getAlmanacStyles` | 无参数；返回固定顺序的 5 项 `{ id, name, tagline, badge, accentLight, accentDark, selected }` |
 | `almanac:setStyle` | `setAlmanacStyle` | `id` 字符串；5 个合法 id 之一时，若与当前不同则写入 `preferences.almanacStyle`，返回 `{ ok: true, almanac }`；非法 id 不写盘，返回 `{ ok: false }` |
-| `calendar:getState` | `getState` | 当前 `view`、`focus`、42 格、`almanac`、`clocks: { items }`（每项含 `time`、`relativeText`、`isMenuBar`）与内存里的 `pinned` |
+| `calendar:getState` | `getState` | 当前 `view`、`focus`、42 格、`almanac`、按显示月份算好的 `viewSubtitle`（本月取今天、其他月取该月 1 号）、`clocks: { items }`（每项含 `time`、`relativeText`、`isMenuBar`）与内存里的 `pinned` |
 | `calendar:setView` | `setView` | 校验并切换浏览年月/焦点日，返回新状态 |
 | `calendar:goToday` | `goToday` | 浏览年月与焦点日回到今天，返回新状态 |
 | `clocks:add` | `addClock` | `{ id, label? }`；校验/去重后持久化，返回 `clocks` 快照 |
@@ -262,7 +263,7 @@ main.setupUpdates()
 
 | 频道 | preload API | 说明 |
 | --- | --- | --- |
-| `calendar:onTick` | `onTick` | 每秒发送 `{ almanac, clocks }`；仅窗口可见时发送，每个城市的 `time` 与 `relativeText` 按当前时刻重新计算 |
+| `calendar:onTick` | `onTick` | 每秒发送 `{ almanac, viewSubtitle, clocks }`（窗口可见时），`clocks`、黄历与 `viewSubtitle` 都按当前时刻与当前显示月份重新计算 |
 | `weather:update` | `onWeatherUpdate` | 后台或打开窗口刷新后的天气结果；失败同样下发 `{ ok: false, text: '天气暂不可用', emoji: '🌡️' }` |
 | `ui:openPanel` | `onOpenPanel` | `'almanac'`、`'clocks'` 或 `'weather'`；由设置菜单触发，渲染层打开对应面板 |
 | `update:notice` | `onUpdateNotice` | `ready` / `manual` 横幅；打开窗口与加载完成时重发 |

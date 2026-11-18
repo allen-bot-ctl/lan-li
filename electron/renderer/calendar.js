@@ -90,7 +90,6 @@ function buildYearOptions() {
 function renderAlmanac(almanac) {
   if (!almanac) return;
   lastAlmanac = almanac;
-  lunarSubtitle.textContent = `${almanac.ganZhiText} · ${almanac.lunarMonthText}`;
   almanacStyleName.textContent = almanac.styleName;
   almanacStyleName.title = `农历${almanac.lunarDayText}`;
 
@@ -394,6 +393,13 @@ function closeClockEditor() {
   clockAddedList.replaceChildren();
 }
 
+// 0.1.26：顶栏副标题不再来自「今天」的黄历，而是跟随所显示的月份。
+// 主进程按「本月取今天、其他月取 1 号」算好 viewSubtitle 下发，渲染层只写入。
+function renderViewSubtitle(subtitle) {
+  if (typeof subtitle !== 'string' || subtitle === '') return;
+  lunarSubtitle.textContent = subtitle;
+}
+
 function renderCells(next) {
   grid.replaceChildren();
 
@@ -448,6 +454,7 @@ function applyState(next) {
   buildYearOptions();
   yearSelect.value = String(next.view.year);
   monthTitle.textContent = `${next.view.year}年${next.view.month}月`;
+  renderViewSubtitle(next.viewSubtitle);
 
   renderCells(next);
   renderAlmanac(next.almanac);
@@ -1004,6 +1011,7 @@ window.addEventListener('focus', () => {
 api.onTick((payload) => {
   if (!payload) return;
   renderAlmanac(payload.almanac);
+  renderViewSubtitle(payload.viewSubtitle);
   renderClockList(payload.clocks);
 });
 
