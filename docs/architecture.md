@@ -33,10 +33,10 @@ site/               GitHub Pages 静态主页（不是应用运行时的一部�
 - `electron/main.js`：唯一主进程入口（`package.json` 的 `main`）。持有 `Tray`、`BrowserWindow`、每秒定时器与更新器。
 - `electron/preload.js`：窗口 `webPreferences` 中 `contextIsolation: true`、`nodeIntegration: false`、`sandbox: true`；通过 `contextBridge.exposeInMainWorld('lanli', ...)` 暴露有限 API。
 - `electron/renderer/`：静态 HTML/CSS/JS。只做渲染、翻月、年份选择、世界时钟列表与编辑面板、天气卡片与选城面板、黄历风格面板、「今日黄历」面板、设置按钮、指针进出、Esc；不 `require('lunar-javascript')`，也不计算时区、天气代码或风格映射。
-- `electron/calendar.js`、`almanac-styles.js`、`almanac-focus.js`、`world-clocks.js`、`settings-menu.js`、`weather.js`、`quick-cities.js`、`login-item.js`、`update-feed.js`、`update-status.js`、`app-version.js`、`logger.js`、`mac-self-update.js`：可在没有 Electron 的情况下被 `node --test` require 的模块（`logger.js` 仅在默认取日志路径时惰性 require Electron；`weather.js` 的网络请求通过注入的 `fetch` 完成；`login-item.js` 的 `fs` 与路径可注入）。
+- `electron/calendar.js`、`almanac-styles.js`、`almanac-focus.js`、`world-clocks.js`、`settings-menu.js`、`window-layout.js`、`weather.js`、`quick-cities.js`、`login-item.js`、`update-feed.js`、`update-status.js`、`app-version.js`、`logger.js`、`mac-self-update.js`：可在没有 Electron 的情况下被 `node --test` require 的模块（`logger.js` 仅在默认取日志路径时惰性 require Electron；`weather.js` 的网络请求通过注入的 `fetch` 完成；`login-item.js` 的 `fs` 与路径可注入）。
 - `site/`：纯静态主页，由 `.github/workflows/pages.yml` 部署，不参与打包。
 
-窗口尺寸常量在 `electron/main.js`：`WINDOW_WIDTH = 580`、`WINDOW_HEIGHT = 400`；`electron/renderer/calendar.css` 中 `html, body` 也是 `580px × 400px`。左侧月历 `.calendar-pane` 弹性占满剩余宽度（约 `404px`），右侧卡片栏 `.now-pane` 为 `176px`。改窗口尺寸必须两处一起改，并重新做真机验收。
+窗口尺寸常量在 `electron/main.js`：`WINDOW_WIDTH = 580`、`WINDOW_HEIGHT = 432`；`electron/renderer/calendar.css` 中 `html, body` 也是 `580px × 432px`。最上方 32px 是通栏顶栏，`.app-body` 内的左侧月历 `.calendar-pane` 弹性占满剩余宽度（约 `404px`），右侧卡片栏 `.now-pane` 为 `176px`；两栏内部尺寸与间距仍与 0.1.24 一致。改窗口尺寸必须两处一起改，并重新做真机验收。
 
 ## 数据流
 
@@ -59,7 +59,7 @@ site/               GitHub Pages 静态主页（不是应用运行时的一部�
   → 返回 clocks 快照（每个城市的 HH:mm、相对文案、isMenuBar）→ 渲染层只展示
 
 设置菜单
-  → 顶栏「⚙︎ 设置」→ preload openSettings({ x, y }) → menu:openSettings
+  → 右上角「⚙︎ 设置」→ preload openSettings({ x, y }) → menu:openSettings
   → 主进程 settings-menu.buildSettingsMenuTemplate() → Menu.buildFromTemplate + menu.popup
   → 「黄历风格…」/「编辑世界时钟…」/「更换天气城市…」→ webContents.send('ui:openPanel', 'almanac' | 'clocks' | 'weather')
   → 渲染层面板打开；检查更新直接在主进程走现有更新器，状态仍经 update:status 推送
@@ -135,8 +135,8 @@ site/               GitHub Pages 静态主页（不是应用运行时的一部�
 **职责**
 
 - 渲染主进程给的 `cells`、`almanac`、`clocks`、`weather`、版本号与更新横幅；不渲染登录项状态（由原生菜单直接读取）。
-- 交互：上一月/下一月、年份下拉、今天、点击格子、世界时钟编辑面板（添加/搜索/设为菜单栏/移除）、天气单行与选城面板、黄历风格面板（5 选 1，即点即生效）、「今日黄历」面板（点黄历卡打开，仅「完成」关闭）、设置按钮、重启更新/下载新版。
-- 设置按钮只发送按钮坐标；菜单内容、登录项与退出都由主进程处理。`ui:openPanel` 到达时打开对应面板。
+- 交互：上一月/下一月、年份下拉、今天、点击格子、世界时钟编辑面板（添加/搜索/设为菜单栏/移除）、天气单行与选城面板、黄历风格面板（5 选 1，即点即生效）、「今日黄历」面板（点黄历卡打开，仅「完成」关闭）、通栏顶栏的图钉与设置胶囊、重启更新/下载新版。
+- 顶栏左侧只放图钉与「栏历」，右侧「⚙︎ 设置」只发送按钮坐标；菜单内容、登录项与退出都由主进程处理。`ui:openPanel` 到达时打开对应面板。
 - 天气卡片只请求主进程的当前结果；单行显示 emoji、温度、城市名与「更换 ›」，点击整行打开城市选择面板，搜索框为空时经 `weather:quickCities` 显示当前国家的离线常用城市，输入后经 `weather:searchCity` 搜索，`weather:setCity` 保存或清除手动城市。定位、网络与偏好读写都不在渲染层。
 - 黄历卡片只渲染主进程给的 `almanac`（焦点宜/忌、签语、底注）；「去定制 ›」经 `almanac:getStyles` 打开风格面板，选中后经 `almanac:setStyle` 立即重绘卡片。点击卡片用 `almanac.detail` 打开「今日黄历」面板，不新增 IPC；面板与另外三个面板互斥。主题色只通过 CSSOM 自定义属性注入，不写内联样式。
 - 指针进入/离开窗口根节点时通知主进程；Esc 由主进程的 `before-input-event` 处理。

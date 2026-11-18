@@ -55,6 +55,7 @@ const {
   searchCatalog
 } = require('./world-clocks');
 const { buildSettingsMenuTemplate } = require('./settings-menu');
+const { computePanelBounds } = require('./window-layout');
 const {
   RELEASES_LATEST_URL,
   HOMEPAGE_URL
@@ -74,7 +75,8 @@ const {
 const { createLoginItem } = require('./login-item');
 
 const WINDOW_WIDTH = 580;
-const WINDOW_HEIGHT = 400;
+// 0.1.24's 400px content plus the 32px full-width top bar.
+const WINDOW_HEIGHT = 432;
 
 // Playwright drives a real Electron process on Linux and macOS CI. Only this
 // explicit opt-in exposes the tray/window test hooks; packaged runs never do.
@@ -85,6 +87,9 @@ let calendarWindow = null;
 let clockTimer = null;
 let closeTimer = null;
 let settingsMenuOpen = false;
+// E2E-only probe: records the anchor actually received for the settings menu.
+let e2eLastSettingsAnchor = null;
+let e2eSettingsMenu = null;
 // Pinned is deliberately in-memory only: hiding or restarting clears it.
 let pinned = false;
 let updater = null;
@@ -556,6 +561,10 @@ function openSettingsMenu(event, position) {
 
   const menu = Menu.buildFromTemplate(template);
   const anchor = settingsMenuAnchor(position);
+  if (E2E) {
+    e2eLastSettingsAnchor = anchor;
+    e2eSettingsMenu = menu;
+  }
   const options = { window: target };
   if (anchor) {
     options.x = anchor.x;
@@ -673,23 +682,12 @@ function positionCalendar() {
   const display = screen.getDisplayNearestPoint({ x: bounds.x, y: bounds.y });
   const area = display.workArea;
 
-  let x = bounds.x + bounds.width - WINDOW_WIDTH;
-  if (x < area.x) x = area.x;
-  if (x + WINDOW_WIDTH > area.x + area.width) {
-    x = area.x + area.width - WINDOW_WIDTH;
-  }
-
   // Align with no overlap by default. On a real Mac, if a pointer-passable
-  // gap appears between the menu bar and the panel, use
-  // `bounds.y + bounds.height - 1` (at most 1px overlap).
-  const y = bounds.y + bounds.height;
-
-  calendarWindow.setBounds({
-    x: Math.round(x),
-    y: Math.round(y),
-    width: WINDOW_WIDTH,
-    height: WINDOW_HEIGHT
-  });
+  // gap appears between the menu bar and the panel, the tray bounds bottom is
+  // still the intended anchor. computePanelBounds clamps the result so the
+  // 432px-tall window always stays inside the work area.
+  const target = computePanelBounds(bounds, area, WINDOW_WIDTH, WINDOW_HEIGHT);
+  calendarWindow.setBounds(target);
 }
 
 function openCalendar() {
@@ -1031,6 +1029,16 @@ function registerE2eHooks() {
     },
     isPinned() {
       return pinned;
+    },
+    lastSettingsAnchor() {
+      return e2eLastSettingsAnchor;
+    },
+    closeSettingsMenu() {
+      if (e2eSettingsMenu && typeof e2eSettingsMenu.closePopup === 'function') {
+        e2eSettingsMenu.closePopup();
+      }
+      e2eSettingsMenu = null;
+      return true;
     }
   };
 }

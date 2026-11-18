@@ -42,7 +42,7 @@ ${M}月${D}日 ${HH}:${mm}:${ss}
 **右侧「黄历」（`buildAlmanac`）**
 
 - 右栏顶部为黄历卡片，高度 118px（内容四行）；卡内不再重复大字干支年。标题行右侧为固定 57px 的占位槽：平时留空，悬停/聚焦时显示「去定制 ›」并 120ms 淡入。
-- `ganZhiText`：`` `${lunar.getYearInGanZhi()}${lunar.getYearShengXiao()}年` ``，如 `丙午马年`；`lunarMonthText` 为 `getMonthInChinese() + '月'`，闰月自然带出 `闰六月`。两者用于左侧顶栏的灰色小字「丙午马年 · 十月」。
+- `ganZhiText`：`` `${lunar.getYearInGanZhi()}${lunar.getYearShengXiao()}年` ``，如 `丙午马年`；`lunarMonthText` 为 `getMonthInChinese() + '月'`，闰月自然带出 `闰六月`。两者用于月历顶栏的灰色小字「丙午马年 · 十月」。
 - `lunarDayText`：`` `${lunar.getMonthInChinese()}月${lunar.getDayInChinese()}` ``，如 `十月初九`，作为卡片标题行风格名的悬停 title（前缀「农历」）与「今日黄历」面板标题。
 - `rawYi` / `rawJi` 保存 `lunar.getDayYi()` / `getDayJi()` 的完整原词数组（`.map(String)`，不传 `sect`）。`yi` / `ji` 是逐词映射并按映射后文案去重后的完整列表，规则与 0.1.20 相同。
 - 焦点词 `focusYi` / `focusJi`：各为 `{ term, text, title, hint }`。`term` 是按百年稀有度选出的原词（只对原词计算，与风格无关，算法见下文「焦点数据」）；`text` 为风格文案（`lunar` 即原词）；`title` 为 `lunar` 的原词，其它风格为「文案（原词）」；`hint` 为面板用稀有度提示（特殊词或数据不可用时为空串）。
@@ -150,7 +150,7 @@ ${M}月${D}日 ${HH}:${mm}:${ss}
 
 **窗口**
 
-- `BrowserWindow`：`width 580`、`height 400`、`frame: false`、`resizable/minimizable/maximizable: false`、`skipTaskbar: true`、`alwaysOnTop: true`、`show: false`、`fullscreenable: false`。
+- `BrowserWindow`：`width 580`、`height 432`（32px 通栏顶栏 + 400px 内容）、`frame: false`、`resizable/minimizable/maximizable: false`、`skipTaskbar: true`、`alwaysOnTop: true`、`show: false`、`fullscreenable: false`。
 - `setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })`；加载 `renderer/calendar.html`。
 - `before-input-event` 拦截 Esc → `hideCalendar()`；Esc 只关窗口，不退出应用；钉住时按 Esc 同时取消钉住。
 - 每次从隐藏变可见时 `resetViewToToday()`，即浏览年月与焦点日回到系统今天。
@@ -161,17 +161,16 @@ ${M}月${D}日 ${HH}:${mm}:${ss}
 - 渲染层 `document.documentElement` 的 `mouseenter` → `pointer:enter`，主进程 `cancelClose()`；`mouseleave` → `pointer:leave`，主进程再次 `scheduleClose()`。
 - 200ms 是托盘与窗口之间短暂「两边都不在」的缓冲。
 - **钉住**：主进程内存里的 `pinned` 为 true 时，`scheduleClose()` 直接返回；窗口失焦本来就不触发隐藏，因此托盘/指针离开与失焦都不隐藏。渲染层图钉按钮经 `pin:toggle` 切换；点 × 时主进程取消钉住并 `hideCalendar()`，Esc 走同一 `hideCalendar()`。`hideCalendar()` 无条件把 `pinned` 清回 false 并经 `pin:state` 通知渲染层，所以隐藏后再悬停托盘一定回到未钉住。状态不写 `preferences.json`。
-- 顶栏顺序为 `‹ 今天 › ⚙ 钉住`；齿轮与钉住都是 24px 圆钮。图钉悬停 500ms 后显示页内气泡（11px，按钮正下方、右边缘对齐并钳在窗口内）。
+- 月历顶栏顺序为 `‹ 今天 ›`；图钉与「⚙︎ 设置」胶囊在窗口最上方的 32px 通栏顶栏里：图钉靠左（24px 圆钮），设置靠右（26px 胶囊）。图钉悬停 500ms 后显示页内气泡（11px，按钮正下方、左边缘对齐并钳在窗口内）。
 
-**定位（`positionCalendar`）**
+**定位（`positionCalendar` + `electron/window-layout.js`）**
 
-- 垂直：`y = trayBounds.y + trayBounds.height`，默认不重叠。若真机出现指针可穿过的缝隙，最多改成 `- 1`（1px 重叠）；不要更多。
-- 水平：先让窗口右缘与托盘右缘对齐（`x = bounds.x + bounds.width - WINDOW_WIDTH`）；再钳到当前显示器 `workArea`：左不越界、右不越界。
+- `computePanelBounds(trayBounds, workArea, width, height)` 是纯函数：水平先让窗口右缘与托盘右缘对齐，再钳到 `workArea`；垂直从 `trayBounds.y + trayBounds.height`（菜单栏下缘）开始，并保证 `580×432` 在 1280×800 等常见工作区内完整可见。`npm test` 用注入的 1280×800 / 25px 菜单栏几何直接验证。
 - `screen` 的 `display-metrics-changed` / `display-added` / `display-removed` 时，如果窗口可见则重新定位。
 
 **设置菜单（`electron/settings-menu.js` + `menu:openSettings`）**
 
-- 顶栏齿轮圆钮把按钮左缘/下缘加 4px 的坐标经 preload `openSettings({ x, y })` → `menu:openSettings` 发给主进程；渲染层只负责高亮按钮。
+- 右上角「⚙︎ 设置」胶囊把按钮左缘/下缘加 4px 的坐标经 preload `openSettings({ x, y })` → `menu:openSettings` 发给主进程；渲染层只负责高亮按钮。
 - 主进程用 `buildSettingsMenuTemplate({ version, openAtLogin }, actions)` 生成模板，再 `Menu.buildFromTemplate` + `menu.popup({ window, x, y })`。菜单左上角直接放在按钮左缘、下方 4px 处；超出窗口右侧时交给 macOS 自动调整。坐标缺失时退回光标位置。
 - 模板顺序固定：检查更新（`sublabel` 为 `formatVersionLabel(app.getVersion())`）、登录时打开（`type: 'checkbox'`，`checked` 来自 `getOpenAtLogin()`）、分隔线、黄历风格…、编辑世界时钟…、更换天气城市…、分隔线、退出栏历（`accelerator: 'Cmd+Q'`）。
 - 检查更新（设置菜单的项与右栏底部的文字链接）都调用 `requestUpdateCheck()` → `performUpdateCheck()`（`updater.checkNow({ manual: true })`）；底部入口经 `update:check` 到达主进程，结果仍走 `update:status`，不另写更新逻辑。
@@ -183,7 +182,7 @@ ${M}月${D}日 ${HH}:${mm}:${ss}
 - 唯一入口是「设置」菜单的「退出栏历」（`Cmd+Q`）→ 主进程 `app.quit()`；不再有底栏按钮或 `app:quit` IPC。
 - 单实例锁：拿不到锁直接退出；第二实例不弹窗（`second-instance` 为空处理）。
 
-**测试**：Node 单测覆盖关闭计时/钉住守卫的源码约束；`e2e/pin-and-polish.spec.js` 在真实 Electron 进程中模拟托盘进入/离开与失焦，覆盖钉住、×/Esc、气泡与顶栏宽度。`LANLI_E2E=1` 时主进程额外注册 `globalThis.__lanliTest` 钩子，正式运行不暴露。
+**测试**：Node 单测覆盖关闭计时/钉住守卫的源码约束、通栏顶栏结构与窗口定位纯函数；`e2e/pin-and-polish.spec.js` 在真实 Electron 进程中模拟托盘进入/离开与失焦，覆盖窗口 580×432、顶栏分组、月历顶栏精简、钉住、×/Esc、气泡、设置菜单锚点、最长副标题、相对 0.1.24 的整体下移 32px。`LANLI_E2E=1` 时主进程额外注册 `globalThis.__lanliTest` 钩子，正式运行不暴露。
 
 ## 4. 更新（`electron/updater.js` + `electron/mac-self-update.js` + `electron/update-feed.js`）
 

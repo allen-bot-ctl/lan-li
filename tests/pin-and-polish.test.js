@@ -113,7 +113,9 @@ test('C5 钉住按钮有 500ms 页内气泡，文案与定位满足契约', () =
   assert.match(RENDERER, /const PIN_TOOLTIP_UNPINNED = '钉住窗口，移开鼠标也不隐藏';/);
   assert.match(RENDERER, /const PIN_TOOLTIP_PINNED = '取消钉住并关闭';/);
   assert.match(RENDERER, /pinTooltipTimer = setTimeout\(\(\) => \{[\s\S]*?\}, 500\);/);
-  assert.match(RENDERER, /let left = rect\.right - width;/);
+  // 0.1.25 moved the pin to the top-left, so the bubble is left-aligned now.
+  assert.match(RENDERER, /let left = rect\.left;/);
+  assert.equal(/let left = rect\.right - width;/.test(RENDERER), false);
   assert.match(RENDERER, /Math\.min\(left, window\.innerWidth - width - 4\)/);
   assert.match(RENDERER, /pinButton\.addEventListener\('mouseleave', hidePinTooltip\)/);
 
@@ -194,23 +196,15 @@ test('C10 product.md 与 README 去掉节气倒计时并补上钉住说明', () 
   assert.match(product, /钉住窗口/);
 });
 
-test('顶栏顺序为 ‹ 今天 › ⚙ 钉住，齿轮改为 24px 圆钮', () => {
-  assert.deepEqual(navIds(), [
-    'prev-month',
-    'today-button',
-    'next-month',
-    'settings-button',
-    'pin-button'
-  ]);
+test('月历顶栏顺序为 ‹ 今天 ›；图钉与设置已移入通栏顶栏', () => {
+  assert.deepEqual(navIds(), ['prev-month', 'today-button', 'next-month']);
 
-  const settings = HTML.match(/<button[\s\S]*?id="settings-button"[\s\S]*?<\/button>/);
-  assert.ok(settings, 'settings button should exist');
-  assert.match(settings[0], /class="nav-circle settings-button"/);
-  assert.match(settings[0], /aria-label="设置"/);
-  assert.match(settings[0], /title="设置"/);
-  assert.match(settings[0], /class="settings-gear" aria-hidden="true">⚙︎</);
-  assert.equal(/<span>设置<\/span>/.test(settings[0]), false);
-  assert.equal(/nav-pill settings-button/.test(HTML), false);
+  // Pin and settings live in the full-width top bar now; their structure and
+  // styles are asserted in tests/topbar.test.js.
+  const pane = HTML.match(/<main class="calendar-pane">[\s\S]*?<\/main>/);
+  assert.ok(pane, 'calendar pane should exist');
+  assert.equal(/id="settings-button"/.test(pane[0]), false);
+  assert.equal(/id="pin-button"/.test(pane[0]), false);
 
   const circle = ruleFor('.nav-circle');
   assert.match(circle.body, /width:\s*24px/);

@@ -68,7 +68,7 @@
 html,
 body {
   width: 580px;
-  height: 400px;
+  height: 432px;
   margin: 0;
   overflow: hidden;
   background: #f4f1ed;
@@ -92,9 +92,89 @@ select {
   display: flex;
   width: 100%;
   height: 100%;
+  flex-direction: column;
   overflow: hidden;
   border-radius: 10px;
   background: transparent;
+}
+
+/* Full-width top bar: pin + name on the left, future entries + settings on
+   the right. It owns the 32px the window grew by; the two panes below keep
+   their 0.1.24 internal heights and spacing. */
+
+.topbar {
+  display: flex;
+  flex: 0 0 32px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  height: 32px;
+  padding: 0 15px;
+  border-bottom: 1px solid var(--pane-line);
+  background: transparent;
+}
+
+.topbar-left {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+}
+
+.topbar-title {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.topbar-right {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Future entries go here, to the left of 设置, laid out right to left. Each
+   one is a 24px icon circle with a .pin-tooltip bubble. */
+.topbar-actions {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  gap: 6px;
+}
+
+.topbar-actions:empty {
+  display: none;
+}
+
+.topbar-action {
+  position: relative;
+  display: flex;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--chip);
+  color: var(--muted-strong);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.topbar-action:hover {
+  background: var(--chip-hover);
+}
+
+.app-body {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  flex-direction: row;
 }
 
 /* Left calendar pane */
@@ -210,7 +290,7 @@ select {
 }
 
 .settings-button {
-  margin-left: 2px;
+  flex: 0 0 auto;
 }
 
 .settings-button.is-open {

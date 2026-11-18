@@ -1,0 +1,16 @@
+{
+  "note": "Bounding boxes measured from the unmodified v0.1.24 Electron window (580x400) with LANLI_E2E=1. Used by C7 to prove the 0.1.25 layout is only shifted 32px down.",
+  "viewport": { "width": 580, "height": 400 },
+  "elements": {
+    "calendarPane": { "x": 0, "y": 0, "width": 404, "height": 400 },
+    "toolbar": { "x": 15, "y": 11, "width": 374, "height": 34 },
+    "weekdays": { "x": 15, "y": 49, "width": 374, "height": 19 },
+    "grid": { "x": 15, "y": 68, "width": 374, "height": 323 },
+    "firstCell": { "x": 15, "y": 70, "width": 53.421875, "height": 52.65625 },
+    "nowPane": { "x": 404, "y": 0, "width": 176, "height": 400 },
+    "almanacCard": { "x": 417, "y": 11, "width": 151, "height": 118 },
+    "worldClockCard": { "x": 417, "y": 138, "width": 151, "height": 82 },
+    "weatherCard": { "x": 417, "y": 229, "width": 151, "height": 40 },
+    "paneFooter": { "x": 417, "y": 379, "width": 151, "height": 12 }
+  }
+}

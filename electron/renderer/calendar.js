@@ -531,14 +531,14 @@ function hidePinTooltip() {
 }
 
 // In-page bubble instead of a native title: 500ms hover delay, below the pin
-// button, right edges aligned, clamped so it always stays inside the window.
+// button, left edges aligned, clamped so it always stays inside the window.
 function showPinTooltip() {
   pinTooltip.hidden = false;
   const rect = pinButton.getBoundingClientRect();
   const width = pinTooltip.offsetWidth;
   const height = pinTooltip.offsetHeight;
 
-  let left = rect.right - width;
+  let left = rect.left;
   left = Math.max(4, Math.min(left, window.innerWidth - width - 4));
   let top = rect.bottom + 6;
   if (top + height > window.innerHeight - 4) {
