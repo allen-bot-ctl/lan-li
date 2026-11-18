@@ -596,8 +596,8 @@ select {
   justify-items: end;
 }
 
-.almanac-card:hover .almanac-style-name,
-.almanac-card:focus-within .almanac-style-name {
+.almanac-card:not(.is-dated):hover .almanac-style-name,
+.almanac-card:not(.is-dated):focus-within .almanac-style-name {
   max-width: calc(100% - 50px);
 }
 
@@ -618,6 +618,13 @@ select {
 .weather-card:focus-visible .weather-change {
   opacity: 1;
   pointer-events: auto;
+}
+
+/* 0.1.31：选中的不是今天时，悬停/聚焦黄历卡不显示「去定制 ›」，日期标题始终完整。 */
+.almanac-card.is-dated:hover #almanac-customize,
+.almanac-card.is-dated:focus-within #almanac-customize {
+  opacity: 0;
+  visibility: hidden;
 }
 
 .almanac-card {

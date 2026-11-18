@@ -116,6 +116,7 @@ function renderAlmanac(almanac) {
   almanacStyleName.textContent = isTodayAlmanac(almanac)
     ? almanac.styleName
     : `${almanac.styleName.replace('黄历', '')} · ${almanac.solarText}`;
+  almanacCard.classList.toggle('is-dated', !isTodayAlmanac(almanac));
   almanacStyleName.title = `农历${almanac.lunarDayText}`;
 
   // CSSOM custom properties are the only per-style colours; inline style

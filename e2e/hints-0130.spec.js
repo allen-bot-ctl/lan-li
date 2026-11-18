@@ -31,11 +31,15 @@ async function useStyle(id) {
 
 // 悬停前先把指针挪到中性位置，保证每次都是新的 mouseenter。
 async function hoverAndTip(selector, text) {
+  // 先把指针挪到中性区并等上一个气泡真正隐藏，再悬停；气泡按 500ms 延迟出现，
+  // 断言等事件（气泡可见）而不是卡死时限——macOS CI 上 500ms 计时器 + 600ms 窗口太紧（0.1.30 Release 44281028955）。
   await page.mouse.move(300, 300);
-  await page.waitForTimeout(50);
+  await expect(tip()).toBeHidden();
+  const started = Date.now();
   await page.hover(selector);
-  await expect(tip()).toBeVisible({ timeout: 600 });
+  await expect(tip()).toBeVisible();
   await expect(tip()).toHaveText(text);
+  expect(Date.now() - started).toBeGreaterThanOrEqual(400);
   const box = await page.evaluate(() => {
     const r = document.getElementById('icon-tooltip').getBoundingClientRect();
     return { l: r.left, t: r.top, r: r.right, b: r.bottom, w: innerWidth, h: innerHeight };
@@ -188,5 +192,34 @@ test('C8 「健身党 · 12月31日 ›」一行显示不截断', async () => {
   expect(m.right).toBeLessThanOrEqual(m.headRight + 0.5);
   await page.screenshot({ path: path.join(SHOTS, '22-hints-0130-longest.png') });
   await page.click('#today-button');
+  await useStyle('coder');
+});
+
+test('C10 选中非今天时悬停不显示「去定制 ›」、标题完整；回到今天后照旧显示', async () => {
+  await useStyle('fitness');
+  await page.click('#next-month');
+  await expect(page.locator('#month-title')).toHaveText('2026年12月');
+  await page.locator('.cell[aria-label^="2026年12月31日 "]').click();
+  await expect(page.locator('#almanac-style-name')).toHaveText('健身党 · 12月31日');
+  await page.mouse.move(300, 300);
+  await page.hover('#almanac-quote');
+  await page.waitForTimeout(1000);
+  const dated = await page.evaluate(() => {
+    const el = document.getElementById('almanac-style-name');
+    const btn = document.getElementById('almanac-customize');
+    return { scroll: el.scrollWidth, client: el.clientWidth, opacity: getComputedStyle(btn).opacity,
+      visibility: getComputedStyle(btn).visibility };
+  });
+  expect(dated.scroll).toBeLessThanOrEqual(dated.client);
+  expect(dated.opacity).toBe('0');
+  expect(dated.visibility).toBe('hidden');
+
+  await page.click('#today-button');
+  await expect(page.locator('#almanac-style-name')).toHaveText('健身党黄历');
+  await page.mouse.move(300, 300);
+  await page.hover('#almanac-quote');
+  await expect.poll(() => page.evaluate(() =>
+    getComputedStyle(document.getElementById('almanac-customize')).opacity)).toBe('1');
+  await page.mouse.move(300, 300);
   await useStyle('coder');
 });
