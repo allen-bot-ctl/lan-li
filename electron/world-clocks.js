@@ -198,18 +198,21 @@ function dayNumber(parts) {
   return Math.round(Date.UTC(parts.year, parts.month - 1, parts.day) / 86400000);
 }
 
-// Human-readable offset against the host zone, e.g. +1 小时 / −13 小时.
-// Half-hour zones keep one decimal so 新德里 reads +5.5 小时. Returns an empty
-// string when the two zones agree.
+// Human-readable offset against the host zone, e.g. 快 1 小时 / 慢 13 小时.
+// Half-hour zones split into hours and minutes so 新德里 reads 快 5 小时 30 分.
+// Returns an empty string when the two zones agree or the value is not finite.
 function formatClockOffset(offsetMinutes) {
   if (!Number.isFinite(offsetMinutes) || offsetMinutes === 0) return '';
-  const sign = offsetMinutes > 0 ? '+' : '−';
-  const hours = Math.round((Math.abs(offsetMinutes) / 60) * 10) / 10;
-  return `${sign}${hours} 小时`;
+  const abs = Math.abs(offsetMinutes);
+  const h = Math.floor(abs / 60);
+  const m = abs % 60;
+  const word = offsetMinutes > 0 ? '快' : '慢';
+  return m ? (h ? `${word} ${h} 小时 ${m} 分` : `${word} ${m} 分`) : `${word} ${h} 小时`;
 }
 
-// Relative label shown under each city: 今天 / 明天 / 昨天 plus the offset
-// against the local zone. Same-zone cities only show 今天.
+// Relative label shown under each city: 明天 / 昨天 plus the 快/慢 offset
+// against the local zone. Same-zone cities only show 本地; a zero offset on
+// another date reads 时间相同.
 function describeClockRelative(now, timeZone, localTimeZone) {
   if (!(now instanceof Date) || Number.isNaN(now.getTime())) return null;
   if (!isValidTimeZone(timeZone) || !isValidTimeZone(localTimeZone)) return null;
@@ -217,16 +220,21 @@ function describeClockRelative(now, timeZone, localTimeZone) {
   const zone = zonedParts(now, timeZone);
   const local = zonedParts(now, localTimeZone);
   const dayDelta = dayNumber(zone) - dayNumber(local);
-  const dayText = dayDelta > 0 ? '明天' : dayDelta < 0 ? '昨天' : '今天';
+  const isLocal = timeZone.trim() === localTimeZone.trim();
+  const dayText = dayDelta > 0 ? '明天' : dayDelta < 0 ? '昨天' : '';
   const offsetMinutes = offsetMinutesAt(now, timeZone) - offsetMinutesAt(now, localTimeZone);
   const offsetText = formatClockOffset(offsetMinutes);
+  const text = isLocal
+    ? '本地'
+    : `${dayText ? dayText + ' · ' : ''}${offsetText || '时间相同'}`;
 
   return {
     dayText,
     dayDelta,
     offsetMinutes,
     offsetText,
-    text: offsetText ? `${dayText} · ${offsetText}` : dayText
+    isLocal,
+    text
   };
 }
 

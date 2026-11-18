@@ -285,12 +285,19 @@ function formatWeatherResult(input) {
   const city = textValue(source.city) || '当前位置';
   const temperatureText = `${Math.round(temperature)}°C`;
 
+  const low = finiteNumber(source.low);
+  const high = finiteNumber(source.high);
+  const hasRange = low !== null && high !== null && low <= high;
+
   return {
     ok: true,
     city,
     weather,
     temperature: Math.round(temperature),
     temperatureText,
+    low: hasRange ? Math.round(low) : null,
+    high: hasRange ? Math.round(high) : null,
+    rangeText: hasRange ? `${Math.round(low)}°~${Math.round(high)}°` : '',
     emoji: weatherEmoji(weather),
     text: `${city} · ${weather} · ${temperatureText}`
   };
@@ -309,8 +316,23 @@ function buildWttrUrl(latitude, longitude) {
     `${coordinates.latitude},${coordinates.longitude}?format=j1&lang=zh`;
 }
 
+// "低温 6℃" / "高温 15℃" → 6 / 15. Numbers pass through unchanged; anything
+// without a numeric match returns null.
+function degreeNumber(value) {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value === 'string') {
+    const matched = value.match(/-?\d+(?:\.\d+)?/);
+    if (matched) {
+      const parsed = Number(matched[0]);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+  }
+  return null;
+}
+
 // itboy: data.wendu is the current temperature, data.forecast[0].type is the
-// Chinese weather text such as 多云.
+// Chinese weather text such as 多云, and forecast[0].low/high carry the day's
+// range as 「低温 6℃」「高温 15℃」.
 function parseItboyWeather(data) {
   if (!data || typeof data !== 'object') return null;
   const payload = data.data && typeof data.data === 'object' ? data.data : null;
@@ -318,14 +340,16 @@ function parseItboyWeather(data) {
   const temperature = finiteNumber(payload.wendu);
   if (temperature === null) return null;
   const forecast = Array.isArray(payload.forecast) ? payload.forecast : [];
-  const weather = forecast[0] && typeof forecast[0] === 'object'
-    ? textValue(forecast[0].type)
-    : '';
-  return { temperature, weather: weather || '未知' };
+  const first = forecast[0] && typeof forecast[0] === 'object' ? forecast[0] : null;
+  const weather = first ? textValue(first.type) : '';
+  const low = first ? degreeNumber(first.low) : null;
+  const high = first ? degreeNumber(first.high) : null;
+  return { temperature, weather: weather || '未知', low, high };
 }
 
 // wttr.in j1: current_condition[0].temp_C plus lang_zh[0].value, falling back
-// to weatherDesc[0].value when the localized list is absent.
+// to weatherDesc[0].value when the localized list is absent. The day's range
+// comes from weather[0].mintempC / maxtempC when present.
 function parseWttrWeather(data) {
   if (!data || typeof data !== 'object' || !Array.isArray(data.current_condition)) {
     return null;
@@ -340,7 +364,11 @@ function parseWttrWeather(data) {
   const described = Array.isArray(current.weatherDesc) && current.weatherDesc[0]
     ? textValue(current.weatherDesc[0].value)
     : '';
-  return { temperature, weather: localized || described || '未知' };
+  const daily = Array.isArray(data.weather) ? data.weather[0] : null;
+  const hasDaily = Boolean(daily && typeof daily === 'object');
+  const low = hasDaily ? finiteNumber(daily.mintempC) : null;
+  const high = hasDaily ? finiteNumber(daily.maxtempC) : null;
+  return { temperature, weather: localized || described || '未知', low, high };
 }
 
 function createWeatherService(options = {}) {

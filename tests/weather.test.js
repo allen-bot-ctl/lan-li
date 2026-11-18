@@ -122,11 +122,15 @@ test('itboy and wttr.in URLs carry their inputs', () => {
 test('itboy response is parsed from data.wendu and forecast[0].type', () => {
   assert.deepEqual(parseItboyWeather(itboyBody('8', '多云')), {
     temperature: 8,
-    weather: '多云'
+    weather: '多云',
+    low: null,
+    high: null
   });
   assert.deepEqual(parseItboyWeather(itboyBody('-3.4', '小雪')), {
     temperature: -3.4,
-    weather: '小雪'
+    weather: '小雪',
+    low: null,
+    high: null
   });
   assert.equal(parseItboyWeather({ data: { forecast: [{ type: '晴' }] } }), null);
   assert.equal(parseItboyWeather({ data: { wendu: '' } }), null);
@@ -137,15 +141,21 @@ test('itboy response is parsed from data.wendu and forecast[0].type', () => {
 test('wttr.in response prefers lang_zh and falls back to weatherDesc', () => {
   assert.deepEqual(parseWttrWeather(wttrBody('8', '多云')), {
     temperature: 8,
-    weather: '多云'
+    weather: '多云',
+    low: null,
+    high: null
   });
   assert.deepEqual(parseWttrWeather(wttrBody('9', '', 'Cloudy')), {
     temperature: 9,
-    weather: 'Cloudy'
+    weather: 'Cloudy',
+    low: null,
+    high: null
   });
   assert.deepEqual(parseWttrWeather(wttrBody('7', undefined, 'Sunny')), {
     temperature: 7,
-    weather: 'Sunny'
+    weather: 'Sunny',
+    low: null,
+    high: null
   });
   assert.equal(parseWttrWeather({ current_condition: [] }), null);
   assert.equal(parseWttrWeather({ current_condition: [{}] }), null);
@@ -318,6 +328,9 @@ test('weather result formats as 城市 · 天气 · 温度°C', () => {
       weather: '多云',
       temperature: 8,
       temperatureText: '8°C',
+      low: null,
+      high: null,
+      rangeText: '',
       emoji: '⛅️',
       text: '纽约 · 多云 · 8°C'
     }
@@ -335,6 +348,53 @@ test('weather result formats as 城市 · 天气 · 温度°C', () => {
     formatWeatherResult({ city: '纽约', weather: '多云' }),
     { ok: false, text: UNAVAILABLE_TEXT, emoji: '🌡️' }
   );
+});
+
+test('C4 两个天气源的今日气温区间', () => {
+  assert.deepEqual(
+    parseItboyWeather({
+      data: {
+        wendu: '8',
+        forecast: [{ high: '高温 15℃', low: '低温 6℃', type: '多云' }]
+      }
+    }),
+    { temperature: 8, weather: '多云', low: 6, high: 15 }
+  );
+
+  assert.deepEqual(
+    parseWttrWeather({
+      current_condition: [{ temp_C: '-5', lang_zh: [{ value: '小雪' }] }],
+      weather: [{ mintempC: '-12', maxtempC: '-3' }]
+    }),
+    { temperature: -5, weather: '小雪', low: -12, high: -3 }
+  );
+
+  assert.equal(
+    formatWeatherResult({
+      city: '北京',
+      weather: '多云',
+      temperature: 8,
+      low: 6,
+      high: 15
+    }).rangeText,
+    '6°~15°'
+  );
+  assert.equal(
+    formatWeatherResult({
+      city: '北京',
+      weather: '小雪',
+      temperature: -5,
+      low: -12,
+      high: -3
+    }).rangeText,
+    '-12°~-3°'
+  );
+
+  const noRange = formatWeatherResult({ city: '北京', weather: '多云', temperature: 8 });
+  assert.equal(noRange.rangeText, '');
+  assert.equal(noRange.low, null);
+  assert.equal(noRange.high, null);
+  assert.equal(noRange.temperature, 8);
 });
 
 test('weather text maps to a card emoji with 雷/雪/雨 precedence', () => {
