@@ -23,17 +23,34 @@
           <button class="nav-pill" id="today-button" type="button">今天</button>
           <button class="nav-circle" id="next-month" type="button" aria-label="下一月">›</button>
           <button
-            class="nav-pill settings-button"
+            class="nav-circle settings-button"
             id="settings-button"
             type="button"
+            title="设置"
+            aria-label="设置"
             aria-haspopup="menu"
             aria-expanded="false"
           >
             <span class="settings-gear" aria-hidden="true">⚙︎</span>
-            <span>设置</span>
+          </button>
+          <button
+            class="nav-circle pin-button"
+            id="pin-button"
+            type="button"
+            aria-label="钉住窗口"
+            aria-pressed="false"
+          >
+            <svg class="pin-icon pin-icon-pin" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+              <path d="M9.828.722a.5.5 0 0 1 .354.146l4.95 4.95a.5.5 0 0 1 0 .707c-.48.48-1.072.588-1.503.588-.177 0-.335-.018-.46-.039l-3.134 3.134a5.927 5.927 0 0 1 .16 1.013c.046.702-.032 1.687-.72 2.375a.5.5 0 0 1-.707 0l-2.829-2.828-3.182 3.182c-.195.195-1.219.902-1.414.707-.195-.195.512-1.22.707-1.414l3.182-3.182-2.828-2.829a.5.5 0 0 1 0-.707c.688-.688 1.673-.767 2.375-.72a5.922 5.922 0 0 1 1.013.16l3.134-3.133a2.772 2.772 0 0 1-.04-.461c0-.43.108-1.022.589-1.503a.5.5 0 0 1 .353-.146z"/>
+            </svg>
+            <svg class="pin-icon pin-icon-close" viewBox="0 0 16 16" aria-hidden="true" focusable="false" hidden>
+              <path d="M4 4l8 8m0-8-8 8"/>
+            </svg>
           </button>
         </nav>
       </header>
+
+      <div class="pin-tooltip" id="pin-tooltip" role="tooltip" hidden>钉住窗口，移开鼠标也不隐藏</div>
 
       <div class="weekdays" aria-hidden="true">
         <span>一</span>
@@ -58,7 +75,6 @@
         <div class="card-head">
           <span class="card-title almanac-style-name" id="almanac-style-name">农历黄历</span>
           <span class="card-swap almanac-head-swap">
-            <span class="term-countdown" id="almanac-term-countdown"></span>
             <button class="card-link" id="almanac-customize" type="button">去定制 ›</button>
           </span>
         </div>
@@ -77,7 +93,7 @@
       <section class="card world-clock-card" aria-label="世界时钟">
         <div class="card-head">
           <span class="card-title">世界时钟</span>
-          <button class="card-link" id="clock-edit" type="button">编辑</button>
+          <button class="card-link" id="clock-edit" type="button">编辑 ›</button>
         </div>
         <div class="clock-list" id="clock-list"></div>
         <div class="clock-empty" id="clock-empty" hidden>尚未添加城市</div>

@@ -25,6 +25,10 @@ contextBridge.exposeInMainWorld('lanli', {
   },
   pointerEnter: () => ipcRenderer.send('pointer:enter'),
   pointerLeave: () => ipcRenderer.send('pointer:leave'),
+  togglePin: () => ipcRenderer.invoke('pin:toggle'),
+  onPinState: (callback) => {
+    ipcRenderer.on('pin:state', (_event, payload) => callback(payload));
+  },
   openSettings: (position) => ipcRenderer.send('menu:openSettings', position),
   onOpenPanel: (callback) => {
     ipcRenderer.on('ui:openPanel', (_event, panel) => callback(panel));

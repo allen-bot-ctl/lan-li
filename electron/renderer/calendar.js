@@ -12,11 +12,14 @@ const prevMonth = document.getElementById('prev-month');
 const nextMonth = document.getElementById('next-month');
 const todayButton = document.getElementById('today-button');
 const settingsButton = document.getElementById('settings-button');
+const pinButton = document.getElementById('pin-button');
+const pinTooltip = document.getElementById('pin-tooltip');
+const pinIconPin = pinButton.querySelector('.pin-icon-pin');
+const pinIconClose = pinButton.querySelector('.pin-icon-close');
 const grid = document.getElementById('grid');
 const almanacCard = document.getElementById('almanac-card');
 const almanacStyleName = document.getElementById('almanac-style-name');
 const almanacCustomize = document.getElementById('almanac-customize');
-const almanacTermCountdown = document.getElementById('almanac-term-countdown');
 const almanacFocusYi = document.getElementById('almanac-focus-yi');
 const almanacFocusJi = document.getElementById('almanac-focus-ji');
 const almanacQuote = document.getElementById('almanac-quote');
@@ -66,6 +69,8 @@ let almanacStylesToken = 0;
 let updateMode = null;
 let bannerMode = null;
 let checkStatusTimer = null;
+let pinned = false;
+let pinTooltipTimer = null;
 
 function daysInMonth(year, month) {
   return new Date(year, month, 0).getDate();
@@ -88,7 +93,6 @@ function renderAlmanac(almanac) {
   lunarSubtitle.textContent = `${almanac.ganZhiText} · ${almanac.lunarMonthText}`;
   almanacStyleName.textContent = almanac.styleName;
   almanacStyleName.title = `农历${almanac.lunarDayText}`;
-  almanacTermCountdown.textContent = almanac.termCountdown ? almanac.termCountdown.text : '';
 
   // CSSOM custom properties are the only per-style colours; inline style
   // attributes stay forbidden by the CSP.
@@ -448,6 +452,7 @@ function applyState(next) {
   renderCells(next);
   renderAlmanac(next.almanac);
   renderClockList(next.clocks);
+  renderPin(next.pinned);
   if (!clockPicker.hidden) renderClockEditor(next.clocks);
 }
 
@@ -504,6 +509,62 @@ function clearSettingsHighlight() {
   settingsButton.classList.remove('is-open');
   settingsButton.setAttribute('aria-expanded', 'false');
 }
+
+const PIN_TOOLTIP_UNPINNED = '钉住窗口，移开鼠标也不隐藏';
+const PIN_TOOLTIP_PINNED = '取消钉住并关闭';
+
+function renderPin(nextPinned) {
+  pinned = Boolean(nextPinned);
+  pinButton.setAttribute('aria-label', pinned ? PIN_TOOLTIP_PINNED : '钉住窗口');
+  pinButton.setAttribute('aria-pressed', pinned ? 'true' : 'false');
+  pinIconPin.hidden = pinned;
+  pinIconClose.hidden = !pinned;
+  pinTooltip.textContent = pinned ? PIN_TOOLTIP_PINNED : PIN_TOOLTIP_UNPINNED;
+}
+
+function hidePinTooltip() {
+  if (pinTooltipTimer) {
+    clearTimeout(pinTooltipTimer);
+    pinTooltipTimer = null;
+  }
+  pinTooltip.hidden = true;
+}
+
+// In-page bubble instead of a native title: 500ms hover delay, below the pin
+// button, right edges aligned, clamped so it always stays inside the window.
+function showPinTooltip() {
+  pinTooltip.hidden = false;
+  const rect = pinButton.getBoundingClientRect();
+  const width = pinTooltip.offsetWidth;
+  const height = pinTooltip.offsetHeight;
+
+  let left = rect.right - width;
+  left = Math.max(4, Math.min(left, window.innerWidth - width - 4));
+  let top = rect.bottom + 6;
+  if (top + height > window.innerHeight - 4) {
+    top = Math.max(4, rect.top - height - 6);
+  }
+
+  pinTooltip.style.left = `${Math.round(left)}px`;
+  pinTooltip.style.top = `${Math.round(top)}px`;
+}
+
+pinButton.addEventListener('mouseenter', () => {
+  hidePinTooltip();
+  pinTooltipTimer = setTimeout(() => {
+    pinTooltipTimer = null;
+    showPinTooltip();
+  }, 500);
+});
+
+pinButton.addEventListener('mouseleave', hidePinTooltip);
+
+pinButton.addEventListener('click', () => {
+  hidePinTooltip();
+  api.togglePin().then((result) => {
+    if (result) renderPin(result.pinned);
+  }).catch(() => {});
+});
 
 settingsButton.addEventListener('click', () => {
   const rect = settingsButton.getBoundingClientRect();
@@ -861,6 +922,7 @@ updateAction.addEventListener('click', () => {
 api.onUpdateNotice(showUpdateNotice);
 api.onUpdateStatus(applyCheckStatus);
 api.onWeatherUpdate(renderWeather);
+api.onPinState((payload) => renderPin(payload && payload.pinned));
 
 clockEdit.addEventListener('click', () => {
   openClockEditor();
@@ -911,7 +973,9 @@ api.onOpenPanel((panel) => {
 });
 
 document.addEventListener('pointerdown', clearSettingsHighlight, true);
+document.addEventListener('pointerdown', hidePinTooltip, true);
 window.addEventListener('blur', clearSettingsHighlight);
+window.addEventListener('blur', hidePinTooltip);
 
 document.documentElement.addEventListener('mouseenter', () => {
   clearSettingsHighlight();

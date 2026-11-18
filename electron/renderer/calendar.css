@@ -211,7 +211,6 @@ select {
 
 .settings-button {
   margin-left: 2px;
-  font-weight: 500;
 }
 
 .settings-button.is-open {
@@ -220,8 +219,49 @@ select {
 }
 
 .settings-gear {
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1;
+}
+
+.pin-button {
+  position: relative;
+}
+
+.pin-icon {
+  display: block;
+  width: 13px;
+  height: 13px;
+  fill: currentColor;
+}
+
+.pin-icon-close {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+}
+
+.pin-icon[hidden] {
+  display: none;
+}
+
+.pin-tooltip {
+  position: fixed;
+  z-index: 30;
+  padding: 5px 8px;
+  border: 1px solid var(--sheet-border);
+  border-radius: 8px;
+  background: var(--sheet-bg);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.16);
+  color: var(--muted-strong);
+  font-size: 11px;
+  line-height: 1.25;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.pin-tooltip[hidden] {
+  display: none;
 }
 
 .weekdays {
@@ -449,20 +489,6 @@ select {
 .almanac-head-swap {
   flex: 0 0 57px;
   justify-items: end;
-}
-
-.term-countdown {
-  color: var(--muted);
-  font-size: 10px;
-  line-height: 1;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  opacity: 1;
-}
-
-.almanac-card:hover .term-countdown,
-.almanac-card:focus-within .term-countdown {
-  opacity: 0;
 }
 
 /* 卡片入口默认隐藏，悬停/聚焦所在卡片时再显示；保留占位以免卡片高度变化 */
@@ -730,6 +756,19 @@ select {
   color: var(--faint);
   font-size: 10px;
   line-height: 1;
+}
+
+/* Version-adjacent secondary action: same size as the version, one step
+   darker than --faint so it still reads as clickable. */
+.pane-check-update {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1;
+}
+
+.pane-check-update:hover {
+  color: var(--link);
+  opacity: 1;
 }
 
 /* Panels */

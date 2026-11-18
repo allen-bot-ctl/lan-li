@@ -179,29 +179,7 @@ function focusEntry(term, list, style) {
   };
 }
 
-// 下一个节气倒计时：24 节气全算，日期以库给出的节气公历日为准（不按本机
-// 时区换算），今天就是节气时显示「今日X」，明天交节时显示「X 明天」。
-// 只由本地日历日决定，跨午夜随每秒 tick 自动换日。
-function buildTermCountdown(solar, lunar) {
-  const today = lunar.getJieQi();
-  if (today) {
-    return { name: today, days: 0, text: `今日${today}` };
-  }
-
-  const next = lunar.getNextJieQi(true);
-  if (!next) {
-    return { name: '', days: null, text: '' };
-  }
-
-  const name = next.getName();
-  const days = next.getSolar().subtract(solar);
-  return {
-    name,
-    days,
-    text: days === 1 ? `${name} 明天` : `${name} ${days}天后`
-  };
-}
-
+// 下一个节气倒计时已按 0.1.24 契约移除；月历格子仍标出节气。
 function buildAlmanac(date, styleId = 'lunar') {
   const solar = Solar.fromYmd(date.getFullYear(), date.getMonth() + 1, date.getDate());
   const lunar = solar.getLunar();
@@ -244,7 +222,6 @@ function buildAlmanac(date, styleId = 'lunar') {
     focusJi: focusEntry(focusJiTerm, 'ji', style),
     quote: data.quote(style.definition.id, zhiXing),
     metaText,
-    termCountdown: buildTermCountdown(solar, lunar),
     detail: {
       yiItems: isLunar ? rawYi.slice() : mappedYi.labels.slice(),
       jiItems: isLunar ? rawJi.slice() : mappedJi.labels.slice(),

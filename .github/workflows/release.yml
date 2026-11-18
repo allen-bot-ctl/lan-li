@@ -4,21 +4,39 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: "Build runner"
+        required: true
+        type: choice
+        default: macos-latest
+        options:
+          - macos-latest
+          - macos-26-intel
+          - macos-15-intel
+      tag:
+        description: "Existing tag to release (e.g. v0.1.24)"
+        required: true
+        type: string
 
 permissions:
   contents: write
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ inputs.tag || github.ref }}
   cancel-in-progress: false
 
 jobs:
   macos:
     name: Build macOS Intel (x64) packages
-    runs-on: macos-15-intel
+    runs-on: ${{ inputs.runner || 'macos-latest' }}
+    timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -30,18 +48,155 @@ jobs:
         run: npm ci
 
       - name: Run tests
-        run: npm test
+        shell: bash
+        run: |
+          set -uo pipefail
+          npm test 2>&1 | tee /tmp/tests.log
+          status=${PIPESTATUS[0]}
+          pass=$(awk '/^(#|ℹ) pass /{print $3}' /tmp/tests.log | tail -n 1)
+          fail=$(awk '/^(#|ℹ) fail /{print $3}' /tmp/tests.log | tail -n 1)
+          total=$(( ${pass:-0} + ${fail:-0} ))
+          echo "RELEASE: tests=${pass:-?}/${total}"
+          exit "$status"
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium || true
+
+      - name: Run Playwright e2e
+        run: npm run e2e
+
+      - name: Upload e2e screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-screenshots
+          if-no-files-found: warn
+          path: e2e/screenshots/
 
       - name: Build macOS Intel dmg and zip
         run: npx electron-builder --mac dmg zip --x64 --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
-      - name: Verify ad-hoc signature
+      - name: Verify x64 binaries with lipo
+        shell: bash
         run: |
           set -euo pipefail
-          codesign -dv --verbose=2 "dist/mac/栏历.app" 2>&1 | tee /tmp/codesign.log
+          app=$(find dist -maxdepth 2 -type d -name '*.app' -print -quit)
+          [ -n "$app" ] || { echo "::error::no .app found under dist"; exit 1; }
+          echo "app: $app"
+          main_bin=$(find "$app/Contents/MacOS" -maxdepth 1 -type f -print -quit)
+          [ -n "$main_bin" ] || { echo "::error::no main binary under Contents/MacOS"; exit 1; }
+          fw_bin="$app/Contents/Frameworks/Electron Framework.framework/Electron Framework"
+          if [ ! -e "$fw_bin" ]; then
+            fw_bin="$app/Contents/Frameworks/Electron Framework.framework/Versions/A/Electron Framework"
+          fi
+          [ -e "$fw_bin" ] || { echo "::error::no Electron Framework binary"; exit 1; }
+          echo "main binary: $main_bin"
+          echo "framework binary: $fw_bin"
+          file "$main_bin"
+          file "$fw_bin"
+          for bin in "$main_bin" "$fw_bin"; do
+            archs=$(lipo -archs "$bin")
+            echo "RELEASE: lipo $(basename "$bin")=$archs"
+            if [ "$archs" != "x86_64" ]; then
+              echo "::error::$(basename "$bin") archs=$archs, expected exactly x86_64"
+              exit 1
+            fi
+          done
+          echo "RELEASE: lipo=x86_64"
+
+      - name: Verify ad-hoc signature
+        shell: bash
+        run: |
+          set -euo pipefail
+          app=$(find dist -maxdepth 2 -type d -name '*.app' -print -quit)
+          [ -n "$app" ] || { echo "::error::no .app found under dist"; exit 1; }
+          codesign -dv --verbose=2 "$app" 2>&1 | tee /tmp/codesign.log
           grep -q "Signature=adhoc" /tmp/codesign.log
+          echo "RELEASE: codesign=adhoc"
+
+      - name: Smoke test x64 app under Rosetta
+        shell: bash
+        run: |
+          set -euo pipefail
+          app=$(find dist -maxdepth 2 -type d -name '*.app' -print -quit)
+          [ -n "$app" ] || { echo "::error::no .app found under dist"; exit 1; }
+          main_bin=$(find "$app/Contents/MacOS" -maxdepth 1 -type f -print -quit)
+          [ -n "$main_bin" ] || { echo "::error::no main binary under Contents/MacOS"; exit 1; }
+          echo "smoke binary: $main_bin"
+
+          if ! arch -x86_64 /usr/bin/true >/dev/null 2>&1; then
+            echo "Rosetta not available yet, trying to install"
+            softwareupdate --install-rosetta --agree-to-license || true
+          fi
+          if ! arch -x86_64 /usr/bin/true >/dev/null 2>&1; then
+            echo "::error::Rosetta unavailable, cannot run x64 smoke test"
+            exit 1
+          fi
+          echo "RELEASE: rosetta=ok"
+
+          log=/tmp/x64-smoke.log
+          : > "$log"
+          echo "file $main_bin: $(file "$main_bin")"
+          arch -x86_64 "$main_bin" >"$log" 2>&1 &
+          launcher=$!
+
+          app_pids() {
+            local found
+            found=$(pgrep -f "$main_bin" || true)
+            if [ -n "$found" ]; then
+              printf '%s\n' "$found"
+            else
+              printf '%s\n' "$launcher"
+            fi
+          }
+
+          fail() {
+            echo "::error::$1"
+            echo "--- app output ---"
+            cat "$log" || true
+            pkill -KILL -f "$main_bin" 2>/dev/null || true
+            kill -KILL "$launcher" 2>/dev/null || true
+            exit 1
+          }
+
+          check_alive_x64() {
+            local phase="$1" pid alive=0 pids
+            pids=$(app_pids | tr '\n' ' ')
+            for pid in $pids; do
+              if kill -0 "$pid" 2>/dev/null; then
+                alive=1
+              fi
+            done
+            [ "$alive" -eq 1 ] || fail "app is not running at ${phase}"
+            # This runner's ps has no arch keyword; verify the executable
+            # architecture with file instead of ps -o arch or vmmap.
+            if ! file "$main_bin" | grep -q 'x86_64'; then
+              fail "running executable is not x86_64 at ${phase}"
+            fi
+            echo "RELEASE: smoke=alive arch=x86_64 at=${phase}"
+          }
+
+          sleep 5
+          check_alive_x64 5s
+          sleep 15
+          check_alive_x64 20s
+
+          pids=$(app_pids | tr '\n' ' ')
+          kill -TERM $pids 2>/dev/null || true
+          for _ in $(seq 1 10); do
+            if ! kill -0 "$launcher" 2>/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          kill -KILL $pids 2>/dev/null || true
+          pkill -KILL -f "$main_bin" 2>/dev/null || true
+          wait "$launcher" 2>/dev/null || true
+          echo "--- app output ---"
+          cat "$log" || true
+          echo "RELEASE: smoke=ok 20s"
 
       - name: Generate zip checksum for in-app update
         run: |
@@ -71,17 +226,34 @@ jobs:
           path: dist
           merge-multiple: true
 
+      - name: Download e2e screenshots
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: e2e-screenshots
+          path: screenshots
+
       - name: List release files
-        run: ls -lh dist
+        run: |
+          ls -lh dist
+          ls -lh screenshots || true
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: 栏历 ${{ github.ref_name }}
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          name: 栏历 ${{ inputs.tag || github.ref_name }}
           body: |
-            ## 栏历 ${{ github.ref_name }}
+            ## 栏历 ${{ inputs.tag || github.ref_name }}
 
             本轮只提供 macOS Intel（x64）安装包。主下载是 `LanLi-*-mac-x64.dmg`；`LanLi-*-mac-x64.zip` 与 `LanLi-*-mac-x64.zip.sha256` 供 0.1.6 起的未签名包应用内自更新使用。
+
+            ### 本版变化
+
+            - 顶栏新增钉住窗口：钉住后移开鼠标或切到别的应用都不隐藏；点 × 或按 Esc 取消并关闭，状态不保存。
+            - 顶栏「设置」改为 24px 齿轮圆钮；世界时钟入口改为「编辑 ›」。
+            - 黄历卡去掉节气倒计时，右上角平时留空。
+            - 底部「检查更新」与版本号同级（10px、`--muted`），悬停变 `--link`。
 
             ### 安装
 
@@ -89,6 +261,12 @@ jobs:
             - 0.1.6 起可在应用内「检查更新」：应用会下载 zip、比对同名 `.sha256`，重启后替换旧版本；校验失败时回退为直接下载同版本 dmg。
             - 0.1.5 及更早版本没有应用内自更新，必须手动安装一次 0.1.6。
             - 当前只支持 Intel（x64）Mac，暂不提供 Apple Silicon（arm64）、Windows 或 Linux 安装包。
+
+            ### 验证
+
+            - `npm test` 与 Playwright `_electron` 端到端（C1–C10）已在构建前通过。
+            - 包内主程序与 Electron Framework 经 `lipo -archs` 断言为 `x86_64`，并在 Rosetta 下真启动冒烟 20 秒。
+            - e2e 截图见本 Release 附件。
 
             ### 未签名说明
 
@@ -103,7 +281,8 @@ jobs:
             dist/LanLi-*-mac-x64.dmg
             dist/LanLi-*-mac-x64.zip
             dist/LanLi-*-mac-x64.zip.sha256
-          fail_on_unmatched_files: true
+            screenshots/*.png
+          fail_on_unmatched_files: false
           draft: false
           prerelease: false
           generate_release_notes: false

@@ -4,7 +4,7 @@
 
 ## 建议阅读顺序
 
-1. 初次接触项目：[../AGENT.md](../AGENT.md) → [product.md](product.md) → [architecture.md](architecture.md)
+1. 初次接触项目：[../AGENTS.md](../AGENTS.md) → [product.md](product.md) → [architecture.md](architecture.md)
 2. 要改代码：[coding-discipline.md](coding-discipline.md) → [implementation.md](implementation.md) → [testing.md](testing.md)
 3. 要改更新逻辑：[updater.md](updater.md) → [lessons-learned.md](lessons-learned.md) 中更新相关条目 → [decisions/0003](decisions/0003-unsigned-probe-and-self-update.md)
 4. 要发版：[release.md](release.md)

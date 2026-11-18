@@ -76,11 +76,17 @@ const { createLoginItem } = require('./login-item');
 const WINDOW_WIDTH = 580;
 const WINDOW_HEIGHT = 400;
 
+// Playwright drives a real Electron process on Linux and macOS CI. Only this
+// explicit opt-in exposes the tray/window test hooks; packaged runs never do.
+const E2E = process.env.LANLI_E2E === '1';
+
 let tray = null;
 let calendarWindow = null;
 let clockTimer = null;
 let closeTimer = null;
 let settingsMenuOpen = false;
+// Pinned is deliberately in-memory only: hiding or restarting clears it.
+let pinned = false;
 let updater = null;
 let selfUpdater = null;
 let updateSetupError = null;
@@ -196,7 +202,8 @@ function buildState() {
     focus: { year: focus.year, month: focus.month, day: focus.day },
     cells: buildCells(view.year, view.month, now),
     almanac: buildAlmanac(now, almanacStyle),
-    clocks: currentClockSnapshot(now)
+    clocks: currentClockSnapshot(now),
+    pinned
   };
 }
 
@@ -390,7 +397,17 @@ function createTray() {
   // their own small NSStatusItem padding around the title, and there is no
   // public API to remove that, so no private API or zero-width characters are
   // used here.
-  tray = new Tray(nativeImage.createEmpty());
+  try {
+    tray = new Tray(nativeImage.createEmpty());
+  } catch (error) {
+    // A headless Linux CI box may have no status-item implementation. The
+    // calendar window itself still works, and tray events are simulated
+    // through the E2E hooks, so only fail loudly outside E2E.
+    if (!E2E) throw error;
+    tray = null;
+    logger.warn('[栏历] 测试环境无法创建托盘：' + reasonOf(error));
+    return;
+  }
 
   tray.on('mouse-enter', openCalendar);
   tray.on('mouse-leave', scheduleClose);
@@ -640,6 +657,9 @@ function cancelClose() {
 
 function scheduleClose() {
   cancelClose();
+  // Pinned windows ignore tray mouse-leave and window pointer-leave until the
+  // user unpins (× or Esc) or the window is hidden by another path.
+  if (pinned) return;
   // A native settings menu floats above the window; pointer-leave would
   // otherwise hide the calendar while the user is still choosing an item.
   if (settingsMenuOpen) return;
@@ -693,9 +713,19 @@ function openCalendar() {
 
 function hideCalendar() {
   cancelClose();
+  // Hiding always ends the pinned session; the next tray hover reopens in the
+  // default unpinned state, as required (nothing is persisted).
+  const wasPinned = pinned;
+  pinned = false;
+  if (wasPinned) sendPinState();
   if (calendarWindow && !calendarWindow.isDestroyed() && calendarWindow.isVisible()) {
     calendarWindow.hide();
   }
+}
+
+function sendPinState() {
+  if (!calendarWindow || calendarWindow.isDestroyed()) return;
+  calendarWindow.webContents.send('pin:state', { pinned });
 }
 
 function updateClock() {
@@ -915,6 +945,19 @@ function registerIpc() {
     scheduleClose();
   });
 
+  // The renderer toggles one in-memory flag. Unpinning hides immediately so
+  // ×, Esc and a real hide all leave the same unpinned state behind.
+  ipcMain.handle('pin:toggle', () => {
+    if (pinned) {
+      hideCalendar();
+    } else {
+      pinned = true;
+      cancelClose();
+      sendPinState();
+    }
+    return { pinned };
+  });
+
   ipcMain.on('menu:openSettings', (event, position) => {
     openSettingsMenu(event, position);
   });
@@ -963,8 +1006,37 @@ function registerIpc() {
   });
 }
 
+// Playwright cannot drive native tray geometry on a headless CI box, so the
+// real tray handlers are called through these hooks instead. Registered only
+// when LANLI_E2E=1; production processes expose nothing.
+function registerE2eHooks() {
+  if (!E2E) return;
+  globalThis.__lanliTest = {
+    trayEnter() {
+      openCalendar();
+      return Boolean(calendarWindow && !calendarWindow.isDestroyed() &&
+        calendarWindow.isVisible());
+    },
+    trayLeave() {
+      scheduleClose();
+      return true;
+    },
+    isVisible() {
+      return Boolean(calendarWindow && !calendarWindow.isDestroyed() &&
+        calendarWindow.isVisible());
+    },
+    blur() {
+      if (calendarWindow && !calendarWindow.isDestroyed()) calendarWindow.blur();
+      return true;
+    },
+    isPinned() {
+      return pinned;
+    }
+  };
+}
+
 async function bootstrap() {
-  if (process.platform !== 'darwin') {
+  if (process.platform !== 'darwin' && !E2E) {
     dialog.showErrorBox('栏历', '栏历首发只支持 macOS。');
     app.quit();
     return;
@@ -987,6 +1059,7 @@ async function bootstrap() {
   createTray();
   registerDisplayListeners();
   setupUpdates();
+  registerE2eHooks();
 
   // Write the menu bar title immediately instead of waiting for the first
   // one-second interval.
