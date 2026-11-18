@@ -232,7 +232,7 @@ main.setupUpdates()
 
 | 频道 | preload API | 作用 |
 | --- | --- | --- |
-| `app:version` | `getVersion` | 返回 `formatVersionLabel(app.getVersion())`，如 `v0.1.30` |
+| `app:version` | `getVersion` | 返回 `formatVersionLabel(app.getVersion())`，如 `v0.1.31` |
 | `weather:get` | `getWeather` | 返回当前天气结果；有 `preferences.weatherCity` 时直接用其城市名与坐标，否则按 IP 定位；30 分钟缓存 |
 | `weather:searchCity` | `searchCity` | `query`；主进程请求 Open-Meteo 地理编码，返回最多 8 条 `{ name, admin1, country, latitude, longitude, label }`，`label` 为「城市名 · 省/州 · 国家」；空查询返回空数组 |
 | `weather:quickCities` | `getQuickCities` | 无参数；按手动城市 `weatherCity.country` 或自动模式的 IP 国家，从内置 `electron/data/quick-cities.json` 返回 `{ country, countryCode, cities: [{ name, latitude, longitude, country?, admin1?, label, selected }] }`；无法确定国家或该国不在清单时 `cities` 为空 |
