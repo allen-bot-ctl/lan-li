@@ -46,12 +46,12 @@ ${M}月${D}日 ${HH}:${mm}:${ss}
 - **月历顶栏副标题（`buildViewSubtitle(viewYear, viewMonth, today)`，0.1.26）**：按**所显示的月份**计算——显示月是本月时取今天（跨午夜随 tick 更新），其他月取该月 1 号，文案为「干支生肖年 · 农历月」，闰月照旧「闰六月」。主进程在 `buildState` 与每秒 `calendar:onTick` 里都以 `viewSubtitle` 字段下发；渲染层 `renderViewSubtitle` 只把它写入 `#lunar-subtitle`，`renderAlmanac` 不再写副标题。右侧黄历卡不变，仍只按今天计算，不随翻月变化。
 - `lunarDayText`：`` `${lunar.getMonthInChinese()}月${lunar.getDayInChinese()}` ``，如 `十月初九`，作为卡片标题行风格名的悬停 title（前缀「农历」）与「今日黄历」面板标题。
 - `rawYi` / `rawJi` 保存 `lunar.getDayYi()` / `getDayJi()` 的完整原词数组（`.map(String)`，不传 `sect`）。`yi` / `ji` 是逐词映射并按映射后文案去重后的完整列表，规则与 0.1.20 相同。
-- 焦点词 `focusYi` / `focusJi`：各为 `{ term, text, title, hint }`。`term` 是按百年稀有度选出的原词（只对原词计算，与风格无关，算法见下文「焦点数据」）；`text` 为风格文案（`lunar` 即原词）；`title` 为 `lunar` 的原词，其它风格为「文案（原词）」；`hint` 为面板用稀有度提示（特殊词或数据不可用时为空串）。
+- 焦点词 `focusYi` / `focusJi`：各为 `{ term, text, title, hint }`。`term` 是按百年稀有度选出的原词（只对原词计算，与风格无关，算法见下文「焦点数据」）；`text` 为风格文案（`lunar` 即原词）；`title` 为 `lunar` 的原词，其它风格 0.1.30 起为稀有度提示（同 `hint`，可为空串，不再拼「（原词）」）；`hint` 为面板用稀有度提示（特殊词或数据不可用时为空串）。
 - `quote`：按 `getZhiXing()` 从随包签语表取当前风格的一句；`metaText`：`` `${getDayInGanZhi()}日 ${节气或值星} 冲${getDayChongShengXiao()}煞${getDaySha()}` ``，所有风格相同。
 - 卡片只返回风格、干支/农历月、宜忌焦点、签语、底注与「今日黄历」明细；不再返回下一个节气倒计时。
-- `detail`：`{ yiItems, jiItems, zhiXing, tianShen, tianShenLuck, chongText, pengZu }`。「今日黄历」面板用：`yiItems` / `jiItems` 在 `lunar` 下为原词列表，其它风格为映射去重后的「文案（原词）」数组；`chongText` 为 `` `冲${生肖}（${干支}）煞${sha}` ``；`pengZu` 为 `[getPengZuGan(), getPengZuZhi()]`。
+- `detail`：`{ yiItems, jiItems, zhiXing, tianShen, tianShenLuck, chongText, pengZu }`。「今日黄历」面板用：`yiItems` / `jiItems` 在 `lunar` 下为原词列表，其它风格为映射去重后的风格文案数组（0.1.30 起不附原词）；`chongText` 为 `` `冲${生肖}（${干支}）煞${sha}` ``；`pengZu` 为 `[getPengZuGan(), getPengZuZhi()]`。
 - 已删除：`yiText`、`jiText`、`yiTitle`、`jiTitle` 与常量 `ALMANAC_MAX_ITEMS`（0.1.20 的「前 6 项 + 悬停全文」规则撤除）。
-- `styleId` / `styleName` / `accentLight` / `accentDark` 随结果下发，供卡片标题、主题色与风格面板使用。只由「现在」与 `styleId` 决定，不随翻月或焦点日变化；`calendar:onTick` 每秒重算，跨天（午夜）自动刷新。数据全部来自 lunar-javascript 离线计算，不接网络。
+- `styleId` / `styleName` / `accentLight` / `accentDark` 随结果下发，供卡片标题、主题色与风格面板使用。`dateKey`（`YYYY-MM-DD`）/ `solarText`（如「12月2日」）0.1.30 起随结果下发。今天的黄历只由「现在」与 `styleId` 决定，`calendar:onTick` 每秒重算，跨天（午夜）自动刷新；选中其他日期时渲染层经 `almanac:getForDate` 取那天的结果，不随翻月变化。数据全部来自 lunar-javascript 离线计算，不接网络。
 - 风格表由 `electron/almanac-styles.js` 在主进程启动时同步读取 `electron/data/almanac-styles/{coder,worker,student,fitness}.json` 并缓存；`lunar` 是主进程常量与恒等映射。文件读取失败、`schemaVersion !== 1` 或 `id` 与文件名不符时，该风格仍使用常量表中的名称、徽标与颜色，但映射退化为原词，并写一条 logger 警告。
 - 焦点数据 `electron/data/almanac-focus.json` 由 `electron/almanac-focus.js` 在同一处启动流程同步读取一次并缓存，结构见第 5 节。任何读取/结构问题都只写一条 logger 警告，全部词按 `36525` 计分、签语与提示为空，不影响卡片其它内容。
 - 偏好键 `preferences.json` 顶层 `almanacStyle`：只接受 5 个风格 id；缺失、类型不对或未知值一律按 `lunar` 处理，且不回写。仅在用户选中非当前风格时写入，保留其它键。
@@ -232,13 +232,14 @@ main.setupUpdates()
 
 | 频道 | preload API | 作用 |
 | --- | --- | --- |
-| `app:version` | `getVersion` | 返回 `formatVersionLabel(app.getVersion())`，如 `v0.1.29` |
+| `app:version` | `getVersion` | 返回 `formatVersionLabel(app.getVersion())`，如 `v0.1.30` |
 | `weather:get` | `getWeather` | 返回当前天气结果；有 `preferences.weatherCity` 时直接用其城市名与坐标，否则按 IP 定位；30 分钟缓存 |
 | `weather:searchCity` | `searchCity` | `query`；主进程请求 Open-Meteo 地理编码，返回最多 8 条 `{ name, admin1, country, latitude, longitude, label }`，`label` 为「城市名 · 省/州 · 国家」；空查询返回空数组 |
 | `weather:quickCities` | `getQuickCities` | 无参数；按手动城市 `weatherCity.country` 或自动模式的 IP 国家，从内置 `electron/data/quick-cities.json` 返回 `{ country, countryCode, cities: [{ name, latitude, longitude, country?, admin1?, label, selected }] }`；无法确定国家或该国不在清单时 `cities` 为空 |
 | `weather:setCity` | `setCity` | `{ name, latitude, longitude, country?, admin1? }` 或 `null`；校验后写入/删除 `preferences.weatherCity` 并立即返回（不等待网络），后台强制刷新，结果经 `weather:update` 异步推送 |
 | `almanac:getStyles` | `getAlmanacStyles` | 无参数；返回固定顺序的 5 项 `{ id, name, tagline, badge, accentLight, accentDark, selected }` |
 | `almanac:setStyle` | `setAlmanacStyle` | `id` 字符串；5 个合法 id 之一时，若与当前不同则写入 `preferences.almanacStyle`，返回 `{ ok: true, almanac }`；非法 id 不写盘，返回 `{ ok: false }` |
+| `almanac:getForDate` | `getAlmanacForDate` | 0.1.30：`key` 为 `YYYY-MM-DD` 字符串（1900–2100 的合法日期）；返回该日按当前风格的 `buildAlmanac` 结果（带 `dateKey`、`solarText`），非法返回 `null`。选中日期只在渲染层内存里，`calendar:getState` 与每秒 tick 带 `openSeq`（窗口每次从隐藏到显示 +1），渲染层据此回到今天 |
 | `calendar:getState` | `getState` | 当前 `view`、`focus`、42 格、`almanac`、按显示月份算好的 `viewSubtitle`（本月取今天、其他月取该月 1 号）、`clocks: { items }`（每项含 `time`、`relativeText`、`isMenuBar`）与内存里的 `pinned` |
 | `calendar:setView` | `setView` | 校验并切换浏览年月/焦点日，返回新状态 |
 | `calendar:goToday` | `goToday` | 浏览年月与焦点日回到今天，返回新状态 |
