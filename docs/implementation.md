@@ -55,7 +55,7 @@ ${M}月${D}日 ${HH}:${mm}:${ss}
 - 风格表由 `electron/almanac-styles.js` 在主进程启动时同步读取 `electron/data/almanac-styles/{coder,worker,student,fitness}.json` 并缓存；`lunar` 是主进程常量与恒等映射。文件读取失败、`schemaVersion !== 1` 或 `id` 与文件名不符时，该风格仍使用常量表中的名称、徽标与颜色，但映射退化为原词，并写一条 logger 警告。
 - 焦点数据 `electron/data/almanac-focus.json` 由 `electron/almanac-focus.js` 在同一处启动流程同步读取一次并缓存，结构见第 5 节。任何读取/结构问题都只写一条 logger 警告，全部词按 `36525` 计分、签语与提示为空，不影响卡片其它内容。
 - 偏好键 `preferences.json` 顶层 `almanacStyle`：只接受 5 个风格 id；缺失、类型不对或未知值一律按 `lunar` 处理，且不回写。仅在用户选中非当前风格时写入，保留其它键。
-- 渲染层「黄历」卡片显示四行：宜行 / 忌行（`#almanac-focus-yi`、`#almanac-focus-ji`，14px 加粗、单行、不设 `text-overflow`）、签语行 `#almanac-quote`、底注行 `#almanac-meta`。标题行只保留 `#almanac-customize`（去定制 ›），沿用 0.1.22 的默认 `opacity: 0` + `pointer-events: none` 与悬停/聚焦显示规则、120ms opacity 过渡，槽宽 `flex: 0 0 57px`、`justify-items: end`，平时留空。点击整张卡片（`#almanac-customize` 除外）打开「今日黄历」面板；「去定制 ›」仍打开黄历风格面板。
+- 渲染层「黄历」卡片显示三行：宜行 / 忌行（`#almanac-focus-yi`、`#almanac-focus-ji`，14px 加粗、单行、不设 `text-overflow`）、签语行 `.almanac-quote-row`（灰色「签」标签 `.almanac-tag-qian` + `#almanac-quote`，单行省略号）。0.1.29 起主进程仍返回 `metaText`，但卡片不再显示，干支冲煞只在「今日黄历」面板。标题行只保留 `#almanac-customize`（去定制 ›），沿用 0.1.22 的默认 `opacity: 0` + `pointer-events: none` 与悬停/聚焦显示规则、120ms opacity 过渡，槽宽 `flex: 0 0 57px`、`justify-items: end`，平时留空。点击整张卡片（`#almanac-customize` 除外）打开「今日黄历」面板；「去定制 ›」仍打开黄历风格面板。
 
 **测试**：`tests/calendar.test.js`（节气、初七、2026-11-16 黄历「丙午马年 / 十月 / 十月初八 / 纳采 / 上梁」、42 格与 lead、今日/周末/节日标记、副标题「本月取今天、其他月取 1 号」与闰月前缀、菜单栏标题、禁用 `getOtherFestivals`）；`tests/almanac-styles.test.js`（114 词表与四份映射完全相等、文件 schema、兜底、去重、确定性、默认兼容、偏好清洗、4 个日期 × 5 种风格选词一致）；`tests/almanac-focus.test.js`（数据 sha256/结构、36525 天稀有度复算、60 条签语、7 个固定日期、确定性、2026 相邻不重复、特殊词与平局、降级、不联网、不截断）；`tests/pin-and-polish.test.js`（钉住守卫与不持久化、×/Esc 复位、500ms 气泡、1900–2100 每一天副标题宽度扫描与 viewSubtitle 走读、三条入口文案、检查更新字号/颜色、文档同步、已删倒计时）。
 
@@ -93,7 +93,7 @@ ${M}月${D}日 ${HH}:${mm}:${ss}
 
 - 用 `Intl.DateTimeFormat(..., { timeZone, hourCycle: 'h23' })` 取该时区的年月日时分秒与星期，不依赖运行进程的本地时区。
 - `time`：`HH:mm:ss`，全部补零；`date`：`M月D日`，月日不补零；`weekday`：`星期一`…`星期日`。`formatClock` 仍用于菜单栏标题等需要秒的场景；右栏列表用 `formatClockTime(now, timeZone)` 输出 `HH:mm`。
-- `describeClockRelative(now, timeZone, localTimeZone)` 返回 `{ dayText, dayDelta, offsetMinutes, offsetText, text }`：按两个时区的日历年月日判断「今天/昨天/明天」，按同一时刻的 UTC 偏移差计算 `±N 小时`（整小时不带小数；`+5.5` 这类半小时时区保留一位小数；负号用 `−`）。同本地时区只显示「今天」，否则如「今天 · −13 小时」「昨天 · +9 小时」。`formatClockOffset` 单独可测。
+- `describeClockRelative(now, timeZone, localTimeZone)` 返回 `{ dayText, dayDelta, offsetMinutes, offsetText, isLocal, text }`（0.1.29）：按两个时区的日历年月日判断「明天/昨天」（同一天为空串，不写「今天」），按同一时刻的 UTC 偏移差写「快 N 小时」「慢 N 小时」（半小时时区如「快 10 小时 30 分」）。与本地同一 IANA 时区显示「本地」；同偏移的其他时区显示「时间相同」；跨天如「明天 · 快 13 小时」「昨天 · 慢 13 小时」。`formatClockOffset` 单独可测。
 
 **列表操作**
 

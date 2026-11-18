@@ -54,7 +54,7 @@ xvfb-run -a npm run e2e   # Linux；macOS 直接 npm run e2e
 日志轮转测试在 `tests/updater.test.js` 中，不单独建 `logger.test.js`。
 
 
-`e2e/brand-toolbar-toast.spec.js`（C6–C9，通过 `__lanliTest.emitUpdateStatus` / `emitUpdateNotice` 注入）：浮层出现时 `#grid` 与右栏三卡 rect 逐项 0px 不变；浮层水平居中且 top − 顶栏 bottom = 8px、「已是最新」2.3–2.9 秒消失、ready 10 秒后仍在且真实点 × 后 `#check-update` 保留 `has-update`；manual 提示宽 ≤ 360px、消息/按钮/× 同一行且消息不溢出；页面无 `#update-banner`、`#app-version` 为 `v` + package.json 版本。
+`e2e/brand-toolbar-toast.spec.js` 只保留 C9（无更新横幅、页脚版本与 package.json 一致）。0.1.29 起：`e2e/toast-0129.spec.js` 覆盖通用提示组件——五种类型都能触发、居中且距顶栏 8px、宽 320px、左侧 3px 色条、月历与右栏位移 0；success 2.8–3.4 秒消失、悬停不消失；progress 持续到下一状态、30 秒无结果转「检查失败」；sticky（新版本已就绪）10 秒仍在、× 关闭后橙点保留；页面只有一个 `#toast`，连续两次只剩最新一条。`e2e/cards-0129.spec.js` 覆盖检查中外圈弧旋转而箭头不动、黄历「签」标签与卡上无冲煞且详情仍有「建除 · 值神 · 冲煞」、天气当前气温+区间与「-12°~-3°」配最长城市不换行。所有几何断言在入场动画结束（200ms + 150ms）后测量。
 
 ## 写测试的约束
 
@@ -104,7 +104,7 @@ xvfb-run -a npm run e2e   # Linux；macOS 直接 npm run e2e
 
 以下需在 0.1.21 安装包上逐项确认：
 
-1. 黄历卡显示 1 宜 1 忌、签语、底注四行，宜忌加粗且不截断；卡片高度明显变高（约 118px）。
+1. 黄历卡显示 1 宜 1 忌与带「签」标签的签语三行，宜忌加粗且不截断，卡上没有干支冲煞底注（0.1.29 起卡片高约 100px）。
 2. 天气卡为单行，行尾有「更换 ›」；点整行与点「更换 ›」都打开城市面板。
 3. 世界时钟可见城市数不少于 0.1.20。
 4. 点黄历卡打开「今日黄历」，六段内容齐全；只能用「完成」关闭；点「去定制 ›」仍是风格面板。
