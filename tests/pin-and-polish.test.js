@@ -235,21 +235,6 @@ test('C9 右栏底部只剩 10px 版本号，更新提示改成不占布局的�
   assert.equal(/check-update|pane-footer-sep/.test(footer[0]), false);
 
   assert.equal(/id="update-banner"/.test(HTML), false, 'the banner row is gone');
-  assert.match(HTML, /<div class="toast" id="update-toast" role="status" hidden>/);
-  assert.match(HTML, /id="update-toast-action"/);
-  assert.match(HTML, /id="update-toast-close"/);
-
-  const toast = ruleFor('.toast');
-  assert.match(toast.body, /position:\s*absolute/);
-  assert.match(toast.body, /top:\s*40px/);
-  assert.match(toast.body, /left:\s*50%/);
-  assert.match(toast.body, /max-width:\s*360px/);
-  assert.match(toast.body, /height:\s*32px/);
-  assert.match(toast.body, /backdrop-filter:\s*blur\(12px\)/);
-  assert.match(toast.body, /transition:\s*opacity 120ms ease-in, transform 120ms ease-in/);
-  assert.match(ruleFor('.toast.is-visible').body, /transition:\s*opacity 160ms ease-out, transform 160ms ease-out/);
-  assert.match(ruleFor('.toast[hidden]').body, /display:\s*none/);
-  assert.match(ruleFor('.toast-message').body, /white-space:\s*nowrap/);
 });
 
 test('C10 product.md 与 README 去掉节气倒计时并补上钉住说明', () => {

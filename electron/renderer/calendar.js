@@ -36,12 +36,6 @@ const weatherEmoji = document.getElementById('weather-emoji');
 const weatherTemp = document.getElementById('weather-temp');
 const weatherRange = document.getElementById('weather-range');
 const weatherCity = document.getElementById('weather-city');
-const updateToast = document.getElementById('update-toast');
-const updateToastMessage = document.getElementById('update-toast-message');
-const updateToastAction = document.getElementById('update-toast-action');
-const updateToastClose = document.getElementById('update-toast-close');
-const toastGlyphBusy = updateToast.querySelector('.toast-glyph-busy');
-const toastGlyphDone = updateToast.querySelector('.toast-glyph-done');
 const appVersion = document.getElementById('app-version');
 const checkUpdate = document.getElementById('check-update');
 const weatherPicker = document.getElementById('weather-picker');
@@ -69,10 +63,6 @@ let weatherSearchTimer = null;
 let weatherQuickCities = null;
 let weatherQuickToken = 0;
 let almanacStylesToken = 0;
-let updateMode = null;
-let toastMode = null;
-let checkStatusTimer = null;
-let toastExitTimer = null;
 let pendingNotice = null;
 let pinned = false;
 let iconTooltipTimer = null;
@@ -884,118 +874,76 @@ function closeAlmanacPicker() {
   almanacStyleList.replaceChildren();
 }
 
-function clearCheckStatusTimer() {
-  if (checkStatusTimer) {
-    clearTimeout(checkStatusTimer);
-    checkStatusTimer = null;
-  }
-}
-
-function setToastGlyph(kind) {
-  toastGlyphBusy.toggleAttribute('hidden', kind !== 'busy');
-  toastGlyphDone.toggleAttribute('hidden', kind === 'busy');
-  updateToast.classList.toggle('is-accent', kind === 'accent');
-}
-
-function showToast() {
-  if (toastExitTimer) {
-    clearTimeout(toastExitTimer);
-    toastExitTimer = null;
-  }
-  updateToast.hidden = false;
-  // The enter transition needs a frame with the element laid out first.
-  requestAnimationFrame(() => updateToast.classList.add('is-visible'));
-}
-
-// Exit runs the 120ms reverse transition before the element leaves the DOM.
-function hideToast() {
-  updateToast.classList.remove('is-visible');
-  if (toastExitTimer) clearTimeout(toastExitTimer);
-  toastExitTimer = setTimeout(() => {
-    toastExitTimer = null;
-    if (!updateToast.classList.contains('is-visible')) updateToast.hidden = true;
-  }, 120);
-}
-
-function hideStatusToast() {
-  if (toastMode !== 'status') return;
-  toastMode = null;
-  updateMode = null;
-  clearCheckStatusTimer();
-  checkUpdate.classList.remove('is-spinning');
-  setToastGlyph('done');
-  updateToastMessage.textContent = '';
-  hideToast();
+function checkFailedToast() {
+  return {
+    type: 'error',
+    title: '检查失败',
+    detail: '网络不通或更新源暂不可用',
+    action: { label: '重试', onClick: () => api.checkUpdate() }
+  };
 }
 
 function showUpdateNotice(notice) {
   if (!notice) return;
 
-  clearCheckStatusTimer();
   clearSettingsHighlight();
   pendingNotice = notice;
-  toastMode = 'notice';
-  updateMode = notice.mode === 'ready' ? 'ready' : 'manual';
-  checkUpdate.classList.remove('is-spinning');
+  const ready = notice.mode === 'ready';
   // An available update keeps its orange dot until it is installed.
-  checkUpdate.classList.toggle('has-update', updateMode === 'ready');
-  setToastGlyph(updateMode === 'ready' ? 'accent' : 'done');
-  updateToastMessage.textContent = updateMode === 'ready'
-    ? '新版本已就绪'
-    : '无法自动更新，请手动下载';
-  updateToastAction.textContent = updateMode === 'ready' ? '重启更新' : '下载新版';
-  updateToastAction.hidden = false;
-  updateToastClose.hidden = false;
-  showToast();
+  checkUpdate.classList.toggle('has-update', ready);
+  showToast(ready
+    ? {
+        type: 'warning',
+        title: '新版本已就绪',
+        detail: '重启后完成更新',
+        action: { label: '立即重启', onClick: () => api.restartToUpdate() },
+        sticky: true
+      }
+    : {
+        type: 'warning',
+        title: '发现新版本',
+        detail: '无法自动更新，请手动下载',
+        action: { label: '下载新版', onClick: () => api.openLatestRelease() },
+        sticky: true
+      });
 }
 
-// Manual check results share the toast with update notices. Notices win so a
-// pending download/restart prompt is never replaced by a status line.
+// Manual check statuses share the toast with update notices. Sticky notices win
+// so a pending download/restart prompt is never replaced by a status line.
 function applyCheckStatus(status) {
   if (!status) return;
-  clearCheckStatusTimer();
-
+  const state = typeof status.state === 'string' ? status.state : '';
   const label = typeof status.label === 'string' ? status.label : '';
-  if (!label) {
-    if (toastMode === 'status') hideStatusToast();
+  if (!state && !label) {
+    if (toastState && toastState.type === 'progress') hideToast();
     return;
   }
-  if (toastMode === 'notice') return;
+  if (toastState && toastState.sticky) return;
 
-  toastMode = 'status';
-  updateMode = null;
-  updateToastMessage.textContent = label;
-  updateToastAction.hidden = true;
-  updateToastClose.hidden = true;
-  const busy = status.busy === true;
-  checkUpdate.classList.toggle('is-spinning', busy);
-  setToastGlyph(busy ? 'busy' : 'done');
-  showToast();
-
-  if (status.timed) {
-    checkStatusTimer = setTimeout(() => {
-      checkStatusTimer = null;
-      hideStatusToast();
-    }, 2500);
+  const version = appVersion.textContent.trim();
+  if (state === 'checking') {
+    showToast({ type: 'progress', title: '正在检查更新…' });
+  } else if (state === 'downloading') {
+    showToast({
+      type: 'progress',
+      title: Number.isFinite(status.percent)
+        ? `正在下载新版本 ${Math.round(status.percent)}%`
+        : '正在下载新版本'
+    });
+  } else if (state === 'up-to-date') {
+    showToast({ type: 'success', title: version ? `已是最新版本 ${version}` : '已是最新版本' });
+  } else if (state === 'error') {
+    showToast(checkFailedToast());
+  } else if (state === 'manual') {
+    showToast({ type: 'warning', title: '需手动下载' });
+  } else {
+    showToast({ type: 'info', title: label || '开发态不检查更新' });
   }
 }
 
-updateToastAction.addEventListener('click', () => {
-  if (updateMode === 'ready') {
-    api.restartToUpdate();
-  } else if (updateMode === 'manual') {
-    api.openLatestRelease();
-  }
-});
-
-// Dismissing the toast never clears the orange dot: the update is still there.
-updateToastClose.addEventListener('click', () => {
-  clearCheckStatusTimer();
-  toastMode = null;
-  updateMode = null;
-  checkUpdate.classList.remove('is-spinning');
-  hideToast();
-});
+// 进行中的提示目前只有更新检查/下载，顶栏图标的弧线随之旋转。
+onToastChange((kind) => checkUpdate.classList.toggle('is-spinning', kind === 'progress'));
+setToastProgressFallback(checkFailedToast);
 
 api.onUpdateNotice(showUpdateNotice);
 api.onUpdateStatus(applyCheckStatus);

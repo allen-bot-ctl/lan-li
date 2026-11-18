@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>栏历</title>
   <link rel="stylesheet" href="calendar.css">
+  <link rel="stylesheet" href="toast.css">
 </head>
 <body>
   <div class="app">
@@ -194,20 +195,18 @@
     </div>
   </div>
 
-  <div class="toast" id="update-toast" role="status" hidden>
-    <span class="toast-status" aria-hidden="true">
-      <svg class="toast-glyph toast-glyph-busy" viewBox="0 0 24 24" focusable="false" hidden>
-        <path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
-      </svg>
-      <svg class="toast-glyph toast-glyph-done" viewBox="0 0 16 16" focusable="false" hidden>
-        <path d="M6.2 11.4 2.8 8l1.1-1.1 2.3 2.3 5-5L12.3 5.3z"/>
-      </svg>
-    </span>
-    <span class="toast-message" id="update-toast-message"></span>
-    <button class="toast-action" id="update-toast-action" type="button" hidden>重启更新</button>
-    <button class="toast-close" id="update-toast-close" type="button" aria-label="关闭" hidden>×</button>
+  <div class="toast" id="toast" role="status" aria-live="polite" data-type="info" hidden>
+    <svg class="toast-icon" viewBox="0 0 18 18" aria-hidden="true" focusable="false"><path id="toast-icon-path" d=""/></svg>
+    <div class="toast-text">
+      <div class="toast-title" id="toast-title"></div>
+      <div class="toast-detail" id="toast-detail" hidden></div>
+    </div>
+    <button class="toast-action" id="toast-action" type="button" hidden></button>
+    <button class="toast-close" id="toast-close" type="button" aria-label="关闭">×</button>
+    <div class="toast-progress" aria-hidden="true"></div>
   </div>
 
+  <script src="toast.js"></script>
   <script src="calendar.js"></script>
 </body>
 </html>

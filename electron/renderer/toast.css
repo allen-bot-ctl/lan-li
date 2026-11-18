@@ -1,0 +1,161 @@
+/* 通用提示组件，所有提示共用 */
+.toast {
+  --toast-color: #3b82f6;
+  position: absolute;
+  top: 40px;
+  left: 50%;
+  z-index: 15;
+  display: flex;
+  box-sizing: border-box;
+  width: 320px;
+  min-height: 44px;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px 8px 14px;
+  overflow: hidden;
+  border: 1px solid var(--sheet-border);
+  border-radius: 12px;
+  background: var(--sheet-bg);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
+  color: var(--text);
+  opacity: 0;
+  transform: translate(-50%, -12px);
+  transition: opacity 150ms ease-in, transform 150ms ease-in;
+}
+
+.toast::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 3px;
+  background: var(--toast-color);
+}
+
+.toast.is-visible {
+  opacity: 1;
+  transform: translate(-50%, 0);
+  transition: opacity 200ms ease-out, transform 200ms ease-out;
+}
+
+.toast[hidden] {
+  display: none;
+}
+
+.toast[data-type="success"] {
+  --toast-color: #34a853;
+}
+
+.toast[data-type="warning"] {
+  --toast-color: var(--accent);
+}
+
+.toast[data-type="error"] {
+  --toast-color: var(--red);
+}
+
+.toast-icon {
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: var(--toast-color);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.toast-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.toast-title {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toast-detail {
+  overflow: hidden;
+  color: var(--muted-strong);
+  font-size: 12px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toast-detail[hidden],
+.toast-action[hidden],
+.toast-close[hidden] {
+  display: none;
+}
+
+.toast-action {
+  flex: 0 0 auto;
+  height: 24px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 24px;
+  cursor: pointer;
+}
+
+.toast-close {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted-strong);
+  font-size: 14px;
+  line-height: 20px;
+  cursor: pointer;
+}
+
+.toast-close:hover {
+  background: var(--chip-hover);
+}
+
+.toast-progress {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: none;
+  height: 2px;
+  overflow: hidden;
+}
+
+.toast[data-type="progress"] .toast-progress {
+  display: block;
+}
+
+.toast-progress::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 30%;
+  background: var(--toast-color);
+  animation: toast-flow 1.2s ease-in-out infinite alternate;
+}
+
+@keyframes toast-flow {
+  to {
+    left: 70%;
+  }
+}
