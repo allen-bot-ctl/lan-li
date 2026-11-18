@@ -1,0 +1,210 @@
+name: Trial macOS x64 cross-build
+
+on:
+  push:
+    branches:
+      - ci/arm-x64-trial
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: trial-arm-x64-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  trial-macos-x64:
+    name: Cross-build x64 on macos-latest
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run contract tests
+        shell: bash
+        run: |
+          set -uo pipefail
+          npm test 2>&1 | tee /tmp/tests.log
+          status=${PIPESTATUS[0]}
+          pass=$(awk '/^ℹ pass /{print $3}' /tmp/tests.log | tail -n 1)
+          fail=$(awk '/^ℹ fail /{print $3}' /tmp/tests.log | tail -n 1)
+          total=$(( ${pass:-0} + ${fail:-0} ))
+          echo "TRIAL: tests=${pass:-?}/${total}"
+          exit "$status"
+
+      - name: Build macOS x64 dmg and zip
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: |
+          set -euo pipefail
+          npx electron-builder --mac dmg zip --x64 --publish never
+          ls -lh dist/LanLi-*-mac-x64.dmg dist/LanLi-*-mac-x64.zip
+          echo "TRIAL: build=x64 dmg+zip"
+
+      - name: Report build host architecture
+        shell: bash
+        run: |
+          set -euo pipefail
+          host=$(uname -m)
+          node_arch=$(node -p 'process.arch')
+          cpu=$(sysctl -n machdep.cpu.brand_string || true)
+          echo "uname -m: $host"
+          echo "node arch: $node_arch"
+          echo "cpu: $cpu"
+          echo "TRIAL: host=$host node=$node_arch"
+
+      - name: Verify x64 binaries with lipo
+        shell: bash
+        run: |
+          set -euo pipefail
+          app=$(find dist -maxdepth 2 -type d -name '*.app' -print -quit)
+          [ -n "$app" ] || { echo "::error::no .app found under dist"; exit 1; }
+          echo "app: $app"
+          main_bin=$(find "$app/Contents/MacOS" -maxdepth 1 -type f -print -quit)
+          [ -n "$main_bin" ] || { echo "::error::no main binary under Contents/MacOS"; exit 1; }
+          fw_bin="$app/Contents/Frameworks/Electron Framework.framework/Electron Framework"
+          if [ ! -e "$fw_bin" ]; then
+            fw_bin="$app/Contents/Frameworks/Electron Framework.framework/Versions/A/Electron Framework"
+          fi
+          [ -e "$fw_bin" ] || { echo "::error::no Electron Framework binary"; exit 1; }
+          echo "main binary: $main_bin"
+          echo "framework binary: $fw_bin"
+          file "$main_bin"
+          file "$fw_bin"
+          for bin in "$main_bin" "$fw_bin"; do
+            archs=$(lipo -archs "$bin")
+            echo "TRIAL: lipo $(basename "$bin")=$archs"
+            if [ "$archs" != "x86_64" ]; then
+              echo "::error::$(basename "$bin") archs=$archs, expected exactly x86_64"
+              exit 1
+            fi
+          done
+          echo "TRIAL: lipo=x86_64"
+
+      - name: Verify ad-hoc signature
+        shell: bash
+        run: |
+          set -euo pipefail
+          app=$(find dist -maxdepth 2 -type d -name '*.app' -print -quit)
+          [ -n "$app" ] || { echo "::error::no .app found under dist"; exit 1; }
+          codesign -dv --verbose=2 "$app" 2>&1 | tee /tmp/codesign.log
+          grep -q "Signature=adhoc" /tmp/codesign.log
+          echo "TRIAL: codesign=adhoc"
+
+      - name: Smoke test x64 app under Rosetta
+        shell: bash
+        run: |
+          set -euo pipefail
+          app=$(find dist -maxdepth 2 -type d -name '*.app' -print -quit)
+          [ -n "$app" ] || { echo "::error::no .app found under dist"; exit 1; }
+          main_bin=$(find "$app/Contents/MacOS" -maxdepth 1 -type f -print -quit)
+          [ -n "$main_bin" ] || { echo "::error::no main binary under Contents/MacOS"; exit 1; }
+          echo "smoke binary: $main_bin"
+
+          if ! arch -x86_64 /usr/bin/true >/dev/null 2>&1; then
+            echo "Rosetta not available yet, trying to install"
+            softwareupdate --install-rosetta --agree-to-license || true
+          fi
+          if ! arch -x86_64 /usr/bin/true >/dev/null 2>&1; then
+            echo "::error::Rosetta unavailable, cannot run x64 smoke test"
+            exit 1
+          fi
+          echo "TRIAL: rosetta=ok"
+
+          log=/tmp/x64-smoke.log
+          : > "$log"
+          arch -x86_64 "$main_bin" >"$log" 2>&1 &
+          launcher=$!
+          echo "launcher pid: $launcher"
+
+          app_pids() {
+            local found
+            found=$(pgrep -f "$main_bin" || true)
+            if [ -n "$found" ]; then
+              printf '%s\n' "$found"
+            else
+              printf '%s\n' "$launcher"
+            fi
+          }
+
+          fail() {
+            echo "::error::$1"
+            echo "--- app output ---"
+            cat "$log" || true
+            pkill -KILL -f "$main_bin" 2>/dev/null || true
+            kill -KILL "$launcher" 2>/dev/null || true
+            exit 1
+          }
+
+          check_alive_x64() {
+            local phase="$1" pid alive=0 pids
+            pids=$(app_pids | tr '\n' ' ')
+            for pid in $pids; do
+              if kill -0 "$pid" 2>/dev/null; then
+                alive=1
+              fi
+            done
+            [ "$alive" -eq 1 ] || fail "app is not running at ${phase}"
+            ps -o pid=,ppid=,arch=,comm= -p $pids || true
+            if ! ps -o arch= -p $pids | awk 'NF==1 && $1=="x86_64"{ok=1} END{exit ok?0:1}'; then
+              fail "no x86_64 process at ${phase}"
+            fi
+            echo "TRIAL: smoke=alive arch=x86_64 at=${phase}"
+          }
+
+          sleep 5
+          check_alive_x64 5s
+          sleep 15
+          check_alive_x64 20s
+
+          pids=$(app_pids | tr '\n' ' ')
+          kill -TERM $pids 2>/dev/null || true
+          for _ in $(seq 1 10); do
+            if ! kill -0 "$launcher" 2>/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          kill -KILL $pids 2>/dev/null || true
+          pkill -KILL -f "$main_bin" 2>/dev/null || true
+          wait "$launcher" 2>/dev/null || true
+
+          echo "--- app output ---"
+          cat "$log" || true
+          echo "TRIAL: smoke=ok 20s"
+
+      - name: Generate zip checksum for in-app update
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd dist
+          count=0
+          for f in LanLi-*-mac-x64.zip; do
+            [ -e "$f" ] || { echo "::error::no x64 zip found"; exit 1; }
+            shasum -a 256 "$f" > "$f.sha256"
+            cat "$f.sha256"
+            count=$((count + 1))
+          done
+          echo "TRIAL: sha256=${count}"
+
+      - name: Upload trial macOS x64 artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: trial-macos-x64
+          retention-days: 3
+          if-no-files-found: error
+          path: |
+            dist/LanLi-*-mac-x64.dmg
+            dist/LanLi-*-mac-x64.zip
+            dist/LanLi-*-mac-x64.zip.sha256
