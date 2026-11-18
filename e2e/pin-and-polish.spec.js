@@ -469,7 +469,7 @@ test('S3 点「今天」回到本月，副标题为今天的值', async () => {
   await expect(page.locator('#lunar-subtitle')).toHaveText(todaySubtitle);
 });
 
-test('C7 月历格子、三张卡与版本行相对 0.1.24 只整体下移 32px', async () => {
+test('C7 月历格子、三张卡与版本行相对 0.1.24 整体下移 32px（0.1.29 黄历卡收紧 18px）', async () => {
   await showUnpinned();
 
   const measured = await page.evaluate(() => {
@@ -498,15 +498,18 @@ test('C7 月历格子、三张卡与版本行相对 0.1.24 只整体下移 32px'
     height: BASELINE.viewport.height + 32
   });
 
+  const ALMANAC_SHRINK = 18; // 0.1.29 黄历卡去掉干支冲煞行
   for (const [name, before] of Object.entries(BASELINE.elements)) {
     const after = measured[name];
+    const shrink = name === 'almanacCard' ? ALMANAC_SHRINK : 0;
+    const lift = (name === 'worldClockCard' || name === 'weatherCard') ? ALMANAC_SHRINK : 0;
     expect(after, name).toBeTruthy();
     expect({
       name,
       x: Math.abs(after.x - before.x) <= 1,
       width: Math.abs(after.width - before.width) <= 1,
-      height: Math.abs(after.height - before.height) <= 1,
-      y: Math.abs(after.y - (before.y + 32)) <= 1
+      height: Math.abs(after.height - (before.height - shrink)) <= 1,
+      y: Math.abs(after.y - (before.y + 32 - lift)) <= 1
     }).toEqual({ name, x: true, width: true, height: true, y: true });
   }
 
