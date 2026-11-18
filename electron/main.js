@@ -29,7 +29,8 @@ const {
   configureAlmanacStyles,
   configureAlmanacFocus,
   buildAlmanac,
-  buildViewSubtitle
+  buildViewSubtitle,
+  parseDateKey
 } = require('./calendar');
 const {
   isStyleId,
@@ -107,13 +108,21 @@ const logger = createLogger();
 
 let view = null;
 let focus = null;
+// 0.1.30：窗口每次从隐藏到显示 +1，渲染层据此把黄历选中日期回到今天。
+let openSeq = 0;
+// E2E-only：固定「现在」，用来验证跨午夜；正式运行恒为 null。
+let e2eNow = null;
+
+function currentNow() {
+  return e2eNow ? new Date(e2eNow) : new Date();
+}
 let worldClocks = { items: [], index: 0 };
 // Stored IANA id for the menu-bar display zone. null/omitted means follow the
 // system local zone. The renderer never reads or writes preferences directly.
 let menuBarTimeZone = null;
 
 function todayParts() {
-  const now = new Date();
+  const now = currentNow();
   return {
     year: now.getFullYear(),
     month: now.getMonth() + 1,
@@ -202,7 +211,7 @@ function applyLoginItem(desired) {
 }
 
 function buildState() {
-  const now = new Date();
+  const now = currentNow();
   return {
     view: { year: view.year, month: view.month },
     focus: { year: focus.year, month: focus.month, day: focus.day },
@@ -211,6 +220,7 @@ function buildState() {
     // 0.1.26：副标题跟随所显示的月份，与黄历卡（仍按今天）分开下发。
     viewSubtitle: buildViewSubtitle(view.year, view.month, now),
     clocks: currentClockSnapshot(now),
+    openSeq,
     pinned
   };
 }
@@ -700,6 +710,7 @@ function openCalendar() {
   const wasVisible = calendarWindow.isVisible();
 
   if (!wasVisible) {
+    openSeq += 1;
     resetViewToToday();
     positionCalendar();
     calendarWindow.show();
@@ -730,7 +741,7 @@ function sendPinState() {
 }
 
 function updateClock() {
-  const now = new Date();
+  const now = currentNow();
 
   if (tray) {
     const title = formatMenuTitleInZone(now, resolvedMenuBarTimeZone(), defaultLocalTimeZone()) ||
@@ -865,7 +876,13 @@ function registerIpc() {
       writePreferences({ ...readPreferences(), almanacStyle });
     }
 
-    return { ok: true, almanac: buildAlmanac(new Date(), almanacStyle) };
+    return { ok: true, almanac: buildAlmanac(currentNow(), almanacStyle) };
+  });
+
+  // 0.1.30：黄历跟随选中日期，渲染层传 YYYY-MM-DD；非法日期返回 null。
+  ipcMain.handle('almanac:getForDate', (_event, key) => {
+    const date = parseDateKey(key);
+    return date ? buildAlmanac(date, almanacStyle) : null;
   });
 
   ipcMain.handle('calendar:setView', (_event, payload) => applyViewPayload(payload));
@@ -1046,6 +1063,11 @@ function registerE2eHooks() {
     },
     emitUpdateStatus(status) {
       sendUpdateStatus(status);
+      return true;
+    },
+    setNow(iso) {
+      e2eNow = typeof iso === 'string' ? iso : null;
+      updateClock();
       return true;
     },
     emitUpdateNotice(notice) {

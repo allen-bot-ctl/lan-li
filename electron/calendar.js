@@ -198,6 +198,19 @@ function focusEntry(term, list, style) {
   };
 }
 
+// 0.1.30：渲染层按 YYYY-MM-DD 取某天黄历；格式或日期非法返回 null。
+function parseDateKey(key) {
+  if (typeof key !== 'string') return null;
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(key);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (year < MIN_YEAR || year > MAX_YEAR || month < 1 || month > 12) return null;
+  if (day < 1 || day > daysInMonth(year, month)) return null;
+  return new Date(year, month - 1, day, 12);
+}
+
 // 下一个节气倒计时已按 0.1.24 契约移除；月历格子仍标出节气。
 function buildAlmanac(date, styleId = 'lunar') {
   const solar = Solar.fromYmd(date.getFullYear(), date.getMonth() + 1, date.getDate());
@@ -225,6 +238,8 @@ function buildAlmanac(date, styleId = 'lunar') {
   const chongText = `冲${chongShengXiao}（${lunar.getDayChongGan()}${lunar.getDayChong()}）煞${sha}`;
 
   return {
+    dateKey: `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`,
+    solarText: `${date.getMonth() + 1}月${date.getDate()}日`,
     styleId: style.definition.id,
     styleName: style.definition.name,
     accentLight: style.definition.accent.light,
@@ -266,5 +281,6 @@ module.exports = {
   configureAlmanacFocus,
   mapAlmanacTerms,
   buildAlmanac,
+  parseDateKey,
   buildViewSubtitle
 };
