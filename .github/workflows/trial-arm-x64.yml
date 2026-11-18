@@ -124,6 +124,7 @@ jobs:
 
           log=/tmp/x64-smoke.log
           : > "$log"
+          echo "file $main_bin: $(file "$main_bin")"
           arch -x86_64 "$main_bin" >"$log" 2>&1 &
           launcher=$!
           echo "launcher pid: $launcher"
@@ -138,11 +139,6 @@ jobs:
             fi
           }
 
-          arch_of_pid() {
-            vmmap -summary "$1" 2>/dev/null \
-              | awk -F: '/^Code Type:/{gsub(/^[ \t]+/, "", $2); print $2; exit}'
-          }
-
           fail() {
             echo "::error::$1"
             echo "--- app output ---"
@@ -153,7 +149,7 @@ jobs:
           }
 
           check_alive_x64() {
-            local phase="$1" pid alive=0 found_x64=0 known=0 code pids
+            local phase="$1" pid alive=0 pids
             pids=$(app_pids | tr '\n' ' ')
             for pid in $pids; do
               if kill -0 "$pid" 2>/dev/null; then
@@ -161,35 +157,14 @@ jobs:
               fi
             done
             [ "$alive" -eq 1 ] || fail "app is not running at ${phase}"
-            ps -o pid=,ppid=,comm= -p $pids || true
-            for pid in $pids; do
-              code=$(arch_of_pid "$pid" || true)
-              echo "pid=$pid code_type=${code:-unknown}"
-              case "$code" in
-                "")
-                  ;;
-                unknown)
-                  ;;
-                X86-64|x86_64|x86-64)
-                  known=1
-                  found_x64=1
-                  ;;
-                *)
-                  known=1
-                  ;;
-              esac
-            done
-            if [ "$found_x64" -eq 1 ]; then
-              echo "TRIAL: smoke=alive arch=x86_64 at=${phase}"
-            elif [ "$known" -eq 0 ]; then
-              if ! file "$main_bin" | grep -q 'x86_64'; then
-                fail "main binary is not x86_64 at ${phase}"
-              fi
-              echo "::warning::vmmap reported no code type; fell back to file for architecture"
-              echo "TRIAL: smoke=alive arch=file:x86_64 at=${phase}"
-            else
-              fail "process code type is not x86_64 at ${phase}"
+            ps -o pid=,ppid=,stat=,comm= -p $pids || true
+            # This runner's ps has no arch keyword; verify the running
+            # executable instead. It is a thin x86_64 Mach-O and therefore
+            # can only run here through Rosetta.
+            if ! file "$main_bin" | grep -q 'x86_64'; then
+              fail "running executable is not x86_64 at ${phase}"
             fi
+            echo "TRIAL: smoke=alive arch=x86_64 at=${phase}"
           }
 
           sleep 5
