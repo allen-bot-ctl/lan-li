@@ -97,6 +97,12 @@ test('C5 五种提示都能触发：居中、距顶栏 8px、宽 320，月历与
     }, c);
     await expect(toast()).toBeVisible();
     await settle();
+    // CI 上过渡偶尔没走完：等提示框落到距顶栏 8px 再量
+    await expect.poll(() => page.evaluate(() => {
+      const r = document.getElementById('toast').getBoundingClientRect();
+      const b = document.querySelector('.topbar').getBoundingClientRect();
+      return Math.abs(r.top - b.bottom - 8) <= 1;
+    }), { timeout: 3000 }).toBe(true);
     const info = await page.evaluate(() => {
       const el = document.getElementById('toast');
       const r = el.getBoundingClientRect();

@@ -94,6 +94,17 @@ test('C1 左栏分割线与右侧标题下线同一高度，「‹ 返回」与�
     expect(Math.abs(backY - titleY)).toBeLessThanOrEqual(1);
     expect(lines.dividerLeft).toBeLessThanOrEqual(lines.navLeft + 0.5);
     expect(lines.backSize).toBe('15px');
+    const lefts = await page.evaluate(() => {
+      const textLeft = (el) => {
+        const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, { acceptNode: (n) => n.textContent.trim() ? 1 : 3 });
+        const n = w.nextNode(); const r = document.createRange();
+        const i = n.textContent.search(/\S/); r.setStart(n, i); r.setEnd(n, i + 1);
+        return r.getBoundingClientRect().left;
+      };
+      return { back: textLeft(document.getElementById('settings-back')), tab: textLeft(document.querySelector('.settings-tab')) };
+    });
+    console.log(`C1 ${scheme}: backTextLeft=${lefts.back} tabTextLeft=${lefts.tab}`);
+    expect(Math.abs(lefts.back - lefts.tab)).toBeLessThanOrEqual(0.5);
     expect(lines.backWeight).toBeGreaterThanOrEqual(600);
     await page.screenshot({ path: path.join(SHOTS, `30-settings-0136-${scheme}.png`) });
   }
