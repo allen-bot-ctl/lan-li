@@ -78,6 +78,7 @@ const {
 } = require('./quick-cities');
 const { createLoginItem } = require('./login-item');
 const { createWeatherRefresher } = require('./weather-refresh');
+const { buildAtlas, createClockImageMaker } = require('./tray-clock-image');
 
 const WINDOW_WIDTH = 580;
 // 0.1.24's 400px content plus the 32px full-width top bar.
@@ -90,6 +91,7 @@ const E2E = process.env.LANLI_E2E === '1';
 let tray = null;
 let menuBarShowDate = true;
 let lastTrayTitle = '';
+let makeClockImage = null; // v0.1.38: null until the glyph atlas is ready; falls back to setTitle
 let lastTrayTooltip = '';
 let e2eLoginOpen = false;
 const e2eLoginCalls = [];
@@ -790,7 +792,14 @@ function updateClock() {
     const zone = resolvedMenuBarTimeZone(); const local = defaultLocalTimeZone();
     const title = formatMenuTitleInZone(now, zone, local, { showDate: menuBarShowDate }) || formatMenuTitle(now, { showDate: menuBarShowDate });
     const tooltip = formatTrayTooltipInZone(now, zone, local);
-    tray.setTitle(title, { fontType: 'monospacedDigit' });
+    const img = makeClockImage && title !== lastTrayTitle ? makeClockImage(title) : null;
+    if (img) {
+      tray.setImage(img);
+      tray.setTitle('');
+    } else if (!makeClockImage || title !== lastTrayTitle) {
+      if (makeClockImage) tray.setImage(nativeImage.createEmpty());
+      tray.setTitle(title, { fontType: 'monospacedDigit' });
+    }
     if (tooltip && typeof tray.setToolTip === 'function') tray.setToolTip(tooltip);
     lastTrayTitle = title; lastTrayTooltip = tooltip;
   }
@@ -1181,6 +1190,16 @@ async function bootstrap() {
   // one-second interval.
   updateClock();
   clockTimer = setInterval(updateClock, 1000);
+
+  if (tray && process.platform === 'darwin' && process.env.LANLI_TITLE_TEXT !== '1') {
+    buildAtlas(BrowserWindow).then((atlas) => {
+      makeClockImage = createClockImageMaker(nativeImage, atlas);
+      lastTrayTitle = '';
+      updateClock();
+    }).catch((error) => {
+      logger.warn('[栏历] 时钟图片生成失败，继续用文字标题：' + reasonOf(error));
+    });
+  }
 }
 
 const gotLock = app.requestSingleInstanceLock();
