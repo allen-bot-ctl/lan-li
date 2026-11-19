@@ -36,6 +36,8 @@ async function launchApp() {
 }
 
 async function openMore() {
+  // 先确保窗口可见（前面的 spec 可能留下指针在窗外，窗口会被自动隐藏）。
+  await trayEnter();
   await page.click('#settings-button');
   await mainEval(() => globalThis.__lanliTest.clickSettingsMenuItem('more-settings'));
   await closeSettingsMenu();
