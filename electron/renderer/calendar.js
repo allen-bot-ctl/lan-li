@@ -53,6 +53,19 @@ const almanacDetailTitle = document.getElementById('almanac-detail-title');
 const almanacDetailBody = document.getElementById('almanac-detail-body');
 const almanacDetailClose = document.getElementById('almanac-detail-close');
 
+const appBody = document.querySelector('.app-body');
+const settingsView = document.getElementById('settings-view');
+const settingsBack = document.getElementById('settings-back');
+const settingsTabs = document.querySelectorAll('.settings-tab');
+const settingsPageUi = document.getElementById('settings-page-ui');
+const settingsPageUpdate = document.getElementById('settings-page-update');
+const settingOpenAtLogin = document.getElementById('setting-open-at-login');
+const settingShowDate = document.getElementById('setting-show-date');
+const settingsVersion = document.getElementById('settings-version');
+const settingsCheckUpdate = document.getElementById('settings-check-update');
+
+let settingsTab = null;
+
 let state = null;
 let lastAlmanac = null;
 let detailDay = null;
@@ -752,6 +765,7 @@ function weatherRowButton(row) {
     // the city and pushes the refreshed result via weather:update, so this
     // never waits on the network.
     closeWeatherPicker();
+    afterPickerChoice('weather');
     renderWeather({ ok: false, text: `${label} · 加载中…` });
     api.setCity(city).catch(() => {
       refreshWeather();
@@ -926,6 +940,7 @@ function selectAlmanacStyle(row) {
     }
     showAlmanac();
     closeAlmanacPicker();
+    afterPickerChoice('almanac');
   }).catch(() => {});
 }
 
@@ -1080,8 +1095,88 @@ almanacDetailClose.addEventListener('click', () => {
   closeAlmanacDetail();
 });
 
+const EMBEDDED = { almanac: [almanacPicker, openAlmanacPicker], weather: [weatherPicker, openWeatherPicker], clocks: [clockPicker, openClockEditor] };
+
+function closeAllPickers() {
+  closeClockEditor();
+  closeWeatherPicker();
+  closeAlmanacPicker();
+  closeAlmanacDetail();
+  almanacPicker.classList.remove('is-embedded');
+  weatherPicker.classList.remove('is-embedded');
+  clockPicker.classList.remove('is-embedded');
+}
+
+function selectSettingsTab(tab) {
+  settingsTab = tab;
+  settingsTabs.forEach((el) => {
+    const on = el.dataset.tab === tab;
+    el.classList.toggle('is-selected', on);
+    el.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
+  closeAllPickers();
+  settingsPageUi.hidden = tab !== 'ui';
+  settingsPageUpdate.hidden = tab !== 'update';
+  const embedded = EMBEDDED[tab];
+  if (embedded) {
+    embedded[0].classList.add('is-embedded');
+    embedded[1]();
+  }
+}
+
+function openSettingsView() {
+  closeAllPickers();
+  clearSettingsHighlight();
+  appBody.hidden = true;
+  settingsView.hidden = false;
+  api.setSettingsView(true);
+  selectSettingsTab('ui');
+  api.getSettings().then((s) => {
+    settingOpenAtLogin.checked = s.openAtLogin === true;
+    settingShowDate.checked = s.menuBarShowDate !== false;
+    settingsVersion.textContent = s.version;
+  }).catch(() => {});
+}
+
+function closeSettingsView() {
+  if (settingsView.hidden) return;
+  closeAllPickers();
+  settingsTab = null;
+  settingsView.hidden = true;
+  appBody.hidden = false;
+  api.setSettingsView(false);
+}
+
+function afterPickerChoice(tab) {
+  if (!settingsView.hidden && settingsTab === tab) selectSettingsTab(tab);
+}
+
+settingsBack.addEventListener('click', () => {
+  closeSettingsView();
+});
+settingsTabs.forEach((el) => {
+  el.addEventListener('click', () => selectSettingsTab(el.dataset.tab));
+});
+settingOpenAtLogin.addEventListener('change', () => {
+  const el = settingOpenAtLogin;
+  api.setOpenAtLogin(el.checked).then((v) => { el.checked = v === true; }).catch(() => {});
+});
+settingShowDate.addEventListener('change', () => {
+  api.setMenuBarShowDate(settingShowDate.checked);
+});
+settingsCheckUpdate.addEventListener('click', () => {
+  if (pendingNotice) {
+    showUpdateNotice(pendingNotice);
+    return;
+  }
+  api.checkUpdate();
+});
+
 api.onOpenPanel((panel) => {
   clearSettingsHighlight();
+  if (panel === 'settings') { openSettingsView(); return; }
+  closeSettingsView();
+  if (panel === 'calendar') return;
   if (panel === 'clocks') openClockEditor();
   if (panel === 'weather') openWeatherPicker();
   if (panel === 'almanac') openAlmanacPicker();

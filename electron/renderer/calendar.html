@@ -137,6 +137,27 @@
     </aside>
     </div>
 
+    <div class="settings-view" id="settings-view" hidden>
+      <nav class="settings-nav" aria-label="设置分类">
+        <button class="settings-back" id="settings-back" type="button">‹ 返回</button>
+        <button class="settings-tab" type="button" data-tab="ui">界面设置</button>
+        <button class="settings-tab" type="button" data-tab="almanac">黄历</button>
+        <button class="settings-tab" type="button" data-tab="weather">天气</button>
+        <button class="settings-tab" type="button" data-tab="clocks">世界时钟</button>
+        <button class="settings-tab" type="button" data-tab="update">升级</button>
+      </nav>
+      <section class="settings-content" id="settings-content">
+        <div class="settings-page" id="settings-page-ui">
+          <label class="settings-row"><span class="settings-label">开机自启动</span><input class="settings-switch" id="setting-open-at-login" type="checkbox" role="switch"></label>
+          <label class="settings-row"><span class="settings-label">菜单栏显示日期</span><input class="settings-switch" id="setting-show-date" type="checkbox" role="switch"></label>
+        </div>
+        <div class="settings-page" id="settings-page-update" hidden>
+          <div class="settings-row"><span class="settings-label">当前版本 <span id="settings-version"></span></span></div>
+          <button class="settings-button" id="settings-check-update" type="button">检查更新</button>
+        </div>
+      </section>
+    </div>
+
     <div class="picker-overlay" id="clock-picker" hidden>
       <section class="picker-sheet" role="dialog" aria-modal="true" aria-label="编辑世界时钟">
         <div class="picker-head">

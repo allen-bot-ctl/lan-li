@@ -1254,3 +1254,16 @@ select {
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
+.settings-view{position:absolute;top:32px;left:0;right:0;bottom:0;display:flex;flex-direction:row;}
+.settings-view[hidden],.app-body[hidden],.settings-page[hidden]{display:none !important;}
+.settings-nav{width:120px;flex:0 0 120px;display:flex;flex-direction:column;gap:2px;padding:8px 6px;border-right:1px solid var(--sheet-border);}
+.settings-tab,.settings-back{all:unset;padding:6px 10px;border-radius:6px;color:var(--text);font-size:13px;cursor:default;}
+.settings-tab.is-selected{background:var(--chip-hover);color:var(--text);}
+.settings-back{margin-bottom:6px;opacity:.8}
+.settings-content{position:relative;flex:1 1 auto;min-width:0;padding:14px 16px;overflow:auto;color:var(--text);}
+.settings-row{display:flex;align-items:center;justify-content:space-between;height:34px;font-size:13px;}
+.settings-button{margin-top:10px;}
+.picker-overlay.is-embedded{top:32px;left:120px;padding:0;background:transparent;backdrop-filter:none;}
+.picker-overlay.is-embedded .picker-sheet{max-width:none;height:100%;border:0;border-radius:0;box-shadow:none;background:transparent;}
+.picker-overlay.is-embedded .picker-close{display:none;}

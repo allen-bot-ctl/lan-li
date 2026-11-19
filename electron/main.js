@@ -98,6 +98,7 @@ let settingsMenuOpen = false;
 // E2E-only probe: records the anchor actually received for the settings menu.
 let e2eLastSettingsAnchor = null;
 let e2eSettingsMenu = null;
+let settingsViewOpen = false;
 // Pinned is deliberately in-memory only: hiding or restarting clears it.
 let pinned = false;
 let updater = null;
@@ -418,7 +419,12 @@ function createCalendarWindow() {
   calendarWindow.webContents.on('before-input-event', (event, input) => {
     if (input.type === 'keyDown' && (input.key === 'Escape' || input.key === 'Esc')) {
       event.preventDefault();
-      hideCalendar();
+      if (settingsViewOpen) {
+        settingsViewOpen = false;
+        sendPanel('calendar');
+      } else {
+        hideCalendar();
+      }
     }
   });
 
@@ -744,6 +750,7 @@ function openCalendar() {
 
 function hideCalendar() {
   cancelClose();
+  settingsViewOpen = false;
   // Hiding always ends the pinned session; the next tray hover reopens in the
   // default unpinned state, as required (nothing is persisted).
   const wasPinned = pinned;
@@ -829,6 +836,7 @@ function registerIpc() {
   ipcMain.handle('settings:get', () => ({ openAtLogin: getOpenAtLogin(), menuBarShowDate, version: app.getVersion() }));
   ipcMain.handle('settings:setOpenAtLogin', (_e, value) => applyLoginItem(Boolean(value)));
   ipcMain.handle('settings:setMenuBarShowDate', (_e, value) => setMenuBarShowDate(value));
+  ipcMain.on('settings:viewState', (_e, open) => { settingsViewOpen = Boolean(open); });
 
   ipcMain.handle('weather:get', () => {
     if (!weatherService) return unavailableWeather();
@@ -1091,6 +1099,7 @@ function registerE2eHooks() {
       e2eSettingsMenu = null;
       return true;
     },
+    clickSettingsMenuItem(id) { const item = e2eSettingsMenu && e2eSettingsMenu.getMenuItemById(id); if (!item) return false; item.click(); return true; },
     emitUpdateStatus(status) {
       sendUpdateStatus(status);
       return true;
