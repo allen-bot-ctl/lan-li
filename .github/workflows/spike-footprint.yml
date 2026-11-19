@@ -1,0 +1,55 @@
+name: spike-footprint
+on:
+  push:
+    branches: [spike/menubar-footprint]
+  workflow_dispatch:
+jobs:
+  measure:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - run: sw_vers; uname -m; sysctl -n machdep.cpu.brand_string; sysctl -n hw.memsize
+      - name: build
+        run: |
+          cd spike/electron && npm install --no-audit --no-fund && cd ../..
+          cd spike/swift && swiftc -O main.swift -o spike-swift && ls -la spike-swift
+      - name: measure
+        run: |
+          cat > /tmp/sample.sh <<'SH'
+          # $1 label, $2 root pid
+          label=$1; root=$2
+          desc() { local p=$1; echo $p; for c in $(pgrep -P $p); do desc $c; done; }
+          n=0; sum_rss=0; max_rss=0; sum_cpu=0
+          for i in $(seq 1 12); do
+            pids=$(desc $root | tr '\n' ',' | sed 's/,$//')
+            read rss cpu np <<<"$(ps -o rss=,%cpu= -p $pids | awk '{r+=$1;c+=$2;n++} END{printf "%d %.2f %d", r, c, n}')"
+            echo "$label sample $i procs=$np rss_kb=$rss cpu=$cpu"
+            n=$((n+1)); sum_rss=$((sum_rss+rss)); [ $rss -gt $max_rss ] && max_rss=$rss
+            sum_cpu=$(echo "$sum_cpu + $cpu" | bc)
+            sleep 5
+          done
+          echo "$label procs:"; ps -o pid,rss,%cpu,comm -p $(desc $root | tr '\n' ',' | sed 's/,$//')
+          printf "RESULT %s avgRSS_MB=%.1f maxRSS_MB=%.1f avgCPU=%.2f\n" $label $(echo "$sum_rss/$n/1024" | bc -l) $(echo "$max_rss/1024" | bc -l) $(echo "$sum_cpu/$n" | bc -l) | tee -a /tmp/results.txt
+          SH
+          cd spike/electron
+          ./node_modules/.bin/electron . > /tmp/electron.log 2>&1 &
+          EPID=$!
+          sleep 15
+          bash /tmp/sample.sh electron $EPID
+          cat /tmp/electron.log
+          kill $EPID; sleep 2; pkill -f spike/electron || true
+          cd ../swift
+          ./spike-swift > /tmp/swift.log 2>&1 &
+          SPID=$!
+          sleep 15
+          bash /tmp/sample.sh swift $SPID
+          kill $SPID || true
+          cat /tmp/swift.log
+          echo "===== SUMMARY ($(sw_vers -productVersion) $(uname -m)) ====="
+          cat /tmp/results.txt

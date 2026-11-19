@@ -1,0 +1,2 @@
+{ "name": "spike-electron", "version": "0.0.1", "main": "main.js", "private": true,
+  "devDependencies": { "electron": "^31.7.7" } }
