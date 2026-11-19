@@ -10,9 +10,20 @@ const CHARS = '0123456789: 月日';
 const DIGITS = '0123456789';
 const FONT_PT = 13;
 const HEIGHT_PT = 22;
+// Advances of NSFont.monospacedDigitSystemFont(13) measured on macOS (what the
+// old text title used), so the image is exactly as wide as the title text.
+const ADVANCE_PT = { digit: 8.1123046875, ':': 3.783203125, ' ': 3.580078125, cjk: 12.898832684824903 };
+function advanceOf(ch) {
+  if (DIGITS.includes(ch)) return ADVANCE_PT.digit;
+  if (ch === '月' || ch === '日') return ADVANCE_PT.cjk;
+  return ADVANCE_PT[ch];
+}
 
 function atlasScript(scale) {
+  const adv = {};
+  for (const ch of CHARS) adv[ch] = advanceOf(ch);
   return `(() => {
+    const ADV = ${JSON.stringify(adv)};
     const s = ${scale}, H = ${HEIGHT_PT} * s;
     const c = document.createElement('canvas');
     const ctx = c.getContext('2d');
@@ -21,12 +32,10 @@ function atlasScript(scale) {
     const m = ctx.measureText('0月');
     const asc = m.fontBoundingBoxAscent, desc = m.fontBoundingBoxDescent;
     const base = Math.round((H - (asc + desc)) / 2 + asc);
-    let digitW = 0;
-    for (const d of ${JSON.stringify(DIGITS)}) digitW = Math.max(digitW, ctx.measureText(d).width);
     const out = {};
     for (const ch of ${JSON.stringify(CHARS)}) {
-      const adv = ${JSON.stringify(DIGITS)}.includes(ch) ? digitW : ctx.measureText(ch).width;
-      const w = Math.max(1, Math.round(adv));
+      const adv = ADV[ch] * s;
+      const w = Math.max(1, Math.ceil(adv) + 1);
       c.width = w; c.height = H;
       ctx.font = font; ctx.fillStyle = '#000'; ctx.textBaseline = 'alphabetic';
       const gw = ctx.measureText(ch).width;
@@ -35,7 +44,7 @@ function atlasScript(scale) {
       const data = ctx.getImageData(0, 0, w, H).data;
       const a = new Array(w * H);
       for (let i = 0; i < w * H; i++) a[i] = data[i * 4 + 3];
-      out[ch] = { w, a };
+      out[ch] = { w, a, adv: ADV[ch] };
     }
     return { H, out };
   })()`;
@@ -56,33 +65,34 @@ async function buildAtlas(BrowserWindow) {
   }
 }
 
-function composeBitmap(atlas, text) {
+function composeBitmap(atlas, text, scale) {
   const glyphs = [];
-  let W = 0;
+  let total = 0;
   for (const ch of text) {
     const g = atlas.out[ch];
     if (!g) return null;
-    glyphs.push(g); W += g.w;
+    glyphs.push({ g, x: Math.round(total * scale) });
+    total += g.adv;
   }
   const H = atlas.H;
+  const W = Math.max(1, Math.ceil(total * scale));
   const buf = Buffer.alloc(W * H * 4); // BGRA, black ink, alpha from mask
-  let x0 = 0;
-  for (const g of glyphs) {
+  for (const { g, x: x0 } of glyphs) {
     for (let y = 0; y < H; y++) {
-      for (let x = 0; x < g.w; x++) {
+      for (let x = 0; x < g.w && x0 + x < W; x++) {
         const al = g.a[y * g.w + x];
-        if (al) buf[((y * W) + x0 + x) * 4 + 3] = al;
+        const i = ((y * W) + x0 + x) * 4 + 3;
+        if (al > buf[i]) buf[i] = al;
       }
     }
-    x0 += g.w;
   }
   return { buf, W, H };
 }
 
 function createClockImageMaker(nativeImage, atlas) {
   return function make(text) {
-    const b2 = composeBitmap(atlas[2], text);
-    const b1 = composeBitmap(atlas[1], text);
+    const b2 = composeBitmap(atlas[2], text, 2);
+    const b1 = composeBitmap(atlas[1], text, 1);
     if (!b2 || !b1) return null;
     const img = nativeImage.createFromBitmap(b1.buf, { width: b1.W, height: b1.H, scaleFactor: 1 });
     const hi = nativeImage.createFromBitmap(b2.buf, { width: b2.W, height: b2.H, scaleFactor: 2 });
@@ -92,4 +102,4 @@ function createClockImageMaker(nativeImage, atlas) {
   };
 }
 
-module.exports = { buildAtlas, composeBitmap, createClockImageMaker, CHARS };
+module.exports = { buildAtlas, composeBitmap, createClockImageMaker, CHARS, advanceOf };
