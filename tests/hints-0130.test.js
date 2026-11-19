@@ -24,10 +24,11 @@ test('0.1.33 签筒按钮用风格主色，取不到时用 --accent', () => {
   assert.match(css, /prefers-color-scheme: dark\)\s*\{\s*\.almanac-redraw\s*\{\s*color:\s*var\(--almanac-accent-dark,\s*var\(--accent\)\)/);
 });
 
-test('0.1.30 C2 黄历卡标题后常驻 ›，悬停变 --chip-hover 并带「查看黄历详情」气泡', () => {
-  assert.match(cssRule('.almanac-style-name::after'), /content:\s*'›'/);
-  assert.match(cssRule('.almanac-card:hover'), /background:\s*var\(--chip-hover\)/);
-  assert.match(html, /id="almanac-card"[^>]*data-tooltip="查看黄历详情"[^>]*data-tooltip-place="above"/);
+test('0.1.35 C8 黄历卡不再可点：标题无 ›、无悬停底色、无「查看黄历详情」气泡', () => {
+  assert.equal(/\.almanac-style-name::after\s*\{/.test(css), false);
+  assert.equal(/\.almanac-card:hover\s*\{/.test(css), false);
+  assert.equal(html.includes('查看黄历详情'), false);
+  assert.equal(html.includes('id="almanac-detail"'), false);
 });
 
 test('0.1.30 C3 年月标题带 ⌄，标题与翻月按钮都有气泡文字', () => {

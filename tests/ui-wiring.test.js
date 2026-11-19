@@ -37,16 +37,14 @@ test('weather card is a single row ending with 更换 ›', () => {
   assert.equal(/<button[^>]*>[^<]*<button/.test(card[0]), false);
 });
 
-test('almanac focus card and detail panel replace the six-item lists', () => {
+test('almanac focus card replaces the six-item lists', () => {
   const html = source('electron/renderer/calendar.html');
   const renderer = source('electron/renderer/calendar.js');
 
   for (const id of [
     'almanac-focus-yi',
     'almanac-focus-ji',
-    'almanac-quote',
-    'almanac-detail',
-    'almanac-detail-close'
+    'almanac-quote'
   ]) {
     assert.match(html, new RegExp(`id="${id}"`), id);
   }

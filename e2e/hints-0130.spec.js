@@ -134,7 +134,6 @@ test('C11 点签筒：签语换成本风格 12 句里不同的一句，宜忌不
     expect(after.yi).toBe(before.yi);
     expect(after.ji).toBe(before.ji);
   }
-  await expect(page.locator('#almanac-detail')).toBeHidden();
 });
 
 test('C12 换日期后签语回到那天的默认签语', async () => {
@@ -162,27 +161,6 @@ test('C13 最长签语两行内完整显示，右栏不超出窗口', async () =
   expect(m.over).toBeLessThanOrEqual(0);
 });
 
-test('C2 标题末尾有「›」；悬停卡片变 --chip-hover，600ms 内出「查看黄历详情」且在窗口内', async () => {
-  const after = await page.evaluate(() =>
-    getComputedStyle(document.getElementById('almanac-style-name'), '::after').content);
-  expect(after).toBe('"›"');
-  const box = await hoverAndTip('#almanac-quote', '查看黄历详情');
-  const card = await page.evaluate(() => {
-    const el = document.getElementById('almanac-card');
-    const probe = document.createElement('span');
-    document.body.append(probe);
-    probe.style.backgroundColor = 'var(--chip-hover)';
-    const expected = getComputedStyle(probe).backgroundColor;
-    probe.remove();
-    const r = el.getBoundingClientRect();
-    return { bg: getComputedStyle(el).backgroundColor, expected, cursor: getComputedStyle(el).cursor, top: r.top };
-  });
-  expect(card.bg).toBe(card.expected);
-  expect(card.cursor).toBe('pointer');
-  expect(box.b).toBeLessThanOrEqual(card.top + 1);
-  await page.screenshot({ path: path.join(SHOTS, '21-hints-0130-card.png') });
-});
-
 test('C3 年月标题后有「⌄」；标题、左右箭头、今天分别出气泡', async () => {
   await expect(page.locator('.month-title-caret')).toHaveText('⌄');
   await hoverAndTip('.month-title', '选择年份');
@@ -194,27 +172,14 @@ test('C3 年月标题后有「⌄」；标题、左右箭头、今天分别出�
   await page.mouse.move(300, 300);
 });
 
-test('C7 程序猿风格详情的焦点与宜忌、焦点词悬停不含「（原词）」；农历风格不变', async () => {
-  await page.click('#almanac-quote');
-  await expect(page.locator('#almanac-detail')).toBeVisible();
-  const sections = await page.evaluate(() => {
-    const out = {};
-    const heads = document.querySelectorAll('#almanac-detail-body .almanac-detail-heading');
-    for (const h of heads) out[h.textContent] = h.nextElementSibling.textContent;
-    return {
-      out,
-      yiTitle: document.getElementById('almanac-focus-yi').title,
-      jiTitle: document.getElementById('almanac-focus-ji').title
-    };
-  });
-  const keys = Object.keys(sections.out);
-  const focus = sections.out['今日焦点'];
-  const yi = sections.out[keys.find((k) => k.startsWith('宜（'))];
-  const ji = sections.out[keys.find((k) => k.startsWith('忌（'))];
-  for (const text of [focus, yi, ji, sections.yiTitle, sections.jiTitle]) {
+test('C7 焦点词悬停不含「（原词）」；农历风格不变', async () => {
+  const titles = await page.evaluate(() => ({
+    yiTitle: document.getElementById('almanac-focus-yi').title,
+    jiTitle: document.getElementById('almanac-focus-ji').title
+  }));
+  for (const text of [titles.yiTitle, titles.jiTitle]) {
     expect(text.includes('（')).toBe(false);
   }
-  await page.click('#almanac-detail-close');
 
   await useStyle('lunar');
   const lunar = await page.evaluate(() => {

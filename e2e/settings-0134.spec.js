@@ -79,7 +79,7 @@ test('C1 settings menu labels and view open', async () => {
   const items = await settingsMenuItems();
   const moreIdx = items.findIndex((i) => i.id === 'more-settings');
   expect(moreIdx).toBeGreaterThanOrEqual(0);
-  expect(items[moreIdx].label).toBe('更多…');
+  expect(items[moreIdx].label).toBe('全部设置…');
   expect(items[moreIdx + 1].type).toBe('separator');
   expect(items[moreIdx + 2].id).toBe('quit');
   const login = items.find((i) => i.id === 'open-at-login');

@@ -48,10 +48,6 @@ const weatherList = document.getElementById('weather-list');
 const almanacPicker = document.getElementById('almanac-picker');
 const almanacPickerClose = document.getElementById('almanac-picker-close');
 const almanacStyleList = document.getElementById('almanac-style-list');
-const almanacDetail = document.getElementById('almanac-detail');
-const almanacDetailTitle = document.getElementById('almanac-detail-title');
-const almanacDetailBody = document.getElementById('almanac-detail-body');
-const almanacDetailClose = document.getElementById('almanac-detail-close');
 
 const appBody = document.querySelector('.app-body');
 const settingsView = document.getElementById('settings-view');
@@ -62,13 +58,14 @@ const settingsPageUpdate = document.getElementById('settings-page-update');
 const settingOpenAtLogin = document.getElementById('setting-open-at-login');
 const settingShowDate = document.getElementById('setting-show-date');
 const settingsVersion = document.getElementById('settings-version');
+const settingsPageTitle = document.getElementById('settings-page-title');
+const weatherRetry = document.getElementById('weather-retry');
 const settingsCheckUpdate = document.getElementById('settings-check-update');
 
 let settingsTab = null;
 
 let state = null;
 let lastAlmanac = null;
-let detailDay = null;
 let yearOptionsBuilt = false;
 let clocks = null;
 let searchToken = 0;
@@ -154,73 +151,25 @@ function renderAlmanac(almanac) {
     drawnQuote = null;
     drawnFor = drawKey;
   }
-  almanacQuote.textContent = drawnQuote || almanac.quote;
-
-  // 详情面板打开时，日期或风格变了就重画。
-  if (!almanacDetail.hidden && `${almanac.dateKey}|${almanac.styleId}` !== detailDay) {
-    renderAlmanacDetail(almanac);
-  }
+  renderQuote(almanacQuote, drawnQuote || almanac.quote);
 }
 
-function detailSection(parent, heading, lines) {
-  const title = document.createElement('div');
-  title.className = 'almanac-detail-heading';
-  title.textContent = heading;
-
-  const text = document.createElement('div');
-  text.className = 'almanac-detail-text';
-  for (const line of lines) {
-    const row = document.createElement('div');
-    row.className = 'almanac-detail-line';
-    row.textContent = line;
-    text.append(row);
+// 0.1.35：签语有空格就在空格处断成两行（两段各自不换行）；没有空格交给
+// CSS text-wrap: balance。textContent 仍等于原签语。
+function renderQuote(el, text) {
+  const t = String(text || '');
+  const i = t.indexOf(' ');
+  if (i > 0 && i < t.length - 1) {
+    const line = (value) => {
+      const span = document.createElement('span');
+      span.className = 'q-line';
+      span.textContent = value;
+      return span;
+    };
+    el.replaceChildren(line(t.slice(0, i)), document.createTextNode(' '), line(t.slice(i + 1)));
+    return;
   }
-
-  parent.append(title, text);
-}
-
-function focusLine(label, focus) {
-  const hint = focus.hint ? ` · ${focus.hint}` : '';
-  return `${label} ${focus.text}${hint}`;
-}
-
-function renderAlmanacDetail(almanac = lastAlmanac) {
-  if (!almanac) return;
-  almanacDetailTitle.textContent = isTodayAlmanac(almanac)
-    ? `今日黄历 · ${almanac.lunarDayText}`
-    : `黄历 · ${almanac.lunarDayText}`;
-  almanacDetailBody.replaceChildren();
-
-  const detail = almanac.detail;
-  detailSection(almanacDetailBody, '今日焦点', [
-    focusLine('宜', almanac.focusYi),
-    focusLine('忌', almanac.focusJi)
-  ]);
-  detailSection(
-    almanacDetailBody,
-    `宜（${detail.yiItems.length}）`,
-    [detail.yiItems.join(' ')]
-  );
-  detailSection(
-    almanacDetailBody,
-    `忌（${detail.jiItems.length}）`,
-    [detail.jiItems.join(' ')]
-  );
-  if (almanac.quote) {
-    detailSection(almanacDetailBody, '签语', [almanac.quote]);
-  }
-  detailSection(
-    almanacDetailBody,
-    '建除 · 值神 · 冲煞',
-    [`${detail.zhiXing}日 · ${detail.tianShen}（${detail.tianShenLuck}） · ${detail.chongText}`]
-  );
-  detailSection(
-    almanacDetailBody,
-    '彭祖百忌',
-    [`${detail.pengZu[0]}；${detail.pengZu[1]}`]
-  );
-
-  detailDay = `${almanac.dateKey}|${almanac.styleId}`;
+  el.textContent = t;
 }
 
 function renderClockList(snapshot) {
@@ -405,24 +354,9 @@ function runClockSearch() {
   }, 60);
 }
 
-function openAlmanacDetail() {
-  closeClockEditor();
-  closeWeatherPicker();
-  closeAlmanacPicker();
-  clearSettingsHighlight();
-  almanacDetail.hidden = false;
-  renderAlmanacDetail();
-}
-
-function closeAlmanacDetail() {
-  almanacDetail.hidden = true;
-  almanacDetailBody.replaceChildren();
-}
-
 function openClockEditor() {
   closeWeatherPicker();
   closeAlmanacPicker();
-  closeAlmanacDetail();
   clearSettingsHighlight();
   clockPicker.hidden = false;
   clockSearch.value = '';
@@ -700,6 +634,8 @@ function renderWeather(result) {
     weatherRange.hidden = !range;
     weatherCity.textContent = result.city;
     weatherCard.title = `${result.city} · ${result.weather}`;
+    weatherCard.classList.remove('is-failed');
+    weatherRetry.hidden = true;
     return;
   }
 
@@ -712,7 +648,25 @@ function renderWeather(result) {
   weatherRange.hidden = true;
   weatherCity.textContent = text;
   weatherCard.title = text;
+  // 0.1.35：失败态常显「重试」，并隐藏悬停的「更换 ›」（CSS .is-failed）。
+  const failed = !(result && typeof result.text === 'string' && result.text.includes('加载中'));
+  weatherCard.classList.toggle('is-failed', failed);
+  weatherRetry.hidden = !failed;
 }
+
+function retryWeather(event) {
+  event.stopPropagation();
+  event.preventDefault();
+  weatherCity.textContent = '正在刷新…';
+  api.refreshWeather().then((result) => {
+    if (result) renderWeather(result);
+  }).catch(() => {});
+}
+
+weatherRetry.addEventListener('click', retryWeather);
+weatherRetry.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter' || event.key === ' ') retryWeather(event);
+});
 
 function requestWeather() {
   const token = weatherToken + 1;
@@ -843,7 +797,6 @@ function runWeatherSearch() {
 function openWeatherPicker() {
   closeClockEditor();
   closeAlmanacPicker();
-  closeAlmanacDetail();
   clearSettingsHighlight();
   weatherPicker.hidden = false;
   weatherSearch.value = '';
@@ -947,7 +900,6 @@ function selectAlmanacStyle(row) {
 function openAlmanacPicker() {
   closeClockEditor();
   closeWeatherPicker();
-  closeAlmanacDetail();
   clearSettingsHighlight();
   almanacPicker.hidden = false;
   almanacStyleList.replaceChildren();
@@ -1060,6 +1012,8 @@ weatherSearch.addEventListener('input', () => {
   runWeatherSearch();
 });
 
+let redrawShakeTimer = null;
+
 almanacRedraw.addEventListener('click', (event) => {
   event.stopPropagation();
   if (!lastAlmanac) return;
@@ -1067,21 +1021,19 @@ almanacRedraw.addEventListener('click', (event) => {
   const pool = (lastAlmanac.quotePool || []).filter((q) => q !== current);
   if (pool.length === 0) return;
   drawnQuote = pool[Math.floor(Math.random() * pool.length)];
-  almanacQuote.textContent = drawnQuote;
+  renderQuote(almanacQuote, drawnQuote);
   almanacRedraw.classList.remove('is-shaking');
   almanacQuote.classList.remove('is-fresh');
   void almanacRedraw.offsetWidth;
   almanacRedraw.classList.add('is-shaking');
   almanacQuote.classList.add('is-fresh');
+  // 动画 400ms；reduced-motion 时没有 animationend，也按时移除。
+  clearTimeout(redrawShakeTimer);
+  redrawShakeTimer = setTimeout(() => almanacRedraw.classList.remove('is-shaking'), 450);
 });
 
 almanacRedraw.addEventListener('animationend', () => almanacRedraw.classList.remove('is-shaking'));
 almanacQuote.addEventListener('animationend', () => almanacQuote.classList.remove('is-fresh'));
-
-almanacCard.addEventListener('click', (event) => {
-  if (event.target.closest('#almanac-customize')) return;
-  openAlmanacDetail();
-});
 
 almanacCustomize.addEventListener('click', () => {
   openAlmanacPicker();
@@ -1091,17 +1043,12 @@ almanacPickerClose.addEventListener('click', () => {
   closeAlmanacPicker();
 });
 
-almanacDetailClose.addEventListener('click', () => {
-  closeAlmanacDetail();
-});
-
 const EMBEDDED = { almanac: [almanacPicker, openAlmanacPicker], weather: [weatherPicker, openWeatherPicker], clocks: [clockPicker, openClockEditor] };
 
 function closeAllPickers() {
   closeClockEditor();
   closeWeatherPicker();
   closeAlmanacPicker();
-  closeAlmanacDetail();
   almanacPicker.classList.remove('is-embedded');
   weatherPicker.classList.remove('is-embedded');
   clockPicker.classList.remove('is-embedded');
@@ -1111,6 +1058,7 @@ function selectSettingsTab(tab) {
   settingsTab = tab;
   settingsTabs.forEach((el) => {
     const on = el.dataset.tab === tab;
+    if (on) settingsPageTitle.textContent = el.textContent;
     el.classList.toggle('is-selected', on);
     el.setAttribute('aria-selected', on ? 'true' : 'false');
   });

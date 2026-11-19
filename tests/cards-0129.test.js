@@ -64,12 +64,13 @@ test('签区去掉「签」标签、带重新抽签按钮且去掉第二行', ()
   assert.match(row[0], /id="almanac-quote"/);
   assert.equal(html.includes('id="almanac-meta"'), false);
 
-  assert.match(cssRule('.almanac-quote'), /text-overflow:\s*ellipsis/);
+  // 0.1.35：签语改为空格处断行 / text-wrap: balance，不再省略号截断。
+  assert.match(cssRule('.almanac-quote'), /text-wrap:\s*balance/);
+  assert.equal(/-webkit-line-clamp/.test(cssRule('.almanac-quote')), false);
   assert.match(cssRule('.almanac-redraw'), /var\(--almanac-accent-light,\s*var\(--accent\)\)/);
   assert.match(cssRule('.almanac-quote-row'), /border-top:\s*1px solid/);
 
   assert.equal(renderer.includes('almanacMeta'), false);
-  assert.ok(renderer.includes('建除 · 值神 · 冲煞'));
 });
 
 test('天气卡片在气温后渲染气温区间小字', () => {
@@ -80,7 +81,7 @@ test('天气卡片在气温后渲染气温区间小字', () => {
 
   const range = cssRule('.weather-range');
   assert.match(range, /font-size:\s*11px/);
-  assert.match(range, /var\(--muted-strong\)/);
+  assert.match(range, /var\(--muted\)/);
   assert.match(cssRule('.weather-range[hidden]'), /display:\s*none/);
 
   assert.ok(renderer.includes('rangeText'));

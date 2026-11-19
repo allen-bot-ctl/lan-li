@@ -100,7 +100,7 @@ test('C1 检查中外圈弧旋转、箭头不动', async () => {
   await clearToast();
 });
 
-test('C2 黄历签语无「签」标签、卡上无干支冲煞，详情仍有建除 · 值神 · 冲煞', async () => {
+test('C2 黄历签语无「签」标签、卡上无干支冲煞，点卡片不弹详情', async () => {
   await trayEnter();
   const card = await page.evaluate(() => ({
     tag: document.querySelector('.almanac-quote-row .almanac-tag-qian')?.textContent,
@@ -113,11 +113,9 @@ test('C2 黄历签语无「签」标签、卡上无干支冲煞，详情仍有�
   expect(card.meta).toBe(false);
   expect(/冲.煞/.test(card.text)).toBe(false);
 
+  // 0.1.35：黄历详情面板已删除，点卡片不再弹出任何面板。
   await page.click('#almanac-focus-yi');
-  await expect(page.locator('#almanac-detail')).toBeVisible();
-  await expect(page.locator('#almanac-detail-body')).toContainText('建除 · 值神 · 冲煞');
-  await page.click('#almanac-detail-close');
-  await expect(page.locator('#almanac-detail')).toBeHidden();
+  await expect(page.locator('[role="dialog"]:visible')).toHaveCount(0);
 });
 
 test('C4 天气显示当前气温与区间；无区间只显示当前；最长文案不换行', async () => {

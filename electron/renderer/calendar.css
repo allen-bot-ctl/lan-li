@@ -629,11 +629,6 @@ select {
 
 .almanac-card {
   padding-bottom: 9px;
-  cursor: pointer;
-}
-
-.almanac-card:hover {
-  background: var(--chip-hover);
 }
 
 .almanac-style-name {
@@ -642,11 +637,6 @@ select {
   color: var(--almanac-accent-light, var(--muted));
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.almanac-style-name::after {
-  content: '›';
-  margin-left: 2px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -704,8 +694,36 @@ select {
   background: var(--chip-hover);
 }
 
-.almanac-redraw.is-shaking svg {
-  animation: almanac-shake 0.3s ease-in-out;
+.almanac-redraw .qiantong {
+  display: block;
+  width: 24px;
+  height: 24px;
+}
+
+#pop-stick {
+  transform-box: view-box;
+}
+
+.almanac-redraw.is-shaking .qiantong {
+  animation: almanac-shake 0.4s ease-in-out;
+  transform-origin: 50% 90%;
+}
+
+/* 签筒按 viewBox 64 显示为 24px：-16 视图单位 ≈ 上弹 6px。 */
+.almanac-redraw.is-shaking #pop-stick {
+  animation: qt-pop 0.4s ease-out;
+}
+
+@keyframes qt-pop {
+  0%, 100% { transform: translateY(0); }
+  45% { transform: translateY(-16px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .almanac-redraw.is-shaking .qiantong,
+  .almanac-redraw.is-shaking #pop-stick {
+    animation: none;
+  }
 }
 
 .almanac-quote.is-fresh {
@@ -742,13 +760,17 @@ select {
   min-width: 0;
   overflow: hidden;
   color: var(--text);
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  display: block;
+  max-height: 36px;
   font-size: 13px;
   line-height: 18px;
-  text-overflow: ellipsis;
   white-space: normal;
+  text-wrap: balance;
+}
+
+.almanac-quote .q-line {
+  display: block;
+  white-space: nowrap;
 }
 
 .almanac-quote-row {
@@ -816,7 +838,6 @@ select {
   color: var(--muted);
   font-size: 10px;
   line-height: 1.2;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -884,7 +905,8 @@ select {
 
 .weather-range {
   flex: 0 0 auto;
-  color: var(--muted-strong);
+  margin-left: 3px;
+  color: var(--muted);
   font-size: 11px;
   line-height: 18px;
   white-space: nowrap;
@@ -1150,33 +1172,10 @@ select {
   font-size: 10.5px;
 }
 
-.almanac-detail-body {
-  min-height: 0;
-  overflow-y: auto;
-}
 
-.almanac-detail-heading {
-  margin-top: 9px;
-  color: var(--muted);
-  font-size: 11px;
-  line-height: 1.4;
-}
 
-.almanac-detail-heading:first-child {
-  margin-top: 0;
-}
 
-.almanac-detail-text {
-  margin-top: 2px;
-  color: var(--text);
-  font-size: 12px;
-  line-height: 1.5;
-  white-space: normal;
-}
 
-.almanac-detail-line + .almanac-detail-line {
-  margin-top: 1px;
-}
 
 .picker-added-list {
   flex: 0 1 auto;
@@ -1258,12 +1257,24 @@ select {
 .settings-view{position:absolute;top:32px;left:0;right:0;bottom:0;display:flex;flex-direction:row;}
 .settings-view[hidden],.app-body[hidden],.settings-page[hidden]{display:none !important;}
 .settings-nav{width:120px;flex:0 0 120px;display:flex;flex-direction:column;gap:2px;padding:8px 6px;border-right:1px solid var(--sheet-border);}
-.settings-tab,.settings-back{all:unset;padding:6px 10px;border-radius:6px;color:var(--text);font-size:13px;cursor:default;}
+.settings-tab,.settings-back{all:unset;box-sizing:border-box;height:30px;line-height:30px;padding:0 10px;border-radius:6px;color:var(--text);font-size:13px;text-align:left;cursor:pointer;flex:0 0 30px;}
+.settings-tab:hover,.settings-back:hover{background:var(--chip);}
+.settings-tab:focus-visible,.settings-back:focus-visible{outline:2px solid var(--accent);outline-offset:-2px;}
+.settings-nav-divider{flex:0 0 1px;height:1px;margin:6px 0;background:var(--sheet-border);}
 .settings-tab.is-selected{background:var(--chip-hover);color:var(--text);}
-.settings-back{margin-bottom:6px;opacity:.8}
-.settings-content{position:relative;flex:1 1 auto;min-width:0;padding:14px 16px;overflow:auto;color:var(--text);}
+.settings-content{position:relative;flex:1 1 auto;min-width:0;padding:0 16px 14px;overflow:auto;color:var(--text);font-size:13px;}
+.settings-page-title{box-sizing:border-box;height:36px;line-height:35px;margin:0 -16px 8px;padding:0 16px;font-size:15px;font-weight:600;border-bottom:1px solid var(--sheet-border);}
 .settings-row{display:flex;align-items:center;justify-content:space-between;height:34px;font-size:13px;}
-.settings-button{margin-top:10px;}
-.picker-overlay.is-embedded{top:32px;left:120px;padding:0;background:transparent;backdrop-filter:none;}
+.settings-check-update{margin-top:10px;padding:4px 12px;font-size:13px;}
+.picker-overlay.is-embedded{top:68px;left:120px;padding:0;background:transparent;backdrop-filter:none;}
 .picker-overlay.is-embedded .picker-sheet{max-width:none;height:100%;border:0;border-radius:0;box-shadow:none;background:transparent;}
 .picker-overlay.is-embedded .picker-close{display:none;}
+.picker-overlay.is-embedded .picker-head{display:none;}
+.picker-overlay.is-embedded .picker-sheet *{font-size:13px;}
+.picker-overlay.is-embedded .picker-section-label{font-size:12px;}
+.weather-retry{flex:0 0 auto;margin-left:6px;color:var(--link, var(--accent));font-size:11px;line-height:18px;cursor:pointer;}
+.weather-retry[hidden]{display:none;}
+.weather-card.is-failed .weather-change{display:none !important;}
+.weather-card.is-failed:hover .weather-city,.weather-card.is-failed:focus-visible .weather-city{opacity:1;}
+.weather-card.is-failed .weather-swap{display:flex;align-items:center;justify-content:flex-end;gap:6px;}
+.weather-card.is-failed .weather-retry{margin-left:0;}

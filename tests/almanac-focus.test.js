@@ -582,6 +582,7 @@ test('10. focus text never needs truncation and old list markup is gone', () => 
   assert.equal(/text-overflow/.test(focus), false);
 
   const quote = cssRule(css, '.almanac-quote');
-  assert.match(quote, /text-overflow:\s*ellipsis/);
+  assert.match(quote, /text-wrap:\s*balance/);
+  assert.equal(/-webkit-line-clamp/.test(quote), false);
   assert.equal(/\.almanac-meta\s*\{/.test(css), false);
 });

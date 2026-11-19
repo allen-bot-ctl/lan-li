@@ -1140,7 +1140,13 @@ function registerE2eHooks() {
     weatherRefreshCalls() { return e2eWeatherRefreshCalls.slice(); },
     triggerResume() { if (weatherRefresher) weatherRefresher.onResume(); return true; },
     refreshWeatherNow() { return refreshWeather(true).then((r) => r); },
-    hideWindow() { hideCalendar(); return true; }
+    hideWindow() { hideCalendar(); return true; },
+    localZone() { return defaultLocalTimeZone(); },
+    allQuotes() {
+      if (!almanacStyleCatalog) initializeAlmanacStyle();
+      const ids = almanacStyleCatalog.list(almanacStyle).map((style) => style.id);
+      return ids.map((id) => ({ id, pool: buildAlmanac(currentNow(), id).quotePool || [] }));
+    }
   };
 }
 

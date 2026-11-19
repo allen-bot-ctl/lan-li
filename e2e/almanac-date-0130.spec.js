@@ -90,13 +90,7 @@ test('C4 点 12 月灰色「2」格：翻到 12 月、2 号描边、卡片与详
   const card = await cardText();
   expect(card).toEqual({ yi: expected.yi, ji: expected.ji, quote: expected.quote });
 
-  await page.click('#almanac-focus-yi');
-  await expect(page.locator('#almanac-detail')).toBeVisible();
-  await expect(page.locator('#almanac-detail-title')).toHaveText(`黄历 · ${expected.lunar}`);
-  await expect(page.locator('#almanac-detail-body')).toContainText(expected.yi);
   await page.screenshot({ path: path.join(SHOTS, '20-almanac-date-0130.png') });
-  await page.click('#almanac-detail-close');
-  await expect(page.locator('#almanac-detail')).toBeHidden();
 });
 
 test('C5 翻月不改选中，点「今天」回到今天，收起再打开也回到今天', async () => {
