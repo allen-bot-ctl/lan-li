@@ -58,7 +58,7 @@ const {
   removeClock,
   searchCatalog
 } = require('./world-clocks');
-const { buildSettingsMenuTemplate } = require('./settings-menu');
+const { buildSettingsMenuTemplate, buildTrayMenuTemplate } = require('./settings-menu');
 const { computePanelBounds } = require('./window-layout');
 const {
   RELEASES_LATEST_URL,
@@ -103,6 +103,12 @@ let settingsMenuOpen = false;
 let e2eLastSettingsAnchor = null;
 let e2eSettingsMenu = null;
 let settingsViewOpen = false;
+// 0.1.40 托盘右键菜单：菜单开着时悬停不开日历；从菜单打开设置后保持打开，
+// 直到鼠标进入窗口再离开（或 Esc / 隐藏）。
+let trayMenuOpen = false;
+let trayMenuHold = false;
+let e2eTrayMenu = null;
+let e2eQuitCalls = 0;
 // Pinned is deliberately in-memory only: hiding or restarting clears it.
 let pinned = false;
 let updater = null;
@@ -460,10 +466,44 @@ function createTray() {
 
   tray.on('mouse-enter', openCalendar);
   tray.on('mouse-leave', scheduleClose);
+  tray.on('right-click', () => openTrayMenu());
   tray.on('click', () => {
     if (!calendarWindow || calendarWindow.isDestroyed()) return;
     if (!calendarWindow.isVisible()) openCalendar();
   });
+}
+
+function buildTrayMenu() {
+  const template = buildTrayMenuTemplate({
+    checkUpdate: () => { openSettingsFromTray(); requestUpdateCheck(); },
+    openSettings: () => openSettingsFromTray(),
+    quit: () => quitApp()
+  });
+  const menu = Menu.buildFromTemplate(template);
+  menu.on('menu-will-close', () => { trayMenuOpen = false; });
+  return menu;
+}
+
+function openTrayMenu() {
+  hideCalendar();
+  trayMenuOpen = true;
+  const menu = buildTrayMenu();
+  if (E2E) { e2eTrayMenu = menu; return; }
+  if (tray) tray.popUpContextMenu(menu);
+  trayMenuOpen = false;
+}
+
+function openSettingsFromTray() {
+  trayMenuOpen = false;
+  trayMenuHold = true;
+  openCalendar();
+  settingsViewOpen = true;
+  sendPanel('settings');
+}
+
+function quitApp() {
+  if (E2E) { e2eQuitCalls += 1; return; }
+  app.quit();
 }
 
 function sendUpdateNotice() {
@@ -542,7 +582,10 @@ function performUpdateCheck() {
 // The settings menu runs the existing update check without a renderer round
 // trip. Updater statuses are pushed through onStatus; only the unavailable
 // path needs an explicit message.
+let e2eUpdateChecks = 0;
+let e2eUpdateChecks0 = 0;
 function requestUpdateCheck() {
+  if (E2E) e2eUpdateChecks += 1;
   const status = performUpdateCheck();
   if (!updater) sendUpdateStatus(status);
 }
@@ -728,6 +771,7 @@ function scheduleClose() {
   // A native settings menu floats above the window; pointer-leave would
   // otherwise hide the calendar while the user is still choosing an item.
   if (settingsMenuOpen) return;
+  if (trayMenuOpen || trayMenuHold) return;
   closeTimer = setTimeout(hideCalendar, 200);
 }
 
@@ -748,6 +792,7 @@ function positionCalendar() {
 
 function openCalendar() {
   if (!calendarWindow || calendarWindow.isDestroyed()) return;
+  if (trayMenuOpen) return;   // 0.1.40：托盘右键菜单开着时悬停不开日历
 
   cancelClose();
   const wasVisible = calendarWindow.isVisible();
@@ -768,6 +813,7 @@ function openCalendar() {
 
 function hideCalendar() {
   cancelClose();
+  trayMenuHold = false;
   settingsViewOpen = false;
   // Hiding always ends the pinned session; the next tray hover reopens in the
   // default unpinned state, as required (nothing is persisted).
@@ -1022,6 +1068,7 @@ function registerIpc() {
   });
 
   ipcMain.on('pointer:enter', () => {
+    trayMenuHold = false;
     cancelClose();
   });
 
@@ -1128,6 +1175,10 @@ function registerE2eHooks() {
       e2eSettingsMenu = null;
       return true;
     },
+    trayRightClick() { openTrayMenu(); return { menuOpen: trayMenuOpen, visible: Boolean(calendarWindow && !calendarWindow.isDestroyed() && calendarWindow.isVisible()) }; },
+    trayMenuItems() { return e2eTrayMenu ? e2eTrayMenu.items.map((i) => ({ id: i.id, label: i.label, type: i.type, accelerator: i.accelerator || null })) : null; },
+    clickTrayMenuItem(id) { const item = e2eTrayMenu && e2eTrayMenu.getMenuItemById(id); if (!item) return false; e2eUpdateChecks0 = e2eUpdateChecks; item.click(); trayMenuOpen = false; e2eTrayMenu = null; return true; },
+    trayMenuStats() { return { quitCalls: e2eQuitCalls, updateChecks: e2eUpdateChecks - e2eUpdateChecks0, hold: trayMenuHold }; },
     clickSettingsMenuItem(id) { const item = e2eSettingsMenu && e2eSettingsMenu.getMenuItemById(id); if (!item) return false; item.click(); return true; },
     emitUpdateStatus(status) {
       sendUpdateStatus(status);
