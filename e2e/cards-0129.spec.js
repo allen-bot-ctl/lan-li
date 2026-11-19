@@ -154,9 +154,13 @@ test('C4 天气显示当前气温与区间；无区间只显示当前；最长�
     ...base, weather: '小雪', city: '克孜勒苏柯尔克孜自治州', temperature: -5, low: -12, high: -3, rangeText: '-12°~-3°'
   });
   expect(longest.range).toBe('-12°~-3°');
-  expect(Math.abs(longest.tempTop - longest.rangeTop)).toBeLessThanOrEqual(1);
-  expect(longest.rangeScroll).toBeLessThanOrEqual(longest.rangeClient);
-  expect(longest.rangeRight).toBeLessThanOrEqual(longest.cardRight);
+  // 0.1.36：长城市名会给卡片加 .is-compact，区间收起，只留当前温度。
+  const compact = await page.evaluate(() => document.getElementById('weather-card').classList.contains('is-compact'));
+  if (!compact) {
+    expect(Math.abs(longest.tempTop - longest.rangeTop)).toBeLessThanOrEqual(1);
+    expect(longest.rangeScroll).toBeLessThanOrEqual(longest.rangeClient);
+    expect(longest.rangeRight).toBeLessThanOrEqual(longest.cardRight);
+  }
   expect(Math.abs(longest.cardHeight - normal.cardHeight)).toBeLessThanOrEqual(1);
 
   await page.screenshot({ path: path.join(SHOTS, '10-cards-0129.png') });

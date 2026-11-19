@@ -654,6 +654,7 @@ function renderWeather(result) {
     weatherCard.title = `${result.city} · ${result.weather}`;
     weatherCard.classList.remove('is-failed');
     weatherRetry.hidden = true;
+    fitWeatherCity();
     return;
   }
 
@@ -670,8 +671,16 @@ function renderWeather(result) {
   const shown = failed ? '天气不可用' : text;
   weatherCity.textContent = shown;
   weatherCard.title = shown;
+  weatherCard.classList.remove('is-compact');
   weatherCard.classList.toggle('is-failed', failed);
   weatherRetry.hidden = !failed;
+}
+
+// 0.1.36：城市名放不下时先隐藏区间（.is-compact），每次渲染都重新判断。
+function fitWeatherCity() {
+  weatherCard.classList.remove('is-compact');
+  if (weatherRange.hidden) return;
+  if (weatherCity.scrollWidth > weatherCity.clientWidth) weatherCard.classList.add('is-compact');
 }
 
 function retryWeather(event) {
@@ -715,12 +724,18 @@ function weatherRowButton(row) {
   name.className = 'picker-name';
   name.textContent = row.label;
 
-  if (row.selected) {
-    button.disabled = true;
-    const tag = document.createElement('span');
-    tag.className = 'picker-zone';
-    tag.textContent = '已选';
-    button.append(name, tag);
+  const selected = row.auto
+    ? Boolean(weatherQuickCities && weatherQuickCities.manual === false)
+    : row.selected === true;
+  if (selected) {
+    // 0.1.36：选中行仍可点，用底色 + ✓ 表示，不再置灰、不写「已选」。
+    button.classList.add('is-selected');
+    button.setAttribute('aria-selected', 'true');
+    const check = document.createElement('span');
+    check.className = 'picker-check';
+    check.setAttribute('aria-label', '已选');
+    check.textContent = '✓';
+    button.append(name, check);
   } else {
     button.append(name);
   }

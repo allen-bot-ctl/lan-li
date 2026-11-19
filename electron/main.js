@@ -887,8 +887,9 @@ function registerIpc() {
     }
 
     const group = findQuickCities(country);
-    if (!group) return { country: '', countryCode: '', cities: [] };
+    if (!group) return { country: '', countryCode: '', cities: [], manual: Boolean(manual) };
     return {
+      manual: Boolean(manual),
       country: group.country,
       countryCode: group.code,
       cities: group.cities.map((city) => ({

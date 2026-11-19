@@ -218,8 +218,10 @@ test('C5 设置导航：返回与「界面设置」之间有分割线；都是�
   expect(m.dividerHeight).toBeGreaterThan(0);
   for (const item of m.items) {
     expect(item.cursor).toBe('pointer');
-    expect(Math.abs(item.h - 30)).toBeLessThanOrEqual(0.5);
   }
+  // 0.1.36：「返回」改成 36px 与页标题同高，各导航项仍是 30px。
+  expect(Math.abs(m.items[0].h - 36)).toBeLessThanOrEqual(0.5);
+  for (const item of m.items.slice(1)) expect(Math.abs(item.h - 30)).toBeLessThanOrEqual(0.5);
   await backToCalendar();
 });
 
@@ -429,7 +431,8 @@ test('C13 走查补充 N1–N6', async () => {
   await expect(page.locator('#pin-button')).toBeVisible();
   await expect(page.locator('#check-update')).toBeVisible();
   const pinIn = await box('#pin-button');
-  expect(Math.abs(pinIn.x - pinBefore.x)).toBeLessThanOrEqual(0.5);
+  // 0.1.36 起 ⚙ 改为 display:none，钉住贴回右边（右距见 polish-0136 C2），只会右移不会左移。
+  expect(pinIn.x).toBeGreaterThanOrEqual(pinBefore.x - 0.5);
 
   // N2：没有外露的原生复选框；点行文字也能切换
   const exposed = await page.evaluate(() => [...document.querySelectorAll('#settings-page-ui input[type=checkbox]')]

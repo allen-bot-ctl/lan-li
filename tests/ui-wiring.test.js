@@ -71,7 +71,9 @@ test('weather picker lists quick cities when the search box is empty', () => {
   assert.match(renderer, /weatherSearch\.value\.trim\(\) === ''/);
   assert.match(renderer, /section\.textContent = '常用城市'/);
   assert.match(renderer, /api\.getQuickCities\(\)/);
-  assert.match(renderer, /tag\.textContent = '已选'/);
+  // 0.1.36：选中行改为 is-selected + ✓，不再写「已选」。
+  assert.ok(renderer.includes("button.classList.add('is-selected')"));
+  assert.equal(renderer.includes("tag.textContent = '已选'"), false);
   assert.match(preload, /getQuickCities:\s*\(\)\s*=>\s*ipcRenderer\.invoke\('weather:quickCities'\)/);
   assert.match(main, /ipcMain\.handle\('weather:quickCities'/);
 });
