@@ -794,6 +794,7 @@ function updateClock() {
     const tooltip = formatTrayTooltipInZone(now, zone, local);
     const img = makeClockImage && title !== lastTrayTitle ? makeClockImage(title) : null;
     if (img) {
+      if (process.env.LANLI_DUMP_CLOCK) require('fs').writeFileSync(process.env.LANLI_DUMP_CLOCK, img.toPNG({ scaleFactor: 2 }));
       tray.setImage(img);
       tray.setTitle('');
     } else if (!makeClockImage || title !== lastTrayTitle) {
