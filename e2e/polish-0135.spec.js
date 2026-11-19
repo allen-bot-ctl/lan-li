@@ -31,7 +31,8 @@ async function box(selector) {
 async function openSettings() {
   await trayEnter();
   await page.click('#settings-button');
-  await hook('clickSettingsMenuItem', 'more-settings');
+  // 原生菜单 popup 是异步建立的；轮询到菜单项真正点上为止（偶发 flaky 修复）。
+  await expect.poll(() => mainEval(() => globalThis.__lanliTest.clickSettingsMenuItem('more-settings')), { timeout: 5000 }).toBe(true);
   await hook('closeSettingsMenu');
   await expect(page.locator('#settings-view')).toBeVisible();
 }
@@ -354,12 +355,12 @@ test('C11 天气：唤醒 5 秒后强制刷新；失败显示「重试」且不�
   const calls = await hook('weatherRefreshCalls');
   expect(calls[calls.length - 1]).toBe(true);
 
-  // ② 失败态：卡上「天气暂不可用」+「重试」；点重试只刷新
+  // ② 失败态：卡上「天气不可用」（N1）+「重试」；点重试只刷新
   await hook('setWeatherFail', true);
   await trayEnter();
   await hook('refreshWeatherNow');
   await expect(page.locator('#weather-retry')).toBeVisible();
-  await expect(page.locator('#weather-city')).toHaveText('天气暂不可用');
+  await expect(page.locator('#weather-city')).toHaveText('天气不可用');
   const n1 = (await hook('weatherRefreshCalls')).length;
   await page.click('#weather-retry');
   await expect.poll(async () => (await hook('weatherRefreshCalls')).length).toBeGreaterThan(n1);
@@ -388,4 +389,118 @@ test('C11 天气：唤醒 5 秒后强制刷新；失败显示「重试」且不�
   expect(r2.ok).toBe(false);
 
   await hook('setWeatherFail', false);
+});
+
+test('C13 走查补充 N1–N6', async () => {
+  // N1：失败态文字不溢出、无「—」、「重试」≥22px、悬停底色与正常卡片一致
+  await trayEnter();
+  await hook('setWeatherFail', true);
+  await page.evaluate(() => window.lanli.setCity(null));
+  await hook('refreshWeatherNow');
+  await expect(page.locator('#weather-retry')).toBeVisible();
+  const fail = await page.evaluate(() => {
+    const card = document.getElementById('weather-card');
+    const over = [...card.querySelectorAll('*')].filter((el) => el.offsetParent && el.scrollWidth > el.clientWidth + 0.5)
+      .map((el) => el.id || el.className);
+    const temp = document.getElementById('weather-temp');
+    return {
+      over,
+      tempShown: Boolean(temp.offsetParent),
+      city: document.getElementById('weather-city').textContent,
+      retryH: document.getElementById('weather-retry').getBoundingClientRect().height,
+      bg: getComputedStyle(card).backgroundColor
+    };
+  });
+  expect(fail.over).toEqual([]);
+  expect(fail.tempShown).toBe(false);
+  expect(fail.city).toBe('天气不可用');
+  expect(fail.retryH).toBeGreaterThanOrEqual(22);
+  await page.hover('#weather-city');
+  const hoverBg = await page.evaluate(() => getComputedStyle(document.getElementById('weather-card')).backgroundColor);
+  expect(hoverBg).toBe(fail.bg);
+  await page.mouse.move(5, 300);
+  await hook('setWeatherFail', false);
+  await hook('refreshWeatherNow');
+
+  // N4：设置视图里 ⚙ 不可见，钉住与下载位置不变；返回后再出现
+  const pinBefore = await box('#pin-button');
+  await openSettings();
+  await expect(page.locator('#settings-button')).toBeHidden();
+  await expect(page.locator('#pin-button')).toBeVisible();
+  await expect(page.locator('#check-update')).toBeVisible();
+  const pinIn = await box('#pin-button');
+  expect(Math.abs(pinIn.x - pinBefore.x)).toBeLessThanOrEqual(0.5);
+
+  // N2：没有外露的原生复选框；点行文字也能切换
+  const exposed = await page.evaluate(() => [...document.querySelectorAll('#settings-page-ui input[type=checkbox]')]
+    .filter((el) => { const r = el.getBoundingClientRect(); return r.width > 2 && r.height > 2; }).length);
+  expect(exposed).toBe(0);
+  const track = await page.evaluate(() => {
+    const r = document.querySelector('#settings-page-ui .switch-track').getBoundingClientRect();
+    return { w: r.width, h: r.height };
+  });
+  expect(track).toEqual({ w: 32, h: 18 });
+  const was = await page.isChecked('#setting-show-date');
+  await page.click('label.settings-row:has(#setting-show-date) .settings-label');
+  await expect.poll(() => page.isChecked('#setting-show-date')).toBe(!was);
+  expect(await page.evaluate(() => getComputedStyle(document.querySelector('label.settings-row')).cursor)).toBe('pointer');
+  await page.click('label.settings-row:has(#setting-show-date) .settings-label');
+  await expect.poll(() => page.isChecked('#setting-show-date')).toBe(was);
+
+  // N3：已添加城市在搜索框上方；结果最后一个可见行完整在容器内
+  await page.click('.settings-tab[data-tab="clocks"]');
+  await page.fill('#clock-search', 'a');
+  await expect(page.locator('#clock-search-results .picker-item').first()).toBeVisible();
+  await page.waitForTimeout(150);
+  const clocks = await page.evaluate(() => {
+    const added = document.getElementById('clock-added-list').getBoundingClientRect();
+    const search = document.getElementById('clock-search').getBoundingClientRect();
+    const list = document.getElementById('clock-search-results');
+    const lr = list.getBoundingClientRect();
+    const visible = [...list.querySelectorAll('.picker-item')].map((el) => el.getBoundingClientRect())
+      .filter((r) => r.top < lr.bottom - 0.5 && r.bottom > lr.top + 0.5);
+    const last = visible[visible.length - 1];
+    const sheet = document.querySelector('#clock-picker .picker-sheet').getBoundingClientRect();
+    return { addedAbove: added.bottom <= search.top + 0.5, lastBottom: last.bottom, listBottom: lr.bottom,
+      lastTop: last.top, listTop: lr.top, fillGap: sheet.bottom - lr.bottom, rowH: last.height };
+  });
+  expect(clocks.addedAbove).toBe(true);
+  expect(clocks.lastBottom).toBeLessThanOrEqual(clocks.listBottom + 0.5);
+  expect(clocks.lastTop).toBeGreaterThanOrEqual(clocks.listTop - 0.5);
+  expect(clocks.fillGap).toBeLessThan(clocks.rowH + 20);
+
+  // N6：黄历页选中行底色与其他行不同，带 ✓，行距 6px
+  await page.click('.settings-tab[data-tab="almanac"]');
+  await expect(page.locator('#almanac-style-list .almanac-style-item').first()).toBeVisible();
+  const styles = await page.evaluate(() => {
+    const rows = [...document.querySelectorAll('#almanac-style-list .almanac-style-item')];
+    const sel = rows.find((r) => r.classList.contains('is-selected'));
+    const other = rows.find((r) => r !== sel);
+    const a = rows[0].getBoundingClientRect();
+    const b = rows[1].getBoundingClientRect();
+    return { selBg: getComputedStyle(sel).backgroundColor, otherBg: getComputedStyle(other).backgroundColor,
+      check: sel.textContent.includes('✓'), oldTag: rows.some((r) => r.textContent.includes('已选')), gap: b.top - a.bottom };
+  });
+  expect(styles.selBg).not.toBe(styles.otherBg);
+  expect(styles.check).toBe(true);
+  expect(styles.oldTag).toBe(false);
+  expect(Math.abs(styles.gap - 6)).toBeLessThanOrEqual(0.5);
+
+  // N5：「检查更新」是 nav-pill（与「今天」同样式）；检查后下面一行显示结果
+  await page.click('.settings-tab[data-tab="update"]');
+  const pill = await page.evaluate(() => {
+    const a = getComputedStyle(document.getElementById('settings-check-update'));
+    const b = getComputedStyle(document.getElementById('today-button'));
+    return { h: [a.height, b.height], r: [a.borderRadius, b.borderRadius], bg: [a.backgroundColor, b.backgroundColor],
+      result: document.getElementById('settings-update-result').hidden };
+  });
+  expect(pill.h[0]).toBe(pill.h[1]);
+  expect(pill.r[0]).toBe(pill.r[1]);
+  expect(pill.bg[0]).toBe(pill.bg[1]);
+  await hook('emitUpdateStatus', { state: 'up-to-date' });
+  await expect(page.locator('#settings-update-result')).toBeVisible();
+  await expect(page.locator('#settings-update-result')).toContainText('已是最新');
+
+  await backToCalendar();
+  await expect(page.locator('#settings-button')).toBeVisible();
 });

@@ -39,7 +39,8 @@ async function openMore() {
   // 先确保窗口可见（前面的 spec 可能留下指针在窗外，窗口会被自动隐藏）。
   await trayEnter();
   await page.click('#settings-button');
-  await mainEval(() => globalThis.__lanliTest.clickSettingsMenuItem('more-settings'));
+  // 原生菜单 popup 是异步建立的；轮询到菜单项真正点上为止（偶发 flaky 修复）。
+  await expect.poll(() => mainEval(() => globalThis.__lanliTest.clickSettingsMenuItem('more-settings')), { timeout: 5000 }).toBe(true);
   await closeSettingsMenu();
   await expect(page.locator('#settings-view')).toBeVisible();
 }
@@ -103,7 +104,7 @@ test('C2 default tab is ui', async () => {
 
 test('C3 open-at-login toggle', async () => {
   const before = (await loginItemCalls()).length;
-  await page.click('#setting-open-at-login');
+  await page.click('label.settings-row:has(#setting-open-at-login)');
   await expect.poll(async () => {
     const calls = await loginItemCalls();
     return calls.length > before ? calls[calls.length - 1].openAtLogin : null;
@@ -111,7 +112,7 @@ test('C3 open-at-login toggle', async () => {
   let items = await settingsMenuItems();
   expect(items.find((i) => i.id === 'open-at-login').checked).toBe(true);
 
-  await page.click('#setting-open-at-login');
+  await page.click('label.settings-row:has(#setting-open-at-login)');
   await expect.poll(async () => {
     const calls = await loginItemCalls();
     return calls.length > before + 1 ? calls[calls.length - 1].openAtLogin : null;
@@ -133,7 +134,7 @@ test('C4 menu bar show date', async () => {
   expect(hms).toMatch(/^\d{2}:\d{2}:\d{2}$/);
   await expect.poll(() => trayTitle()).toBe(withDate);
 
-  await page.click('#setting-show-date');
+  await page.click('label.settings-row:has(#setting-show-date)');
   await expect.poll(() => trayTitle()).toBe(hms);
   await expect.poll(() => trayTitle()).toMatch(/^\d{2}:\d{2}:\d{2}$/);
 
@@ -150,7 +151,7 @@ test('C4 menu bar show date', async () => {
 
   await trayEnter();
   await openMore();
-  await page.click('#setting-show-date');
+  await page.click('label.settings-row:has(#setting-show-date)');
   await expect.poll(() => trayTitle()).toBe(withDate);
   await expect.poll(async () => (await readPrefs()).menuBarShowDate).toBe(true);
   expect(await trayTooltip()).toBe(tooltip);

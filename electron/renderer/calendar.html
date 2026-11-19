@@ -151,12 +151,13 @@
       <section class="settings-content" id="settings-content">
         <div class="settings-page-title" id="settings-page-title">界面设置</div>
         <div class="settings-page" id="settings-page-ui">
-          <label class="settings-row"><span class="settings-label">开机自启动</span><input class="settings-switch" id="setting-open-at-login" type="checkbox" role="switch"></label>
-          <label class="settings-row"><span class="settings-label">菜单栏显示日期</span><input class="settings-switch" id="setting-show-date" type="checkbox" role="switch"></label>
+          <label class="settings-row"><span class="settings-label">开机自启动</span><input class="settings-switch" id="setting-open-at-login" type="checkbox" role="switch"><span class="switch-track" aria-hidden="true"></span></label>
+          <label class="settings-row"><span class="settings-label">菜单栏显示日期</span><input class="settings-switch" id="setting-show-date" type="checkbox" role="switch"><span class="switch-track" aria-hidden="true"></span></label>
         </div>
         <div class="settings-page" id="settings-page-update" hidden>
           <div class="settings-row"><span class="settings-label">当前版本 <span id="settings-version"></span></span></div>
-          <button class="settings-check-update" id="settings-check-update" type="button">检查更新</button>
+          <button class="nav-pill settings-check-update" id="settings-check-update" type="button">检查更新</button>
+          <div class="settings-update-result" id="settings-update-result" hidden></div>
         </div>
       </section>
     </div>

@@ -333,6 +333,24 @@ function renderSearchResults(rows) {
     });
     clockSearchResults.append(button);
   }
+  fitEmbeddedClockResults();
+}
+
+// N3：设置页里结果列表占满剩余高度，但高度取整到整行，最后一行不被切掉一半。
+function fitEmbeddedClockResults() {
+  const el = clockSearchResults;
+  el.style.removeProperty('height');
+  el.style.removeProperty('flex');
+  if (!clockPicker.classList.contains('is-embedded') || clockPicker.hidden) return;
+  const first = el.querySelector('.picker-item');
+  if (!first) return;
+  const row = first.getBoundingClientRect().height;
+  const cs = getComputedStyle(el);
+  const pad = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+  const avail = el.clientHeight - pad;
+  if (!(row > 0) || !(avail > row)) return;
+  el.style.flex = '0 0 auto';
+  el.style.height = `${Math.floor(avail / row) * row + pad}px`;
 }
 
 function runClockSearchNow() {
@@ -646,10 +664,12 @@ function renderWeather(result) {
   weatherTemp.textContent = '—';
   weatherRange.textContent = '';
   weatherRange.hidden = true;
-  weatherCity.textContent = text;
-  weatherCard.title = text;
-  // 0.1.35：失败态常显「重试」，并隐藏悬停的「更换 ›」（CSS .is-failed）。
+  // 0.1.35：失败态常显「重试」，并隐藏悬停的「更换 ›」（CSS .is-failed）；
+  // N1：失败时文案统一为「天气不可用」、不显示「—」占位温度。
   const failed = !(result && typeof result.text === 'string' && result.text.includes('加载中'));
+  const shown = failed ? '天气不可用' : text;
+  weatherCity.textContent = shown;
+  weatherCard.title = shown;
   weatherCard.classList.toggle('is-failed', failed);
   weatherRetry.hidden = !failed;
 }
@@ -850,9 +870,11 @@ function renderAlmanacStyleRows(rows) {
     button.append(badge, info);
 
     if (row.selected) {
+      button.classList.add('is-selected');
       const selected = document.createElement('span');
-      selected.className = 'picker-zone';
-      selected.textContent = '已选';
+      selected.className = 'almanac-style-check';
+      selected.setAttribute('aria-label', '已选');
+      selected.textContent = '✓';
       button.append(selected);
     }
 
@@ -948,10 +970,28 @@ function showUpdateNotice(notice) {
 
 // Manual check statuses share the toast with update notices. Sticky notices win
 // so a pending download/restart prompt is never replaced by a status line.
+// N5：升级页「检查更新」下面一行显示上次检查结果；没检查过不显示。
+const UPDATE_RESULT_TEXT = {
+  'up-to-date': '已是最新',
+  error: '检查失败，请稍后再试',
+  manual: '需手动下载新版本',
+  ready: '新版本已就绪，重启即可更新'
+};
+
+function recordUpdateResult(state, label) {
+  const el = document.getElementById('settings-update-result');
+  if (!el || !state || state === 'checking' || state === 'downloading') return;
+  const text = UPDATE_RESULT_TEXT[state] || label;
+  if (!text) return;
+  el.textContent = `上次检查：${text}`;
+  el.hidden = false;
+}
+
 function applyCheckStatus(status) {
   if (!status) return;
   const state = typeof status.state === 'string' ? status.state : '';
   const label = typeof status.label === 'string' ? status.label : '';
+  recordUpdateResult(state, label);
   if (!state && !label) {
     if (toastState && toastState.type === 'progress') hideToast();
     return;

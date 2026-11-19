@@ -1265,7 +1265,6 @@ select {
 .settings-content{position:relative;flex:1 1 auto;min-width:0;padding:0 16px 14px;overflow:auto;color:var(--text);font-size:13px;}
 .settings-page-title{box-sizing:border-box;height:36px;line-height:35px;margin:0 -16px 8px;padding:0 16px;font-size:15px;font-weight:600;border-bottom:1px solid var(--sheet-border);}
 .settings-row{display:flex;align-items:center;justify-content:space-between;height:34px;font-size:13px;}
-.settings-check-update{margin-top:10px;padding:4px 12px;font-size:13px;}
 .picker-overlay.is-embedded{top:68px;left:120px;padding:0;background:transparent;backdrop-filter:none;}
 .picker-overlay.is-embedded .picker-sheet{max-width:none;height:100%;border:0;border-radius:0;box-shadow:none;background:transparent;}
 .picker-overlay.is-embedded .picker-close{display:none;}
@@ -1278,3 +1277,33 @@ select {
 .weather-card.is-failed:hover .weather-city,.weather-card.is-failed:focus-visible .weather-city{opacity:1;}
 .weather-card.is-failed .weather-swap{display:flex;align-items:center;justify-content:flex-end;gap:6px;}
 .weather-card.is-failed .weather-retry{margin-left:0;}
+/* N1：失败态不出「—」，卡片底色保持正常（悬停也不变灰）；「重试」是 22px 胶囊。 */
+.weather-card.is-failed .weather-temp{display:none;}
+.weather-card.is-failed:hover{background:var(--card-bg);}
+.weather-card.is-failed .weather-city{color:var(--text);overflow:visible;}
+.weather-retry{display:inline-flex;align-items:center;box-sizing:border-box;height:22px;padding:0 10px;border-radius:11px;background:var(--chip-hover);color:var(--text);font-size:11px;line-height:22px;}
+.weather-retry:hover{background:var(--chip);}
+
+/* N2：拨动开关 32×18，开为 --accent；原生复选框视觉隐藏，整行可点。 */
+label.settings-row{position:relative;cursor:pointer;}
+.settings-switch{position:absolute;width:1px;height:1px;margin:0;overflow:hidden;clip-path:inset(50%);}
+.switch-track{position:relative;flex:0 0 32px;width:32px;height:18px;border-radius:9px;background:var(--chip-hover);transition:background 120ms ease;}
+.switch-track::after{content:'';position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:transform 120ms ease;}
+.settings-switch:checked + .switch-track{background:var(--accent);}
+.settings-switch:checked + .switch-track::after{transform:translateX(14px);}
+.settings-switch:focus-visible + .switch-track{outline:2px solid var(--accent);outline-offset:2px;}
+/* N4：设置视图里隐藏顶栏「⚙︎ 设置」，占位保留，钉住与下载不挪位。 */
+.app:has(#settings-view:not([hidden])) #settings-button{visibility:hidden;}
+/* N5：「检查更新」用与「今天」相同的 nav-pill；下面一行是上次检查结果。 */
+.settings-check-update{margin-top:10px;padding:0 12px;font-size:12px;}
+.settings-update-result{margin-top:8px;color:var(--muted);font-size:12px;}
+.settings-update-result[hidden]{display:none;}
+/* N6：黄历风格选中行底色 + ✓，行距 6px。 */
+#almanac-style-list{display:flex;flex-direction:column;gap:6px;}
+.almanac-style-item.is-selected{background:var(--chip-hover);}
+.almanac-style-check{flex:0 0 auto;margin-left:auto;color:var(--accent);font-size:13px;}
+/* N3：设置页里的世界时钟：已添加城市在上，搜索框在下，结果占满剩余高度。 */
+.picker-overlay.is-embedded#clock-picker .picker-section-label{order:1;margin-top:0;}
+.picker-overlay.is-embedded#clock-picker .picker-added-list{order:2;flex:0 0 auto;max-height:none;overflow:visible;margin-bottom:10px;}
+.picker-overlay.is-embedded#clock-picker .clock-search{order:3;}
+.picker-overlay.is-embedded#clock-picker .picker-results{order:4;flex:1 1 auto;max-height:none;border-bottom:0;}
