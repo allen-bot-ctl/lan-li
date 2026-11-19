@@ -1,4 +1,4 @@
-# 栏历 0.1.36
+# 栏历 0.1.37
 
 > 开发与协作文档：入口见 [AGENTS.md](AGENTS.md)，完整索引见 [docs/README.md](docs/README.md)。
 
@@ -52,11 +52,11 @@ npm run dist
 
 `electron-builder` 会生成未签名的 dmg 与 zip，包含 x64 和 arm64：
 
-- `dist/LanLi-0.1.36-mac-x64.dmg`
-- `dist/LanLi-0.1.36-mac-x64.zip`
-- `dist/LanLi-0.1.36-mac-x64.zip.sha256`（由发布工作流生成）
-- `dist/LanLi-0.1.36-mac-arm64.dmg`
-- `dist/LanLi-0.1.36-mac-arm64.zip`
+- `dist/LanLi-0.1.37-mac-x64.dmg`
+- `dist/LanLi-0.1.37-mac-x64.zip`
+- `dist/LanLi-0.1.37-mac-x64.zip.sha256`（由发布工作流生成）
+- `dist/LanLi-0.1.37-mac-arm64.dmg`
+- `dist/LanLi-0.1.37-mac-arm64.zip`
 
 本轮 `build.mac.identity` 为 `null`，不做代码签名与公证。GitHub Actions 的 Release 工作流只构建并发布 macOS Intel（x64）的 dmg、zip 与 zip 的 sha256 校验文件；本地执行 `npm run dist` 仍可能同时打出 x64 和 arm64。自动更新服务读取 Release 里的 `LanLi-<version>-mac-x64.zip`，不需要额外上传 `latest-mac.yml`。
 
