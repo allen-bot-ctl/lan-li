@@ -12,13 +12,15 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 20 }
       - run: sw_vers; uname -m; sysctl -n machdep.cpu.brand_string; sysctl -n hw.memsize
       - name: build
         run: |
-          cd spike/electron && npm install --no-audit --no-fund && cd ../..
-          cd spike/swift && swiftc -O main.swift -o spike-swift && ls -la spike-swift
+          cd spike/swift
+          swiftc -O -target arm64-apple-macos13 main.swift -o spike-arm64
+          swiftc -O -target x86_64-apple-macos13 main.swift -o spike-x86_64
+          lipo -create spike-arm64 spike-x86_64 -output spike-swift
+          lipo -info spike-swift
+          file spike-swift; ls -la spike-swift
       - name: measure
         run: |
           cat > /tmp/sample.sh <<'SH'
@@ -37,14 +39,7 @@ jobs:
           echo "$label procs:"; ps -o pid,rss,%cpu,comm -p $(desc $root | tr '\n' ',' | sed 's/,$//')
           printf "RESULT %s avgRSS_MB=%.1f maxRSS_MB=%.1f avgCPU=%.2f\n" $label $(echo "$sum_rss/$n/1024" | bc -l) $(echo "$max_rss/1024" | bc -l) $(echo "$sum_cpu/$n" | bc -l) | tee -a /tmp/results.txt
           SH
-          cd spike/electron
-          ./node_modules/electron/dist/Electron.app/Contents/MacOS/Electron . > /tmp/electron.log 2>&1 &
-          EPID=$!
-          sleep 15
-          bash /tmp/sample.sh electron $EPID
-          cat /tmp/electron.log
-          kill $EPID; sleep 2; pkill -f spike/electron || true
-          cd ../swift
+          cd spike/swift
           ./spike-swift > /tmp/swift.log 2>&1 &
           SPID=$!
           sleep 15
