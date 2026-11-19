@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld('lanli', {
   setSettingsView: (open) => ipcRenderer.send('settings:viewState', open),
   searchClocks: (payload) => ipcRenderer.invoke('clocks:search', payload),
   getWeather: () => ipcRenderer.invoke('weather:get'),
+  refreshWeather: () => ipcRenderer.invoke('weather:refresh'),
   searchCity: (query) => ipcRenderer.invoke('weather:searchCity', query),
   getQuickCities: () => ipcRenderer.invoke('weather:quickCities'),
   setCity: (city) => ipcRenderer.invoke('weather:setCity', city),

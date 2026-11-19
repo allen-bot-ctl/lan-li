@@ -92,7 +92,7 @@ test('more settings sits directly above the quit separator', () => {
   const lastSeparator = separatorIndexes[separatorIndexes.length - 1];
 
   assert.equal(template[lastSeparator - 1].id, 'more-settings');
-  assert.equal(template[lastSeparator - 1].label, '更多…');
+  assert.equal(template[lastSeparator - 1].label, '全部设置…');
 });
 
 test('quit entry displays the Cmd+Q accelerator', () => {

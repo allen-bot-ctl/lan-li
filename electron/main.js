@@ -11,7 +11,8 @@ const {
   dialog,
   autoUpdater,
   net,
-  shell
+  shell,
+  powerMonitor
 } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
@@ -76,6 +77,7 @@ const {
   sameCity
 } = require('./quick-cities');
 const { createLoginItem } = require('./login-item');
+const { createWeatherRefresher } = require('./weather-refresh');
 
 const WINDOW_WIDTH = 580;
 // 0.1.24's 400px content plus the 32px full-width top bar.
@@ -107,6 +109,9 @@ let updateSetupError = null;
 let updateNotice = null;
 let weatherService = null;
 let weatherTimer = null;
+let weatherRefresher = null;
+let e2eWeatherFail = false;
+let e2eWeatherRefreshCalls = [];
 let loginItem = null;
 let almanacStyleCatalog = null;
 let almanacStyle = 'lunar';
@@ -476,16 +481,23 @@ function sendUpdateStatus(status) {
 
 function setupWeather() {
   weatherService = createWeatherService({
-    fetch: (url, init) => net.fetch(url, init),
+    fetch: (url, init) => (E2E && e2eWeatherFail ? Promise.reject(new Error('offline')) : net.fetch(url, init)),
     weatherCity: readWeatherCity(readPreferences()),
     logger: {
       info: (message) => logger.info('[栏历] 天气：' + message),
       warn: (message) => logger.warn('[栏历] 天气：' + message)
     }
   });
+  weatherRefresher = createWeatherRefresher({ refresh: (force) => refreshWeather(force) });
   weatherTimer = setInterval(() => {
-    refreshWeather(true);
+    weatherRefresher.run(true);
   }, WEATHER_REFRESH_MS);
+  try {
+    powerMonitor.on('resume', () => weatherRefresher.onResume());
+    powerMonitor.on('unlock-screen', () => weatherRefresher.onResume());
+  } catch (error) {
+    logger.warn('[栏历] 天气：注册唤醒监听失败：' + (error && error.message ? error.message : error));
+  }
 }
 
 function sendWeather(result) {
@@ -494,9 +506,13 @@ function sendWeather(result) {
 }
 
 function refreshWeather(force = false) {
+  if (E2E) e2eWeatherRefreshCalls.push(Boolean(force));
   if (!weatherService) return Promise.resolve(null);
   return weatherService.refresh({ force }).then((result) => {
-    if (result) sendWeather(result);
+    if (result) {
+      if (weatherRefresher) weatherRefresher.handleResult(result);
+      sendWeather(result);
+    }
     return result;
   }).catch((error) => {
     logger.warn('[栏历] 天气：刷新失败：' +
@@ -744,7 +760,7 @@ function openCalendar() {
   }
 
   updateClock();
-  refreshWeather();
+  if (!weatherRefresher || !weatherRefresher.onWindowShow()) refreshWeather();
   sendUpdateNotice();
 }
 
@@ -842,6 +858,8 @@ function registerIpc() {
     if (!weatherService) return unavailableWeather();
     return weatherService.get();
   });
+
+  ipcMain.handle('weather:refresh', () => refreshWeather(true));
 
   ipcMain.handle('weather:searchCity', async (_event, query) => {
     if (!weatherService) return [];
@@ -1118,6 +1136,10 @@ function registerE2eHooks() {
     loginItemCalls() { return e2eLoginCalls.slice(); },
     menuBarZone() { return resolvedMenuBarTimeZone() || defaultLocalTimeZone(); },
     settingsMenuItems() { return buildSettingsMenuTemplate({ version: formatVersionLabel(app.getVersion()), openAtLogin: getOpenAtLogin() }, {}).map((i) => ({ id: i.id || null, type: i.type || 'normal', label: i.label || '', checked: i.checked === true })); },
+    setWeatherFail(v) { e2eWeatherFail = Boolean(v); return true; },
+    weatherRefreshCalls() { return e2eWeatherRefreshCalls.slice(); },
+    triggerResume() { if (weatherRefresher) weatherRefresher.onResume(); return true; },
+    refreshWeatherNow() { return refreshWeather(true).then((r) => r); },
     hideWindow() { hideCalendar(); return true; }
   };
 }

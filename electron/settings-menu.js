@@ -53,7 +53,7 @@ function buildSettingsMenuTemplate(state, actions) {
     },
     {
       id: 'more-settings',
-      label: '更多…',
+      label: '全部设置…',
       click: callback(handlers.openMore)
     },
     { type: 'separator' },

@@ -514,7 +514,7 @@ function createWeatherService(options = {}) {
       .catch((error) => {
         if (requestGeneration !== generation) return null;
         log('warn', '更新失败：' + describeError(error));
-        return store(unavailableWeather());
+        return unavailableWeather();
       })
       .finally(() => {
         if (requestGeneration === generation) inFlight = null;

@@ -619,6 +619,32 @@ test('city search uses the geocoding endpoint and returns parsed rows', async ()
   assert.equal(calls.length, 1);
 });
 
+test('failure is not cached: refresh() without force retries', async () => {
+  const calls = [];
+  const failing = createWeatherService({
+    fetch: async (url) => {
+      calls.push(url);
+      throw new Error('offline');
+    },
+    weatherCity: {
+      name: '上海',
+      latitude: 31.23,
+      longitude: 121.47,
+      country: 'CN',
+      admin1: '上海'
+    },
+    now: () => 1000,
+    logger: { warn: () => {} }
+  });
+
+  await failing.get();
+  const afterGet = calls.length;
+  assert.ok(afterGet > 0);
+
+  await failing.refresh({});
+  assert.ok(calls.length > afterGet);
+});
+
 test('weather service caches results and failures for 30 minutes', async () => {
   let clock = 1000;
   const calls = [];
@@ -652,11 +678,11 @@ test('weather service caches results and failures for 30 minutes', async () => {
     text: UNAVAILABLE_TEXT,
     emoji: '🌡️'
   });
-  assert.equal(calls.length, 2);
+  assert.equal(calls.length, 4);
 
   clock += CACHE_TTL_MS;
   await failing.get();
-  assert.equal(calls.length, 4);
+  assert.equal(calls.length, 6);
 
   const succeeding = createWeatherService({
     fetch: async () => response(itboyBody('8', '多云')),
