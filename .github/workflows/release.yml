@@ -220,6 +220,12 @@ jobs:
     needs: [macos]
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout release notes
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          sparse-checkout: release-notes
+
       - name: Download macOS artifact
         uses: actions/download-artifact@v4
         with:
@@ -238,22 +244,34 @@ jobs:
           ls -lh dist
           ls -lh screenshots || true
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ inputs.tag || github.ref_name }}
-          name: 栏历 ${{ inputs.tag || github.ref_name }}
-          body: |
-            ## 栏历 ${{ inputs.tag || github.ref_name }}
+      - name: Prepare release notes
+        id: notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          VERSION="${TAG#v}"
+          # 已有 Release 且说明非空（例如已从 Mac 构建手动发布）时不覆盖说明。
+          EXISTING="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body -q .body 2>/dev/null || true)"
+          if [ -n "$EXISTING" ]; then
+            echo "Release $TAG 已有说明，保留不动"
+            echo "path=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          NOTES="release-notes/v${VERSION}.md"
+          if [ -f "$NOTES" ]; then
+            echo "使用 $NOTES"
+            cp "$NOTES" "$RUNNER_TEMP/release-notes.md"
+          else
+            echo "未找到 $NOTES，使用通用模板"
+            cat > "$RUNNER_TEMP/release-notes.tpl" <<'NOTES_EOF'
+            ## 栏历 __TAG__
 
             本轮只提供 macOS Intel（x64）安装包。主下载是 `LanLi-*-mac-x64.dmg`；`LanLi-*-mac-x64.zip` 与 `LanLi-*-mac-x64.zip.sha256` 供 0.1.6 起的未签名包应用内自更新使用。
 
             ### 本版变化
 
-            - 顶栏新增钉住窗口：钉住后移开鼠标或切到别的应用都不隐藏；点 × 或按 Esc 取消并关闭，状态不保存。
-            - 顶栏「设置」改为 24px 齿轮圆钮；世界时钟入口改为「编辑 ›」。
-            - 黄历卡去掉节气倒计时，右上角平时留空。
-            - 底部「检查更新」与版本号同级（10px、`--muted`），悬停变 `--link`。
+            - 本版变化见源码提交记录。
 
             ### 安装
 
@@ -277,12 +295,24 @@ jobs:
             ### 源码
 
             https://github.com/allen-bot-ctl/lan-li
+          NOTES_EOF
+            sed -e 's/^  //' -e "s/__TAG__/${TAG}/g" "$RUNNER_TEMP/release-notes.tpl" > "$RUNNER_TEMP/release-notes.md"
+          fi
+          echo "path=$RUNNER_TEMP/release-notes.md" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          name: 栏历 ${{ inputs.tag || github.ref_name }}
+          body_path: ${{ steps.notes.outputs.path }}
           files: |
             dist/LanLi-*-mac-x64.dmg
             dist/LanLi-*-mac-x64.zip
             dist/LanLi-*-mac-x64.zip.sha256
             screenshots/*.png
           fail_on_unmatched_files: false
+          overwrite_files: false
           draft: false
           prerelease: false
           generate_release_notes: false
