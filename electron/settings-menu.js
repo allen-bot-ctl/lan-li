@@ -26,7 +26,7 @@ function buildSettingsMenuTemplate(state, actions) {
     checkUpdate,
     {
       id: 'open-at-login',
-      label: '登录时打开',
+      label: '开机自启动',
       type: 'checkbox',
       checked: current.openAtLogin === true,
       click: (item) => {
@@ -50,6 +50,11 @@ function buildSettingsMenuTemplate(state, actions) {
       id: 'choose-weather-city',
       label: '更换天气城市…',
       click: callback(handlers.openWeather)
+    },
+    {
+      id: 'more-settings',
+      label: '更多…',
+      click: callback(handlers.openMore)
     },
     { type: 'separator' },
     {

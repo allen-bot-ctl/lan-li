@@ -183,3 +183,8 @@ test('menu bar title uses unpadded month/day and padded time', () => {
   assert.equal(isValidMenuTitle('01月05日 09:03:07'), false);
   assert.equal(isValidMenuTitle('1月5日 9:03:07'), false);
 });
+
+test('menu bar title can drop the date part and accepts date-less time', () => {
+  assert.equal(formatMenuTitle(new Date(2026, 0, 5, 9, 3, 7), { showDate: false }), '09:03:07');
+  assert.equal(isValidMenuTitle('09:03:07'), true);
+});

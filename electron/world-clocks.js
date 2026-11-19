@@ -16,7 +16,7 @@ const WEEKDAY_NAMES = {
 };
 
 const MENU_TITLE_PATTERN =
-  /^(?:[1-9]|1[0-2])月(?:[1-9]|[12]\d|3[01])日 (?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d$/;
+  /^(?:(?:[1-9]|1[0-2])月(?:[1-9]|[12]\d|3[01])日 )?(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d$/;
 
 const DEFAULT_WORLD_CLOCK = Object.freeze({
   id: 'Asia/Shanghai',
@@ -240,8 +240,9 @@ function describeClockRelative(now, timeZone, localTimeZone) {
 
 // Menu bar title in a specific IANA zone. Same format as
 // calendar.formatMenuTitle: month/day not zero-padded, HH:mm:ss zero-padded.
-// `localTimeZone` is only used when `timeZone` is unset/invalid.
-function formatMenuTitleInZone(date, timeZone, localTimeZone) {
+// `localTimeZone` is only used when `timeZone` is unset/invalid. Pass
+// `{ showDate: false }` to drop the date part and keep only HH:mm:ss.
+function formatMenuTitleInZone(date, timeZone, localTimeZone, options) {
   if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '';
   const localZone = isValidTimeZone(localTimeZone)
     ? localTimeZone.trim()
@@ -250,8 +251,35 @@ function formatMenuTitleInZone(date, timeZone, localTimeZone) {
   if (!isValidTimeZone(zone)) return '';
 
   const parts = zonedParts(date, zone);
-  return `${parts.month}月${parts.day}日 ` +
-    `${pad2(parts.hour)}:${pad2(parts.minute)}:${pad2(parts.second)}`;
+  const time = `${pad2(parts.hour)}:${pad2(parts.minute)}:${pad2(parts.second)}`;
+  if (options && options.showDate === false) return time;
+  return `${parts.month}月${parts.day}日 ` + time;
+}
+
+const TRAY_WEEKDAY_ZH = {
+  Sun: '日',
+  Mon: '一',
+  Tue: '二',
+  Wed: '三',
+  Thu: '四',
+  Fri: '五',
+  Sat: '六'
+};
+
+// Tray tooltip in a specific IANA zone: `${year}年${month}月${day}日 周${X}`.
+// Zone resolution matches formatMenuTitleInZone exactly. Illegal input → ''.
+function formatTrayTooltipInZone(date, timeZone, localTimeZone) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '';
+  const localZone = isValidTimeZone(localTimeZone)
+    ? localTimeZone.trim()
+    : defaultLocalTimeZone();
+  const zone = isValidTimeZone(timeZone) ? timeZone.trim() : localZone;
+  if (!isValidTimeZone(zone)) return '';
+
+  const parts = zonedParts(date, zone);
+  const weekday = TRAY_WEEKDAY_ZH[parts.weekday];
+  if (!weekday) return '';
+  return `${parts.year}年${parts.month}月${parts.day}日 周${weekday}`;
 }
 
 function isValidMenuTitle(text) {
@@ -475,6 +503,7 @@ module.exports = {
   formatClockOffset,
   describeClockRelative,
   formatMenuTitleInZone,
+  formatTrayTooltipInZone,
   isValidMenuTitle,
   resolveMenuBarTimeZone,
   normalizeMenuBarTimeZone,

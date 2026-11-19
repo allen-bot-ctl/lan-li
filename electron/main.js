@@ -48,6 +48,7 @@ const {
   formatClockTime,
   describeClockRelative,
   formatMenuTitleInZone,
+  formatTrayTooltipInZone,
   resolveMenuBarTimeZone,
   normalizeMenuBarTimeZone,
   nextMenuBarTimeZoneAfterRemove,
@@ -85,6 +86,11 @@ const WINDOW_HEIGHT = 432;
 const E2E = process.env.LANLI_E2E === '1';
 
 let tray = null;
+let menuBarShowDate = true;
+let lastTrayTitle = '';
+let lastTrayTooltip = '';
+let e2eLoginOpen = false;
+const e2eLoginCalls = [];
 let calendarWindow = null;
 let clockTimer = null;
 let closeTimer = null;
@@ -289,10 +295,22 @@ function loadWorldClocks() {
   }
 }
 
+function readMenuBarShowDate(preferences) {
+  return !(preferences && preferences.menuBarShowDate === false);
+}
+
+function setMenuBarShowDate(value) {
+  menuBarShowDate = Boolean(value);
+  writePreferences({ ...readPreferences(), menuBarShowDate });
+  updateClock();
+  return menuBarShowDate;
+}
+
 function initializeAlmanacStyle() {
   almanacStyleCatalog = configureAlmanacStyles({ logger });
   configureAlmanacFocus({ logger });
   almanacStyle = readAlmanacStyle(readPreferences());
+  menuBarShowDate = readMenuBarShowDate(readPreferences());
 }
 
 function persistWorldClocks() {
@@ -568,6 +586,7 @@ function openSettingsMenu(event, position) {
         keepWindowOpen = true;
         sendPanel('weather');
       },
+      openMore: () => { keepWindowOpen = true; sendPanel('settings'); },
       quit: () => app.quit()
     }
   );
@@ -731,6 +750,7 @@ function hideCalendar() {
   pinned = false;
   if (wasPinned) sendPinState();
   if (calendarWindow && !calendarWindow.isDestroyed() && calendarWindow.isVisible()) {
+    sendPanel('calendar');
     calendarWindow.hide();
   }
 }
@@ -744,9 +764,12 @@ function updateClock() {
   const now = currentNow();
 
   if (tray) {
-    const title = formatMenuTitleInZone(now, resolvedMenuBarTimeZone(), defaultLocalTimeZone()) ||
-      formatMenuTitle(now);
+    const zone = resolvedMenuBarTimeZone(); const local = defaultLocalTimeZone();
+    const title = formatMenuTitleInZone(now, zone, local, { showDate: menuBarShowDate }) || formatMenuTitle(now, { showDate: menuBarShowDate });
+    const tooltip = formatTrayTooltipInZone(now, zone, local);
     tray.setTitle(title, { fontType: 'monospacedDigit' });
+    if (tooltip && typeof tray.setToolTip === 'function') tray.setToolTip(tooltip);
+    lastTrayTitle = title; lastTrayTooltip = tooltip;
   }
 
   if (calendarWindow && !calendarWindow.isDestroyed() && calendarWindow.isVisible()) {
@@ -802,6 +825,10 @@ function applyViewPayload(payload) {
 
 function registerIpc() {
   ipcMain.handle('app:version', () => formatVersionLabel(app.getVersion()));
+
+  ipcMain.handle('settings:get', () => ({ openAtLogin: getOpenAtLogin(), menuBarShowDate, version: app.getVersion() }));
+  ipcMain.handle('settings:setOpenAtLogin', (_e, value) => applyLoginItem(Boolean(value)));
+  ipcMain.handle('settings:setMenuBarShowDate', (_e, value) => setMenuBarShowDate(value));
 
   ipcMain.handle('weather:get', () => {
     if (!weatherService) return unavailableWeather();
@@ -1031,6 +1058,8 @@ function registerIpc() {
 // when LANLI_E2E=1; production processes expose nothing.
 function registerE2eHooks() {
   if (!E2E) return;
+  app.setLoginItemSettings = (settings) => { e2eLoginCalls.push({ ...settings }); e2eLoginOpen = Boolean(settings && settings.openAtLogin); };
+  app.getLoginItemSettings = () => ({ openAtLogin: e2eLoginOpen });
   globalThis.__lanliTest = {
     trayEnter() {
       openCalendar();
@@ -1074,7 +1103,13 @@ function registerE2eHooks() {
     emitUpdateNotice(notice) {
       showUpdateNotice(notice);
       return true;
-    }
+    },
+    trayTitle() { return lastTrayTitle; },
+    trayTooltip() { return lastTrayTooltip; },
+    loginItemCalls() { return e2eLoginCalls.slice(); },
+    menuBarZone() { return resolvedMenuBarTimeZone() || defaultLocalTimeZone(); },
+    settingsMenuItems() { return buildSettingsMenuTemplate({ version: formatVersionLabel(app.getVersion()), openAtLogin: getOpenAtLogin() }, {}).map((i) => ({ id: i.id || null, type: i.type || 'normal', label: i.label || '', checked: i.checked === true })); },
+    hideWindow() { hideCalendar(); return true; }
   };
 }
 

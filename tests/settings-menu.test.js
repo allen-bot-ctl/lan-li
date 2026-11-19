@@ -20,6 +20,7 @@ test('settings menu follows the confirmed order and separators', () => {
       'choose-almanac-style',
       'edit-clocks',
       'choose-weather-city',
+      'more-settings',
       '---',
       'quit'
     ]
@@ -50,7 +51,7 @@ test('login item is a checkbox reflecting state and reports the new value', () =
   );
 
   const login = template[1];
-  assert.equal(login.label, '登录时打开');
+  assert.equal(login.label, '开机自启动');
   assert.equal(login.type, 'checkbox');
   assert.equal(login.checked, true);
 
@@ -67,6 +68,7 @@ test('panel and quit entries forward to their actions', () => {
       openAlmanacStyles: () => called.push('almanac'),
       openClocks: () => called.push('clocks'),
       openWeather: () => called.push('weather'),
+      openMore: () => called.push('more'),
       quit: () => called.push('quit')
     }
   );
@@ -74,8 +76,23 @@ test('panel and quit entries forward to their actions', () => {
   template[3].click();
   template[4].click();
   template[5].click();
-  template[7].click();
-  assert.deepEqual(called, ['almanac', 'clocks', 'weather', 'quit']);
+  template[6].click();
+  template[8].click();
+  assert.deepEqual(called, ['almanac', 'clocks', 'weather', 'more', 'quit']);
+});
+
+test('more settings sits directly above the quit separator', () => {
+  const template = buildSettingsMenuTemplate(
+    { version: 'v0.1.16', openAtLogin: false },
+    {}
+  );
+  const separatorIndexes = template
+    .map((item, index) => (item.type === 'separator' ? index : -1))
+    .filter((index) => index >= 0);
+  const lastSeparator = separatorIndexes[separatorIndexes.length - 1];
+
+  assert.equal(template[lastSeparator - 1].id, 'more-settings');
+  assert.equal(template[lastSeparator - 1].label, '更多…');
 });
 
 test('quit entry displays the Cmd+Q accelerator', () => {

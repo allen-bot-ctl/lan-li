@@ -14,6 +14,7 @@ const {
   formatClockOffset,
   describeClockRelative,
   formatMenuTitleInZone,
+  formatTrayTooltipInZone,
   isValidMenuTitle: isValidMenuTitleInZone,
   resolveMenuBarTimeZone,
   normalizeMenuBarTimeZone,
@@ -480,4 +481,34 @@ test('formatMenuTitleInZone falls back to local zone for unset/invalid zone', ()
   assert.equal(formatMenuTitleInZone(instant, undefined, 'Asia/Shanghai'), '1月5日 09:03:07');
   assert.equal(formatMenuTitleInZone(instant, null, 'Asia/Shanghai'), '1月5日 09:03:07');
   assert.equal(formatMenuTitleInZone(instant, 'Mars/Olympus', 'Asia/Shanghai'), '1月5日 09:03:07');
+});
+
+test('formatMenuTitleInZone drops the date part when showDate is false', () => {
+  const instant = new Date('2026-11-16T01:02:03.000Z');
+  assert.equal(formatMenuTitleInZone(instant, 'UTC', 'Asia/Shanghai', { showDate: false }), '01:02:03');
+  assert.equal(formatMenuTitleInZone(instant, 'Asia/Shanghai', 'Asia/Shanghai', { showDate: false }), '09:02:03');
+  assert.equal(formatMenuTitleInZone(instant, 'UTC', 'Asia/Shanghai'), '11月16日 01:02:03');
+  assert.equal(formatMenuTitleInZone(instant, 'Asia/Shanghai', 'Asia/Shanghai'), '11月16日 09:02:03');
+});
+
+test('menu title patterns accept date-less time and reject malformed forms', () => {
+  for (const valid of ['11月16日 01:02:03', '01:02:03']) {
+    assert.equal(MENU_TITLE_PATTERN.test(valid), true, valid);
+    assert.equal(isValidMenuTitle(valid), true, valid);
+    assert.equal(isValidMenuTitleInZone(valid), true, valid);
+  }
+  for (const invalid of ['1:02:03', '01月05日 09:03:07']) {
+    assert.equal(MENU_TITLE_PATTERN.test(invalid), false, invalid);
+    assert.equal(isValidMenuTitle(invalid), false, invalid);
+    assert.equal(isValidMenuTitleInZone(invalid), false, invalid);
+  }
+});
+
+test('formatTrayTooltipInZone renders year/month/day and Chinese weekday', () => {
+  const instant = new Date('2026-11-18T23:30:00.000Z');
+  assert.equal(formatTrayTooltipInZone(instant, 'America/New_York', 'Asia/Shanghai'), '2026年11月18日 周三');
+  assert.equal(formatTrayTooltipInZone(instant, 'Asia/Shanghai', 'Asia/Shanghai'), '2026年11月19日 周四');
+  assert.equal(formatTrayTooltipInZone(instant, undefined, 'Asia/Shanghai'), '2026年11月19日 周四');
+  assert.equal(formatTrayTooltipInZone(new Date('nope'), 'UTC', 'Asia/Shanghai'), '');
+  assert.equal(formatTrayTooltipInZone(undefined, 'UTC', 'Asia/Shanghai'), '');
 });

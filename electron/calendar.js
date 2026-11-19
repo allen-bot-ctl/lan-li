@@ -14,15 +14,17 @@ const MAX_YEAR = 2100;
 // Menu bar title: month and day are not zero padded; hours, minutes and
 // seconds always are. Example: 1月5日 09:03:07 / 11月15日 22:47:13.
 const MENU_TITLE_PATTERN =
-  /^(?:[1-9]|1[0-2])月(?:[1-9]|[12]\d|3[01])日 (?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d$/;
+  /^(?:(?:[1-9]|1[0-2])月(?:[1-9]|[12]\d|3[01])日 )?(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d$/;
 
 function pad2(value) {
   return String(value).padStart(2, '0');
 }
 
-function formatMenuTitle(date) {
-  return `${date.getMonth() + 1}月${date.getDate()}日 ` +
+function formatMenuTitle(date, options) {
+  const time =
     `${pad2(date.getHours())}:${pad2(date.getMinutes())}:${pad2(date.getSeconds())}`;
+  if (options && options.showDate === false) return time;
+  return `${date.getMonth() + 1}月${date.getDate()}日 ` + time;
 }
 
 function isValidMenuTitle(text) {
