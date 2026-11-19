@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- 签筒：红漆竹筒 + 金边 + 5 根签；id="pop-stick" 是点击时弹起的那根 -->
+  <defs>
+    <linearGradient id="cup" x1="0" x2="1" y1="0" y2="0">
+      <stop offset="0" stop-color="#C8372D"/><stop offset=".45" stop-color="#EE5A45"/><stop offset="1" stop-color="#B92F27"/>
+    </linearGradient>
+    <linearGradient id="stick" x1="0" x2="1">
+      <stop offset="0" stop-color="#E9B979"/><stop offset="1" stop-color="#D49A55"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" x2="1">
+      <stop offset="0" stop-color="#E0A62A"/><stop offset=".5" stop-color="#F7CF5C"/><stop offset="1" stop-color="#D89A22"/>
+    </linearGradient>
+  </defs>
+  <g id="sticks" stroke-linecap="round" stroke-width="5" stroke="#DFAA66">
+    <line x1="19" y1="30" x2="14" y2="12"/>
+    <line x1="25" y1="30" x2="23" y2="9"/>
+    <line x1="39" y1="30" x2="41" y2="9"/>
+    <line x1="45" y1="30" x2="50" y2="12"/>
+  </g>
+  <g id="pop-stick">
+    <line x1="32" y1="30" x2="32" y2="4" stroke="#DFAA66" stroke-width="5" stroke-linecap="round"/>
+    <rect x="29.5" y="5" width="5" height="6" rx="2" fill="#C8372D"/>
+  </g>
+  <path d="M13 28 h38 l-2.5 28 a4 4 0 0 1 -4 3.5 h-25 a4 4 0 0 1 -4 -3.5 z" fill="url(#cup)"/>
+  <rect x="11" y="25" width="42" height="6" rx="3" fill="url(#gold)"/>
+  <rect x="14.5" y="53" width="35" height="5" rx="2.5" fill="url(#gold)"/>
+  <path d="M18 36 q14 3 28 0 M18.5 45 q13.5 3 27 0" stroke="#A82820" stroke-width="1.4" fill="none" opacity=".55"/>
+  <circle cx="32" cy="41" r="3.2" fill="none" stroke="#F7CF5C" stroke-width="1.6"/>
+</svg>
