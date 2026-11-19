@@ -38,7 +38,7 @@ jobs:
           printf "RESULT %s avgRSS_MB=%.1f maxRSS_MB=%.1f avgCPU=%.2f\n" $label $(echo "$sum_rss/$n/1024" | bc -l) $(echo "$max_rss/1024" | bc -l) $(echo "$sum_cpu/$n" | bc -l) | tee -a /tmp/results.txt
           SH
           cd spike/electron
-          ./node_modules/.bin/electron . > /tmp/electron.log 2>&1 &
+          ./node_modules/electron/dist/Electron.app/Contents/MacOS/Electron . > /tmp/electron.log 2>&1 &
           EPID=$!
           sleep 15
           bash /tmp/sample.sh electron $EPID
