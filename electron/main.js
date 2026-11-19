@@ -1192,7 +1192,7 @@ async function bootstrap() {
   updateClock();
   clockTimer = setInterval(updateClock, 1000);
 
-  if (tray && process.platform === 'darwin' && process.env.LANLI_TITLE_TEXT !== '1') {
+  if (tray && process.platform === 'darwin' && process.env.LANLI_TITLE_TEXT !== '1' && process.env.LANLI_E2E !== '1') {
     buildAtlas(BrowserWindow).then((atlas) => {
       makeClockImage = createClockImageMaker(nativeImage, atlas);
       lastTrayTitle = '';
