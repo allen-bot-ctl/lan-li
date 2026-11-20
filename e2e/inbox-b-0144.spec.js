@@ -191,6 +191,14 @@ test('B-C8 截图：42 收纳列表（四类 + 一条失联）', async () => {
   await hook('openInboxPanel');
   await expect(rowOf('会议纪要.docx')).toHaveClass(/is-missing/);
   await expect(rowOf('会议纪要.docx').locator('.inbox-act-relink')).toHaveText('重新指定原文件…');
+  // 0.1.46：文件副标题只显示上一级文件夹名，完整路径在悬停提示；日期按钮是单色 svg 图标
+  const fileSub = rowOf('Annual-Report.pdf').locator('.inbox-row-sub');
+  if (await fileSub.count()) {
+    expect(await fileSub.textContent()).not.toContain('/');
+    expect(await fileSub.getAttribute('title')).toContain('/');
+  }
+  await expect(page.locator('#inbox-cal-toggle svg.inbox-cal-icon')).toHaveCount(1);
+  expect(await page.locator('#inbox-cal-toggle').textContent()).not.toContain('📅');
   fs.mkdirSync(SHOTS, { recursive: true });
   await page.screenshot({ path: path.join(SHOTS, '42-inbox-list.png') });
 });

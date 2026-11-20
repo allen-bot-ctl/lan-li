@@ -1215,8 +1215,18 @@ function formatSize(n) {
   return `${(n / 1024 / 1024 / 1024).toFixed(1)} GB`;
 }
 
+// 0.1.46：文件副标题只显示上一级文件夹名（常见目录用中文名），完整路径放悬停提示
+const INBOX_DIR_NAMES = { Downloads: '下载', Desktop: '桌面', Documents: '文稿', Pictures: '图片', Movies: '影片', Music: '音乐' };
+function inboxParentName(p) {
+  if (!p) return '';
+  const parts = String(p).split('/').filter(Boolean);
+  if (parts.length < 2) return '';
+  const dir = parts[parts.length - 2];
+  return INBOX_DIR_NAMES[dir] || dir;
+}
+
 function inboxSubtitle(m) {
-  if (m.type === 'file') return m.missing ? '原文件已移动或删除' : [m.isDir ? '文件夹' : formatSize(m.size), m.preview].filter(Boolean).join(' · ');
+  if (m.type === 'file') return m.missing ? '原文件已移动或删除' : [m.isDir ? '文件夹' : formatSize(m.size), inboxParentName(m.sourcePath)].filter(Boolean).join(' · ');
   if (m.type === 'image') return [formatSize(m.size), m.preview].filter(Boolean).join(' · ');
   if (m.type === 'link') return m.preview || m.sourceUrl || '';
   return m.preview || '';
@@ -1356,6 +1366,7 @@ function buildInboxRow(m) {
   const sub = document.createElement('span');
   sub.className = 'inbox-row-sub';
   appendHighlighted(sub, inboxSubtitle(m), q);
+  if (m.type === 'file' && m.sourcePath) sub.title = m.sourcePath;
   if ((m.tags || []).length) {
     const tags = document.createElement('span');
     tags.className = 'inbox-row-tags';
