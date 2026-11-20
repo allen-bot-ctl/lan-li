@@ -1252,7 +1252,9 @@ const inboxMiniGrid = document.getElementById('inbox-minical-grid');
 const inboxMiniTitle = document.getElementById('inbox-minical-title');
 const INBOX_TAG_SHOW = 6;
 let inboxEntries = [];
-const inboxFilter = { query: '', type: 'all', tags: [], day: null };
+const inboxFilter = { query: '', type: 'all', tags: [], day: null, range: null };
+let inboxPickStart = null; // 0.1.46 区间选择：已点的起点
+const inboxCustom = document.getElementById('inbox-custom');
 let inboxTagTarget = null;
 let inboxTagCounts = [];
 let inboxUndoId = null;
@@ -1269,7 +1271,7 @@ function appendHighlighted(el, text, query) {
 }
 
 function inboxFilterActive() {
-  return Boolean(inboxFilter.query.trim() || inboxFilter.type !== 'all' || inboxFilter.tags.length || inboxFilter.day);
+  return Boolean(inboxFilter.query.trim() || inboxFilter.type !== 'all' || inboxFilter.tags.length || inboxFilter.day || inboxFilter.range);
 }
 
 function renderInboxTags() {
@@ -1317,12 +1319,25 @@ function setInboxType(type) {
   renderInbox();
 }
 
-function setInboxDay(key) {
-  inboxFilter.day = key || null;
-  inboxDayChip.hidden = !inboxFilter.day;
-  inboxDayChipText.textContent = inboxFilter.day ? IQ.dayChipLabel(inboxFilter.day) : '';
+function updateInboxRangeChip() {
+  const r = inboxFilter.range;
+  inboxDayChip.hidden = !r;
+  inboxDayChipText.textContent = r ? IQ.rangeChipLabel(r, IQ.filterEntries(inboxEntries, inboxFilter).length) : '';
+}
+function setInboxRange(r) {
+  inboxFilter.day = null;
+  inboxFilter.range = r || null;
+  inboxPickStart = null;
   renderMiniCal();
   renderInbox();
+}
+function setInboxDay(key) { setInboxRange(key ? { from: key, to: key } : null); }
+function closeInboxRangePop(commitPending) {
+  if (inboxMiniCal.hidden) return;
+  if (commitPending && inboxPickStart) { setInboxDay(inboxPickStart); }
+  inboxPickStart = null;
+  inboxMiniCal.hidden = true;
+  document.getElementById('inbox-cal-toggle').classList.remove('is-active');
 }
 
 function clearInboxFilters() {
@@ -1408,6 +1423,7 @@ function renderInbox(entries) {
   inboxCount.textContent = inboxEntries.length ? (inboxFilterActive() ? `${shown.length}/${inboxEntries.length} 项` : `${inboxEntries.length} 项`) : '';
   const detailOpen = !inboxDetail.hidden;
   inboxEmpty.hidden = detailOpen || inboxEntries.length > 0;
+  updateInboxRangeChip();
   inboxNoResult.hidden = detailOpen || !(inboxEntries.length > 0 && shown.length === 0);
   for (const g of IQ.groupByDate(shown, new Date())) {
     const head = document.createElement('div');
@@ -1519,26 +1535,67 @@ function renderMiniCal() {
   for (let i = 0; i < lead; i += 1) inboxMiniGrid.appendChild(document.createElement('span'));
   const daysIn = new Date(y, m + 1, 0).getDate();
   const todayKey = IQ.dayKeyOf(new Date());
+  const nowD = new Date(); const todayMs = new Date(nowD.getFullYear(), nowD.getMonth(), nowD.getDate()).getTime();
   for (let d = 1; d <= daysIn; d += 1) {
     const key = `${y}-${m + 1}-${d}`;
     const b = document.createElement('button');
     b.type = 'button';
-    b.className = 'inbox-minical-day' + (inboxDaySet.has(key) ? ' has-inbox' : '') + (inboxFilter.day === key ? ' is-active' : '') + (key === todayKey ? ' is-today' : '');
+    const r = inboxFilter.range;
+    const t = new Date(y, m, d).getTime();
+    const future = t > todayMs;
+    const isEnd = inboxPickStart ? key === inboxPickStart : Boolean(r && (key === r.from || key === r.to));
+    const inSel = !inboxPickStart && r && IQ.inRange({ createdMs: t }, r);
+    b.className = 'inbox-minical-day' + (inboxDaySet.has(key) ? ' has-inbox' : ' no-inbox') + (isEnd ? ' is-active' : (inSel ? ' is-in-range' : '')) + (key === todayKey ? ' is-today' : '') + (future ? ' is-future' : '');
+    if (future) b.disabled = true;
     b.dataset.day = key;
     const num = document.createElement('span'); num.textContent = String(d);
     b.appendChild(num);
     if (inboxDaySet.has(key)) { const dot = document.createElement('span'); dot.className = 'inbox-dot'; b.appendChild(dot); }
-    b.addEventListener('click', () => { if (!inboxView.hidden) setInboxDay(inboxFilter.day === key ? null : key); });
+    b.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      if (inboxView.hidden || b.disabled) return;
+      const before = inboxPickStart && IQ.makeRange(inboxPickStart, key).from === key && key !== inboxPickStart;
+      if (!inboxPickStart || before) { inboxPickStart = key; renderMiniCal(); return; }
+      const range = IQ.makeRange(inboxPickStart, key);
+      setInboxRange(range);
+      closeInboxRangePop(false);
+    });
     inboxMiniGrid.appendChild(b);
   }
 }
-document.getElementById('inbox-cal-toggle').addEventListener('click', () => {
-  inboxMiniCal.hidden = !inboxMiniCal.hidden;
-  document.getElementById('inbox-cal-toggle').classList.toggle('is-active', !inboxMiniCal.hidden);
+document.getElementById('inbox-cal-toggle').addEventListener('click', (ev) => {
+  ev.stopPropagation();
+  if (!inboxMiniCal.hidden) { closeInboxRangePop(false); return; }
+  const tb = document.getElementById('inbox-toolbar').getBoundingClientRect();
+  inboxMiniCal.style.top = `${Math.round(tb.bottom - inboxView.getBoundingClientRect().top + 4)}px`;
+  inboxPickStart = null;
+  inboxCustom.hidden = true;
+  document.getElementById('inbox-preset-custom').classList.remove('is-active');
+  inboxMiniCal.hidden = false;
+  document.getElementById('inbox-cal-toggle').classList.add('is-active');
   renderMiniCal();
 });
-document.getElementById('inbox-minical-prev').addEventListener('click', () => { const d = new Date(miniMonth.y, miniMonth.m - 1, 1); miniMonth = { y: d.getFullYear(), m: d.getMonth() }; renderMiniCal(); });
-document.getElementById('inbox-minical-next').addEventListener('click', () => { const d = new Date(miniMonth.y, miniMonth.m + 1, 1); miniMonth = { y: d.getFullYear(), m: d.getMonth() }; renderMiniCal(); });
+for (const btn of document.querySelectorAll('.inbox-preset')) {
+  btn.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    if (btn.dataset.preset === 'custom') {
+      inboxCustom.hidden = !inboxCustom.hidden;
+      btn.classList.toggle('is-active', !inboxCustom.hidden);
+      inboxPickStart = null;
+      renderMiniCal();
+      return;
+    }
+    setInboxRange(IQ.presetRange(btn.dataset.preset, new Date()));
+    closeInboxRangePop(false);
+  });
+}
+inboxMiniCal.addEventListener('click', (ev) => ev.stopPropagation());
+document.addEventListener('click', () => closeInboxRangePop(false));
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !inboxMiniCal.hidden) { e.preventDefault(); e.stopImmediatePropagation(); closeInboxRangePop(false); }
+}, true);
+document.getElementById('inbox-minical-prev').addEventListener('click', (ev) => { ev.stopPropagation(); const d = new Date(miniMonth.y, miniMonth.m - 1, 1); miniMonth = { y: d.getFullYear(), m: d.getMonth() }; renderMiniCal(); });
+document.getElementById('inbox-minical-next').addEventListener('click', (ev) => { ev.stopPropagation(); const d = new Date(miniMonth.y, miniMonth.m + 1, 1); miniMonth = { y: d.getFullYear(), m: d.getMonth() }; renderMiniCal(); });
 
 function refreshInboxDays() {
   return api.inboxDays().then((keys) => {

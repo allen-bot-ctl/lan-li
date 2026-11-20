@@ -164,6 +164,11 @@ select {
   margin-right: 4px;
 }
 
+/* 0.1.46：收纳→检查更新也是 4px，三个图标间距一致 */
+.inbox-button {
+  margin-right: 4px;
+}
+
 .update-icon {
   display: block;
   width: 14px;
@@ -1319,7 +1324,7 @@ label.settings-row{position:relative;cursor:pointer;}
 .picker-check{flex:0 0 auto;margin-left:auto;color:var(--accent);font-size:13px;}
 
 /* ---- 0.1.42 收纳 ---- */
-.inbox-icon{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.3;stroke-linejoin:round;stroke-linecap:round;}
+.inbox-icon{display:block;width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.3;stroke-linejoin:round;stroke-linecap:round;}
 .inbox-view{position:absolute;top:32px;left:0;right:0;bottom:0;display:flex;flex-direction:column;color:var(--text);font-size:13px;}
 .inbox-view[hidden],.inbox-list[hidden],.inbox-detail[hidden],.inbox-empty[hidden]{display:none !important;}
 .inbox-head{position:relative;display:flex;align-items:center;height:36px;flex:0 0 36px;border-bottom:1px solid var(--line, rgba(128,128,128,.18));}
@@ -1385,7 +1390,7 @@ mark.inbox-hit{background:rgba(255,200,0,.45);color:inherit;border-radius:2px;}
 .inbox-tagpop input{width:140px;height:22px;padding:0 6px;border-radius:5px;border:1px solid var(--line, rgba(128,128,128,.3));font-size:12px;outline:none;background:var(--chip);color:var(--text);}
 .inbox-tagpop-err{font-size:11px;color:#ff3b30;}
 .inbox-tagpop-err:empty{display:none;}
-.inbox-minical{flex:0 0 auto;margin:0 16px 4px;padding:4px 8px;border-radius:8px;background:var(--chip);}
+.inbox-minical{position:absolute;right:16px;top:76px;z-index:30;width:252px;padding:8px;border-radius:10px;background:var(--panel, #fff);border:1px solid var(--sheet-border, rgba(128,128,128,.25));box-shadow:0 8px 24px rgba(0,0,0,.22);}
 .inbox-minical-head{display:flex;align-items:center;justify-content:space-between;font-size:12px;font-weight:600;}
 .inbox-minical-head button{border:0;background:transparent;color:var(--text);cursor:pointer;font-size:14px;padding:0 6px;}
 .inbox-minical-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;}
@@ -1405,3 +1410,25 @@ mark.inbox-hit{background:rgba(255,200,0,.45);color:inherit;border-radius:2px;}
 /* 0.1.46：📅 换成与顶栏一致的单色线条图标 */
 .inbox-cal-toggle{display:inline-flex;align-items:center;justify-content:center;color:var(--muted);}
 .inbox-cal-icon{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.3;stroke-linejoin:round;stroke-linecap:round;}
+/* 0.1.46：空列表/无结果时列表不占位，提示在列表区域水平垂直居中 */
+.inbox-list:empty{display:none;}
+.inbox-presets{display:flex;gap:4px;margin-bottom:6px;}
+.inbox-preset{flex:1 1 auto;height:22px;border:0;border-radius:11px;background:var(--chip);color:var(--text);font-size:11px;cursor:pointer;white-space:nowrap;}
+.inbox-preset:hover{background:var(--chip-hover);}
+.inbox-minical-day.no-inbox{opacity:.5;}
+.inbox-minical-day.is-future{opacity:.3;cursor:default;}
+.inbox-minical-day.is-active{opacity:1;}
+.inbox-minical-day.is-in-range{background:color-mix(in srgb, var(--accent) 18%, transparent);}
+.inbox-preset.is-active{background:var(--accent);color:#fff;}
+.inbox-custom[hidden]{display:none !important;}
+.inbox-custom{margin-top:2px;}
+.inbox-empty{flex-direction:column;gap:8px;}
+.inbox-empty-icon{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.1;stroke-linejoin:round;stroke-linecap:round;}
+/* 0.1.46：设置页与收纳页统一——顶栏一行「‹ 返回」+ 居中页名；内容区标题左对齐、小一级 */
+.settings-view{flex-direction:column;}
+.settings-head{position:relative;display:flex;align-items:center;height:36px;flex:0 0 36px;border-bottom:1px solid var(--sheet-border);}
+.settings-head .settings-back{margin:0;flex:0 0 auto;white-space:nowrap;}
+.settings-head-title{position:absolute;left:50%;transform:translateX(-50%);font-size:13px;font-weight:600;white-space:nowrap;pointer-events:none;}
+.settings-body{flex:1 1 auto;min-height:0;display:flex;flex-direction:row;}
+.settings-nav{padding-top:6px;}
+.settings-page-title{height:32px;line-height:32px;margin:0 0 4px;padding:0;font-size:13px;font-weight:600;border-bottom:0;}

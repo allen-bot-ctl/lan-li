@@ -254,19 +254,58 @@ test('B-C4/B-C6 × 删除无确认，toast「已删除 · 撤销」5 秒内可�
 test('B-C5 有收纳的日期显示小点；收纳面板打开时点日期筛到当天，× 取消', async () => {
   const todayKey = IQ.dayKeyOf(new Date());
   // 收纳面板里的月历
+  const d = new Date();
+  const md = `${d.getMonth() + 1}/${d.getDate()}`;
+  // P-C4 快捷项：今天 / 近 7 天 / 近 30 天，点完立即筛选并关闭
   await page.locator('#inbox-cal-toggle').click();
+  await expect(page.locator('.inbox-preset')).toHaveText(['今天', '近 7 天', '近 30 天', '自定义']);
+  await page.locator('.inbox-preset[data-preset="today"]').click();
+  await expect(page.locator('#inbox-minical')).toBeHidden();
+  await expect(page.locator('#inbox-day-chip-text')).toHaveText('今天 · 4 项');
+  await expect(page.locator('.inbox-row')).toHaveCount(4);
+  await page.locator('#inbox-cal-toggle').click();
+  await page.locator('.inbox-preset[data-preset="d30"]').click();
+  await expect(page.locator('#inbox-day-chip-text')).toHaveText('近 30 天 · 4 项');
+  await page.locator('#inbox-cal-toggle').click();
+  await page.locator('.inbox-preset[data-preset="d7"]').click();
+  await expect(page.locator('#inbox-day-chip-text')).toHaveText('近 7 天 · 4 项');
+  // 自定义：今天之后不可点，无收纳日期 50% 但可选；先点开始再点结束；比开始早的日期改为新开始
+  await page.locator('#inbox-cal-toggle').click();
+  await page.locator('#inbox-preset-custom').click();
   const day = page.locator(`.inbox-minical-day[data-day="${todayKey}"]`);
   await expect(day.locator('.inbox-dot')).toHaveCount(1);
+  const tomorrow = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
+  if (tomorrow.getMonth() === d.getMonth()) {
+    const t = page.locator(`.inbox-minical-day[data-day="${IQ.dayKeyOf(tomorrow)}"]`);
+    await expect(t).toBeDisabled();
+    expect(await t.evaluate((el) => getComputedStyle(el).opacity)).toBe('0.3');
+  }
+  const empties = page.locator('.inbox-minical-day.no-inbox:not(.is-future)');
+  if (await empties.count()) expect(await empties.first().evaluate((el) => getComputedStyle(el).opacity)).toBe('0.5');
   await day.click();
-  const d = new Date();
+  await expect(page.locator('#inbox-minical')).toBeVisible();
+  await page.screenshot({ path: path.join(SHOTS, '47-date-range-popover.png') });
+  await day.click();
+  await expect(page.locator('#inbox-minical')).toBeHidden();
   await expect(page.locator('#inbox-day-chip')).toBeVisible();
-  await expect(page.locator('#inbox-day-chip-text')).toHaveText(`${d.getMonth() + 1}月${d.getDate()}日`);
+  await expect(page.locator('#inbox-day-chip-text')).toHaveText(`${md} · 4 项`);
   await expect(rowOf('很久以前的链接')).toHaveCount(0);
   await expect(page.locator('.inbox-row')).toHaveCount(4);
+  await page.screenshot({ path: path.join(SHOTS, '48-date-range-result.png') });
+  // 跨月区间：从很久以前那条所在月的 1 号到今天，5 条都在
+  await page.locator('#inbox-cal-toggle').click();
+  await page.locator('#inbox-preset-custom').click();
+  const months = (d.getFullYear() - old1.getFullYear()) * 12 + d.getMonth() - old1.getMonth();
+  for (let i = 0; i < months; i += 1) await page.locator('#inbox-minical-prev').click();
+  const startKey = IQ.dayKeyOf(new Date(old1.getFullYear(), old1.getMonth(), 1));
+  await page.locator(`.inbox-minical-day[data-day="${startKey}"]`).click();
+  for (let i = 0; i < months; i += 1) await page.locator('#inbox-minical-next').click();
+  await page.locator(`.inbox-minical-day[data-day="${todayKey}"]`).click();
+  const s0 = new Date(old1.getFullYear(), old1.getMonth(), 1);
+  await expect(page.locator('#inbox-day-chip-text')).toHaveText(`${s0.getMonth() + 1}/1–${md} · 5 项`);
   await page.locator('#inbox-day-chip-x').click();
   await expect(page.locator('#inbox-day-chip')).toBeHidden();
   await expect(page.locator('.inbox-row')).toHaveCount(5);
-  await page.locator('#inbox-cal-toggle').click();
   // 主界面月历：今天下方有灰点；面板关着时点日期不会筛选
   await page.locator('#inbox-back').click();
   await expect(page.locator('#inbox-view')).toBeHidden();

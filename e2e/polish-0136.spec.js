@@ -71,42 +71,27 @@ test.afterAll(async () => {
   await app.close();
 });
 
-test('C1 左栏分割线与右侧标题下线同一高度，「‹ 返回」与页标题文字中心对齐（浅/深色各截图）', async () => {
+test('C1 / P-C3 设置顶栏「‹ 返回」+ 居中「设置」，与收纳页顶栏一致；内容标题左对齐（浅/深色各截图）', async () => {
   for (const scheme of ['light', 'dark']) {
     await page.emulateMedia({ colorScheme: scheme });
     await openSettings('ui');
-    const lines = await page.evaluate(() => {
-      const divider = document.querySelector('.settings-nav-divider').getBoundingClientRect();
-      const title = document.getElementById('settings-page-title').getBoundingClientRect();
-      const nav = document.querySelector('.settings-nav').getBoundingClientRect();
-      const bw = parseFloat(getComputedStyle(document.getElementById('settings-page-title')).borderBottomWidth);
-      return {
-        dividerY: divider.top, titleLineY: title.bottom - bw,
-        dividerLeft: divider.left, dividerRight: divider.right, navLeft: nav.left, navRight: nav.right,
-        backSize: getComputedStyle(document.getElementById('settings-back')).fontSize,
-        backWeight: Number(getComputedStyle(document.getElementById('settings-back')).fontWeight)
-      };
+    const m = await page.evaluate(() => {
+      const view = document.getElementById('settings-view').getBoundingClientRect();
+      const head = document.querySelector('.settings-head').getBoundingClientRect();
+      const t = document.getElementById('settings-head-title').getBoundingClientRect();
+      const content = document.getElementById('settings-content').getBoundingClientRect();
+      const pt = document.getElementById('settings-page-title').getBoundingClientRect();
+      const back = getComputedStyle(document.getElementById('settings-back'));
+      return { titleText: document.getElementById('settings-head-title').textContent, titleMid: t.left + t.width / 2, viewMid: view.left + view.width / 2, headH: head.height, pageTitleLeft: pt.left, contentLeft: content.left, backSize: back.fontSize, backWeight: Number(back.fontWeight) };
     });
-    const backY = await textCenterY('#settings-back');
-    const titleY = await textCenterY('#settings-page-title');
-    console.log(`C1 ${scheme}: dividerY=${lines.dividerY} titleLineY=${lines.titleLineY} backTextY=${backY} titleTextY=${titleY}`);
-    expect(Math.abs(lines.dividerY - lines.titleLineY)).toBeLessThanOrEqual(0.5);
-    expect(Math.abs(backY - titleY)).toBeLessThanOrEqual(1);
-    expect(lines.dividerLeft).toBeLessThanOrEqual(lines.navLeft + 0.5);
-    expect(lines.backSize).toBe('15px');
-    const lefts = await page.evaluate(() => {
-      const textLeft = (el) => {
-        const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, { acceptNode: (n) => n.textContent.trim() ? 1 : 3 });
-        const n = w.nextNode(); const r = document.createRange();
-        const i = n.textContent.search(/\S/); r.setStart(n, i); r.setEnd(n, i + 1);
-        return r.getBoundingClientRect().left;
-      };
-      return { back: textLeft(document.getElementById('settings-back')), tab: textLeft(document.querySelector('.settings-tab')) };
-    });
-    console.log(`C1 ${scheme}: backTextLeft=${lefts.back} tabTextLeft=${lefts.tab}`);
-    expect(Math.abs(lefts.back - lefts.tab)).toBeLessThanOrEqual(0.5);
-    expect(lines.backWeight).toBeGreaterThanOrEqual(600);
+    expect(m.titleText).toBe('设置');
+    expect(Math.abs(m.titleMid - m.viewMid)).toBeLessThanOrEqual(1);
+    expect(m.headH).toBe(36);
+    expect(m.pageTitleLeft - m.contentLeft).toBeLessThanOrEqual(17);
+    expect(m.backSize).toBe('15px');
+    expect(m.backWeight).toBeGreaterThanOrEqual(600);
     await page.screenshot({ path: path.join(SHOTS, `30-settings-0136-${scheme}.png`) });
+    if (scheme === 'dark') await page.screenshot({ path: path.join(SHOTS, '46-settings-header.png') });
   }
   await page.emulateMedia({ colorScheme: null });
   await backToCalendar();

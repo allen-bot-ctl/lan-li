@@ -164,19 +164,27 @@
           <button type="button" class="inbox-pill inbox-type" data-type="text">文字</button>
           <button type="button" class="inbox-pill inbox-type" data-type="link">链接</button>
         </div>
-        <button type="button" class="inbox-cal-toggle" id="inbox-cal-toggle" title="按日期筛选" aria-label="按日期筛选"><svg class="inbox-cal-icon" viewBox="0 0 14 14" aria-hidden="true" focusable="false"><rect x="2" y="3" width="10" height="9" rx="1.5"/><path d="M2 6h10M5 1.8v2.4M9 1.8v2.4"/></svg></button>
+        <button type="button" class="inbox-cal-toggle" id="inbox-cal-toggle" title="按时间范围筛选" aria-label="按时间范围筛选"><svg class="inbox-cal-icon" viewBox="0 0 14 14" aria-hidden="true" focusable="false"><rect x="2" y="3" width="10" height="9" rx="1.5"/><path d="M2 6h10M5 1.8v2.4M9 1.8v2.4"/></svg></button>
       </div>
       <div class="inbox-tagrow" id="inbox-tagrow">
-        <span class="inbox-day-chip" id="inbox-day-chip" hidden><span id="inbox-day-chip-text"></span><button type="button" class="inbox-day-chip-x" id="inbox-day-chip-x" aria-label="取消日期筛选">×</button></span>
+        <span class="inbox-day-chip" id="inbox-day-chip" hidden><span id="inbox-day-chip-text"></span><button type="button" class="inbox-day-chip-x" id="inbox-day-chip-x" aria-label="取消时间筛选">×</button></span>
         <span class="inbox-tags" id="inbox-tags"></span>
         <span class="inbox-more-wrap"><button type="button" class="inbox-pill inbox-more" id="inbox-more" hidden></button><span class="inbox-more-menu" id="inbox-more-menu" hidden></span></span>
       </div>
-      <div class="inbox-minical" id="inbox-minical" hidden>
+      <div class="inbox-minical" id="inbox-minical" hidden role="dialog" aria-label="时间范围">
+        <div class="inbox-presets" id="inbox-presets">
+          <button type="button" class="inbox-preset" data-preset="today">今天</button>
+          <button type="button" class="inbox-preset" data-preset="d7">近 7 天</button>
+          <button type="button" class="inbox-preset" data-preset="d30">近 30 天</button>
+          <button type="button" class="inbox-preset" data-preset="custom" id="inbox-preset-custom">自定义</button>
+        </div>
+        <div class="inbox-custom" id="inbox-custom" hidden>
         <div class="inbox-minical-head"><button type="button" id="inbox-minical-prev">‹</button><span id="inbox-minical-title"></span><button type="button" id="inbox-minical-next">›</button></div>
         <div class="inbox-minical-grid" id="inbox-minical-grid"></div>
+        </div>
       </div>
       <div class="inbox-list" id="inbox-list" role="list"></div>
-      <div class="inbox-empty" id="inbox-empty" hidden>把文件、图片、文字或链接拖到菜单栏时钟上，就会收在这里</div>
+      <div class="inbox-empty" id="inbox-empty" hidden><svg class="inbox-empty-icon" viewBox="0 0 14 14" aria-hidden="true" focusable="false"><path d="M2 8v3a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V8"/><path d="M2 8l1.6-5h6.8L12 8H9.2l-.7 1.4H5.5L4.8 8z"/></svg><span class="inbox-empty-text">把文件、图片、文字或链接拖到菜单栏时钟上，就会收在这里</span></div>
       <div class="inbox-noresult" id="inbox-noresult" hidden><span>没有符合条件的收纳</span><button type="button" class="inbox-clear" id="inbox-clear">清除筛选</button></div>
       <div class="inbox-undo" id="inbox-undo" hidden><span>已删除 · </span><button type="button" id="inbox-undo-btn">撤销</button></div>
       <div class="inbox-tagpop" id="inbox-tagpop" hidden><input id="inbox-tag-input" type="text" maxlength="8" placeholder="加标签，回车" autocomplete="off"><span class="inbox-tag-suggest" id="inbox-tag-suggest"></span><span class="inbox-tagpop-err" id="inbox-tagpop-err"></span></div>
@@ -186,9 +194,12 @@
     </div>
 
     <div class="settings-view" id="settings-view" hidden>
-      <nav class="settings-nav" aria-label="设置分类">
+      <div class="settings-head">
         <button class="settings-back" id="settings-back" type="button">‹ 返回</button>
-        <div class="settings-nav-divider" role="separator"></div>
+        <span class="settings-head-title" id="settings-head-title">设置</span>
+      </div>
+      <div class="settings-body">
+      <nav class="settings-nav" aria-label="设置分类">
         <button class="settings-tab" type="button" data-tab="ui">界面设置</button>
         <button class="settings-tab" type="button" data-tab="almanac">黄历</button>
         <button class="settings-tab" type="button" data-tab="weather">天气</button>
@@ -207,6 +218,7 @@
           <div class="settings-update-result" id="settings-update-result" hidden></div>
         </div>
       </section>
+      </div>
     </div>
 
     <div class="picker-overlay" id="clock-picker" hidden>

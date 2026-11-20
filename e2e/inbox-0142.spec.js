@@ -190,13 +190,36 @@ test('A-C9 列表时间倒序，四类各走对应打开方式，原文件移走
   expect(fs.existsSync(path.join(work, '挪走了.pdf'))).toBe(true);
 });
 
-test('A-C9 顶栏收纳入口在检查更新左侧；空状态文案', async () => {
+test('A-C9 / P-C1–P-C3 顶栏收纳入口在检查更新左侧；图标等距；空状态居中；标题居中', async () => {
   await hook('hideWindow');
   const order = await page.evaluate(() => Array.from(document.querySelectorAll('.topbar-right > *')).map((el) => el.id));
   expect(order.indexOf('inbox-button')).toBe(order.indexOf('check-update') - 1);
   for (const m of await entries()) fs.rmSync(path.join(inboxDir, m.id), { recursive: true });
   await hook('openInboxPanel');
   await expect(page.locator('#inbox-empty')).toHaveText('把文件、图片、文字或链接拖到菜单栏时钟上，就会收在这里');
+  // 0.1.46：顶栏三个图标间距一致、同一中线；空提示在列表区域内水平垂直居中；标题紧跟「‹ 返回」左对齐
+  const geo = await page.evaluate(() => {
+    const r = (sel) => document.querySelector(sel).getBoundingClientRect();
+    const ib = r('#inbox-button'); const cu = r('#check-update'); const pb = r('#pin-button');
+    const icons = ['#inbox-button svg', '#check-update svg', '#pin-button svg.pin-icon-pin'].map((q) => { const b = r(q); return b.top + b.height / 2; });
+    const view = r('#inbox-view'); const empty = r('#inbox-empty'); const head = r('.inbox-head');
+    const back = r('#inbox-back'); const title = r('.inbox-title');
+    const listTop = Math.max(...Array.from(document.querySelectorAll('#inbox-view > *')).filter((el) => el !== document.getElementById('inbox-empty') && el.getBoundingClientRect().height > 0 && el.getBoundingClientRect().bottom <= empty.top + 1).map((el) => el.getBoundingClientRect().bottom), head.bottom);
+    return { gap1: cu.left - ib.right, gap2: pb.left - cu.right, icons, emptyMid: empty.top + empty.height / 2, areaMid: (listTop + view.bottom) / 2, emptyH: empty.height, textMid: (() => { const range = document.createRange(); range.selectNodeContents(document.getElementById('inbox-empty')); const b = range.getBoundingClientRect(); return b.top + b.height / 2; })(), titleMid: title.left + title.width / 2, viewMidX: view.left + view.width / 2 };
+  });
+  expect(geo.gap1).toBe(geo.gap2);
+  expect(Math.max(...geo.icons) - Math.min(...geo.icons)).toBeLessThanOrEqual(1);
+  expect(Math.abs(geo.textMid - geo.areaMid)).toBeLessThanOrEqual(2);
+  // P-C3 收纳页顶栏标题居中
+  expect(Math.abs(geo.titleMid - geo.viewMidX)).toBeLessThanOrEqual(1);
+  // P-C1 与设置胶囊 8px：在主界面量（收纳页里胶囊隐藏）
+  fs.mkdirSync(path.join(__dirname, 'screenshots'), { recursive: true });
+  await page.screenshot({ path: path.join(__dirname, 'screenshots', '45-inbox-empty.png') });
+  await page.locator('#inbox-back').click();
+  const pill = await page.evaluate(() => document.getElementById('settings-button').getBoundingClientRect().left - document.getElementById('pin-button').getBoundingClientRect().right);
+  expect(pill).toBe(8);
+  await page.screenshot({ path: path.join(__dirname, 'screenshots', '44-topbar-icons.png'), clip: { x: 380, y: 0, width: 200, height: 32 } });
+  console.log('GEO', JSON.stringify(geo));
 });
 
 test('A-C10 托盘「退出栏历」走带兜底强退的退出函数', async () => {

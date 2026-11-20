@@ -172,3 +172,17 @@ test('B-C7 重新指定原文件：重建软链接，清 missing', () => {
   assert.strictEqual(fs.readlinkSync(path.join(s.root, f.id, f.file)), moved);
   assert.throws(() => s.relink(f.id, path.join(dir, 'nope')));
 });
+
+test('0.1.46 时间范围：快捷项、区间两端都含、跨月、胶囊文案', () => {
+  const now = new Date(2026, 10, 19, 21, 0, 0);
+  const r7 = Q.presetRange('d7', now);
+  assert.deepStrictEqual([r7.from, r7.to], ['2026-11-13', '2026-11-19']);
+  assert.strictEqual(Q.rangeChipLabel(r7, 3), '近 7 天 · 3 项');
+  const r = Q.makeRange('2026-11-28', '2026-10-30');
+  assert.deepStrictEqual([r.from, r.to], ['2026-10-30', '2026-11-28']);
+  assert.strictEqual(Q.rangeChipLabel(r, 2), '10/30–11/28 · 2 项');
+  assert.strictEqual(Q.rangeChipLabel({ from: '2026-11-19', to: '2026-11-19' }, 1), '11/19 · 1 项');
+  assert.ok(Q.inRange({ createdMs: new Date(2026, 10, 28, 23, 59).getTime() }, r));
+  assert.ok(!Q.inRange({ createdMs: new Date(2026, 10, 29, 0, 0).getTime() }, r));
+  assert.ok(Q.inRange({ createdMs: new Date(2026, 9, 30, 0, 0).getTime() }, r));
+});

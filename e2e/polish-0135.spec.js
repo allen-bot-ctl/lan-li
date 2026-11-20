@@ -201,31 +201,23 @@ test('C4 下拉菜单是「全部设置…」，没有「更多…」，点击�
   await backToCalendar();
 });
 
-test('C5 设置导航：返回与「界面设置」之间有分割线；都是手型、高 30px', async () => {
+test('C5 设置导航（0.1.46）：「‹ 返回」在顶栏一行、导航项都是手型、高 30px', async () => {
   await openSettings();
   const m = await page.evaluate(() => {
     const back = document.getElementById('settings-back');
-    const firstTab = document.querySelector('.settings-tab');
-    const between = back.nextElementSibling;
-    const items = [back, ...document.querySelectorAll('.settings-tab')];
     return {
-      dividerBetween: between.classList.contains('settings-nav-divider') && between.nextElementSibling === firstTab,
-      dividerHeight: between.getBoundingClientRect().height,
-      items: items.map((el) => ({ cursor: getComputedStyle(el).cursor, h: el.getBoundingClientRect().height }))
+      backInHead: Boolean(back.closest('.settings-head')),
+      items: [back, ...document.querySelectorAll('.settings-tab')].map((el) => ({ cursor: getComputedStyle(el).cursor, h: el.getBoundingClientRect().height }))
     };
   });
-  expect(m.dividerBetween).toBe(true);
-  expect(m.dividerHeight).toBeGreaterThan(0);
-  for (const item of m.items) {
-    expect(item.cursor).toBe('pointer');
-  }
-  // 0.1.36：「返回」改成 36px 与页标题同高，各导航项仍是 30px。
+  expect(m.backInHead).toBe(true);
+  for (const item of m.items) expect(item.cursor).toBe('pointer');
   expect(Math.abs(m.items[0].h - 36)).toBeLessThanOrEqual(0.5);
   for (const item of m.items.slice(1)) expect(Math.abs(item.h - 30)).toBeLessThanOrEqual(0.5);
   await backToCalendar();
 });
 
-test('C6 五个设置页：页标题 15px/600 带分割线，内容区可见文字 ≥12px', async () => {
+test('C6 五个设置页：内容标题 13px/600 左对齐（0.1.46 小顶栏一级），内容区可见文字 ≥12px', async () => {
   await openSettings();
   const tabs = await page.locator('.settings-tab').allTextContents();
   expect(tabs.length).toBe(5);
@@ -253,10 +245,8 @@ test('C6 五个设置页：页标题 15px/600 带分割线，内容区可见文�
       };
     });
     expect(m.text).toBe(tab);
-    expect(m.size).toBe('15px');
+    expect(m.size).toBe('13px');
     expect(m.weight).toBeGreaterThanOrEqual(600);
-    expect(m.border).toBe('1px');
-    expect(m.borderStyle).toBe('solid');
     expect(m.small, tab).toEqual([]);
   }
   await backToCalendar();

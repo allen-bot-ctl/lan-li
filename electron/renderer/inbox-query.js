@@ -75,6 +75,7 @@
       if (type && m.type !== type) return false;
       if (tags.length && !tags.every((t) => (m.tags || []).includes(t))) return false;
       if (f.day && entryDayKey(m) !== f.day) return false;
+      if (f.range && !inRange(m, f.range)) return false;
       if (q && !haystack(m).includes(q)) return false;
       return true;
     });
@@ -140,6 +141,33 @@
     return out;
   }
 
+  // 0.1.46 时间范围：range = { from:'Y-M-D', to:'Y-M-D' }，两端都含。
+  function keyToDate(k) { const p = String(k).split('-').map(Number); return new Date(p[0], p[1] - 1, p[2]); }
+  function inRange(m, r) {
+    const a = keyToDate(r.from).getTime();
+    const e = keyToDate(r.to); const b = new Date(e.getFullYear(), e.getMonth(), e.getDate() + 1).getTime();
+    const t = entryMs(m);
+    return t >= a && t < b;
+  }
+  function makeRange(k1, k2) {
+    const a = keyToDate(k1).getTime(); const b = keyToDate(k2).getTime();
+    return a <= b ? { from: k1, to: k2 } : { from: k2, to: k1 };
+  }
+  function presetRange(preset, now) {
+    const n = now || new Date();
+    const back = { today: 0, d7: 6, d30: 29 }[preset];
+    if (back === undefined) return null;
+    const s0 = new Date(n.getFullYear(), n.getMonth(), n.getDate() - back);
+    return { from: dayKeyOf(s0), to: dayKeyOf(n), preset };
+  }
+  const PRESET_LABEL = { today: '今天', d7: '近 7 天', d30: '近 30 天' };
+  function rangeChipLabel(r, count) {
+    if (!r) return '';
+    const md = (k) => { const p = String(k).split('-'); return `${Number(p[1])}/${Number(p[2])}`; };
+    const head = r.preset ? PRESET_LABEL[r.preset] : (r.from === r.to ? md(r.from) : `${md(r.from)}–${md(r.to)}`);
+    return `${head} · ${count} 项`;
+  }
+
   function dayChipLabel(dayKey) {
     const p = String(dayKey || '').split('-');
     return p.length === 3 ? `${Number(p[1])}月${Number(p[2])}日` : '';
@@ -147,6 +175,6 @@
 
   return {
     MAX_TAGS, MAX_TAG_LEN, TYPES, normalizeTag, addTag, cleanTags, entryMs, entryDayKey, dayKeyOf,
-    matchesQuery, filterEntries, dateGroupLabel, groupByDate, startOfWeek, tagCounts, highlightParts, dayChipLabel
+    matchesQuery, filterEntries, dateGroupLabel, groupByDate, startOfWeek, tagCounts, highlightParts, dayChipLabel, inRange, makeRange, presetRange, rangeChipLabel
   };
 }));
