@@ -143,6 +143,9 @@ jobs:
           codesign -d -r- "$app" 2>&1 | tee /tmp/dr1.txt
           grep -q "certificate leaf" /tmp/dr1.txt || { echo "::error::designated has no certificate leaf"; exit 1; }
           if grep -q "cdhash" /tmp/dr1.txt; then echo "::error::designated still uses cdhash"; exit 1; fi
+          # 0.1.52 PM 定：证书 SHA-1 指纹钉死（公开信息），换证书或退回临时签名都会失败
+          LANLI_CERT_SHA1="99338b4e87fdf080d334604b104d3fddc1017397"
+          grep -qi "certificate leaf = H\"$LANLI_CERT_SHA1\"" /tmp/dr1.txt || { echo "::error::certificate leaf is not the pinned LanLi Self-Signed cert"; exit 1; }
           codesign --verify --deep --strict "$app"
           echo "RELEASE: designated=$(grep designated /tmp/dr1.txt)"
           # S-C2：同一份产物再签一遍，designated 必须一字不差
