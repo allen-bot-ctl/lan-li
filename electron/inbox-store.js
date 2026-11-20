@@ -100,6 +100,39 @@ function classifyDrop(drop) {
   return [];
 }
 
+// 0.1.49 剪贴板判型：文件 → 图片 → 图文 → 链接 → 文字。
+// c = { files:[path], image:{ buffer, ext }|null, html, text }
+function classifyClipboard(c) {
+  const d = c || {};
+  const files = (d.files || []).filter(Boolean);
+  if (files.length) return files.map((p) => ({ kind: isImagePath(p) ? 'image' : 'file', path: p }));
+  const html = typeof d.html === 'string' ? d.html.trim() : '';
+  const text = typeof d.text === 'string' ? d.text.trim() : '';
+  const htmlPlain = html ? htmlToPlain(html) : '';
+  // 只复制了一张图：剪贴板里有位图，html 为空或只是一个 <img>，没有文字
+  if (d.image && d.image.buffer && d.image.buffer.length && !htmlPlain && !text) {
+    return [{ kind: 'image', buffer: d.image.buffer, ext: d.image.ext || 'png', name: '剪贴板图片' }];
+  }
+  if (html) {
+    const r = classifyDrop({ html, text });
+    if (r.length) return r;
+  }
+  if (text) return classifyDrop({ text });
+  return [];
+}
+
+// 0.1.49 收纳成功提示里的类型名
+function captureLabel(items) {
+  const list = items || [];
+  if (list.some((i) => i.kind === 'file' || (i.kind === 'image' && i.path))) return `${list.length} 个文件`;
+  if (list.length > 1) return `${list.length} 项`;
+  const it = list[0] || {};
+  if (it.kind === 'image') return '图片';
+  if (it.kind === 'link') return '链接';
+  if (it.kind === 'text') return it.html ? '图文' : '文字';
+  return '内容';
+}
+
 function pad(n) { return String(n).padStart(2, '0'); }
 function isoLocal(d) {
   const off = -d.getTimezoneOffset();
@@ -117,6 +150,7 @@ function createInboxStore(opts) {
   const rand = o.rand || (() => Math.random().toString(36).slice(2, 6).padEnd(4, '0'));
   const makeThumb = o.makeThumb || null;   // (srcFile, destJpg) => void
   let lastMs = 0;
+  let extraFields = null;   // 0.1.49：本次保存统一附加的 meta（via / sourceApp）
 
   function ensureRoot() { fs.mkdirSync(root, { recursive: true }); }
 
@@ -131,7 +165,7 @@ function createInboxStore(opts) {
     const meta = Object.assign({
       id, type, title: '', createdAt: isoLocal(d), createdMs: ms, tags: [],
       sourcePath: null, sourceUrl: null, size: 0, ref: 'copy', missing: false, preview: '', schema: SCHEMA
-    }, fields || {});
+    }, extraFields || {}, fields || {});
     return { id, tmp, meta };
   }
 
@@ -178,7 +212,10 @@ function createInboxStore(opts) {
     const i = typeof input === 'string' ? { text: input } : (input || {});
     let html = i.html ? sanitizeHtml(i.html) : textToHtml(i.text || '');
     const plain = i.html ? htmlToPlain(stripInline(html)) : String(i.text || '').trim();
-    return run('text', { title: plain.split('\n')[0].slice(0, 60) || '图文', file: 'content.html', assets: [], rich: Boolean(i.html), preview: plain.replace(/\s+/g, ' ').slice(0, 120) }, (e) => {
+    const lines = plain.split('\n').map((l) => l.trim()).filter(Boolean);
+    const rich = Boolean(i.html);
+    const fields = { title: (lines[0] || '').slice(0, rich ? 40 : 60) || (rich ? '图文' : '文字'), file: 'content.html', assets: [], rich, preview: plain.replace(/\s+/g, ' ').slice(0, 120), rest: lines.slice(1).join(' ').replace(/\s+/g, ' ').slice(0, 60) };
+    return run('text', fields, (e) => {
       const imgs = i.images || [];
       if (imgs.length) fs.mkdirSync(path.join(e.tmp, 'assets'), { recursive: true });
       imgs.forEach((img, n) => {
@@ -187,6 +224,9 @@ function createInboxStore(opts) {
         e.meta.assets.push(file);
         if (img.src) html = html.split(img.src).join(file);
       });
+      if (e.meta.assets.length && makeThumb) {
+        try { makeThumb(path.join(e.tmp, e.meta.assets[0]), path.join(e.tmp, 'thumb.jpg')); if (fs.existsSync(path.join(e.tmp, 'thumb.jpg'))) e.meta.thumb = 'thumb.jpg'; } catch { /* 没缩略图也能用 */ }
+      }
       e.meta.size = Buffer.byteLength(html);
       fs.writeFileSync(path.join(e.tmp, 'content.html'), html);
     });
@@ -207,15 +247,18 @@ function createInboxStore(opts) {
   }
 
   // 一次拖放全部保存；任一项失败则删掉本次已存的，整体报错。
-  function saveAll(items) {
+  function saveAll(items, extra) {
     if (!items || !items.length) throw new InboxError('empty', '没有可识别的内容');
     if (items.length > MAX_ITEMS) throw new InboxError('too-many', '一次最多 50 项');
     const saved = [];
+    extraFields = extra || null;
     try {
       for (const it of items) saved.push(save(it));
     } catch (error) {
       for (const m of saved) remove(m.id);
       throw error;
+    } finally {
+      extraFields = null;
     }
     return saved;
   }
@@ -396,6 +439,6 @@ function describeItems(items) {
 }
 
 module.exports = {
-  createInboxStore, classifyDrop, describeItems, sanitizeHtml, htmlToPlain, textToHtml, imgSources, isImagePath,
+  createInboxStore, classifyDrop, classifyClipboard, captureLabel, describeItems, sanitizeHtml, htmlToPlain, textToHtml, imgSources, isImagePath,
   InboxError, MAX_ITEMS, MAX_IMAGE_BYTES, IMAGE_EXTS
 };

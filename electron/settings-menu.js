@@ -71,6 +71,7 @@ function buildTrayMenuTemplate(actions = {}) {
   const call = (name) => () => { if (typeof actions[name] === 'function') actions[name](); };
   return [
     { id: 'tray-check-update', label: '检查更新…', click: call('checkUpdate') },
+    { id: 'tray-capture-clipboard', label: '收纳剪贴板内容', accelerator: 'Control+Alt+V', registerAccelerator: false, click: call('captureClipboard') },
     { id: 'tray-open-settings', label: '设置中心…', click: call('openSettings') },
     { type: 'separator' },
     { id: 'tray-quit', label: '退出栏历', accelerator: 'CommandOrControl+Q', click: call('quit') }

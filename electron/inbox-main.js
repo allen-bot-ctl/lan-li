@@ -2,7 +2,9 @@
 // 0.1.42 收纳：主进程部分（接纳框窗口、托盘拖拽事件、落盘、列表 IPC）。
 const path = require('node:path');
 const fs = require('node:fs');
-const { createInboxStore, classifyDrop, imgSources, htmlToPlain, MAX_IMAGE_BYTES, InboxError } = require('./inbox-store');
+const crypto = require('node:crypto');
+const { execFile } = require('node:child_process');
+const { createInboxStore, classifyDrop, classifyClipboard, captureLabel, imgSources, htmlToPlain, MAX_IMAGE_BYTES, InboxError } = require('./inbox-store');
 const Q = require('./renderer/inbox-query');
 const UNDO_MS = 5000;
 
@@ -14,6 +16,24 @@ const SUCCESS_HIDE_MS = 1200;
 const ERROR_HIDE_MS = 2000;
 const TEXT_IDLE = '拖到这里，放进收纳';
 const TEXT_UNSUPPORTED = '这个内容暂时收不进来';
+const TEXT_CLIP_EMPTY = '剪贴板里没有可收纳的内容';
+const TEXT_CLIP_DUP = '已经收过了';
+const CLIP_DUP_MS = 3000;
+
+function xmlUnescape(s) { return String(s).replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&'); }
+function fileUrlPath(u) { try { return /^file:/i.test(u) ? decodeURIComponent(new URL(String(u).trim()).pathname).replace(/\/$/, '') : ''; } catch { return ''; } }
+
+// 按快捷键那一刻最前面的应用名（系统自带 lsappinfo，无需授权）。
+function frontAppName() {
+  return new Promise((resolve) => {
+    if (process.platform !== 'darwin') return resolve('');
+    execFile('/bin/sh', ['-c', 'lsappinfo info -only name "$(lsappinfo front)"'], { timeout: 800 }, (err, out) => {
+      if (err) return resolve('');
+      const m = /"(?:LSDisplayName|name)"\s*=\s*"([^"]+)"/i.exec(String(out || ''));
+      resolve(m ? m[1] : '');
+    });
+  });
+}
 
 // 接纳框贴在托盘图标正下方 6px，水平居中，贴屏幕右缘时左移。
 function computeDropzoneBounds(trayBounds, workArea) {
@@ -64,6 +84,8 @@ function createInboxController(deps) {
   let lastSaved = [];
   let e2eOpenCalls = [];
   let lastDropPayload = null;
+  let lastClip = { hash: '', at: 0 };
+  let e2eClipboard = null;   // E2E 注入的剪贴板内容
   let e2eCopyCalls = [];
   let e2eRelinkPath = null;
   const purgeTimers = new Map();
@@ -92,7 +114,7 @@ function createInboxController(deps) {
   function cancelHide() { if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; } }
   function scheduleHide(ms) { cancelHide(); hideTimer = setTimeout(hide, ms); }
 
-  function show() {
+  function show(o) {
     cancelHide();
     const w = ensureWindow();
     const tray = deps.getTray();
@@ -103,7 +125,8 @@ function createInboxController(deps) {
     }
     if (!busy) send({ state: 'idle', text: TEXT_IDLE });
     if (!visible) { w.showInactive(); visible = true; }
-    if (deps.onShow) deps.onShow();
+    // 0.1.49：面板里收纳时提示框不收起日历面板
+    if (deps.onShow && !(o && o.keepCalendar)) deps.onShow();
   }
 
   function hide() {
@@ -165,7 +188,7 @@ function createInboxController(deps) {
     if (!visible) show();
     try {
       const items = await resolveItems(classifyDrop(payload));
-      lastSaved = store.saveAll(items);
+      lastSaved = store.saveAll(items, { via: "drag" });
       send({ state: 'success', text: `已收纳 ${lastSaved.length} 项`, sub: '点开查看' });
       if (deps.onChanged) deps.onChanged();
       scheduleHide(SUCCESS_HIDE_MS);
@@ -176,6 +199,75 @@ function createInboxController(deps) {
       send({ state: 'error', text: errorText(error) });
       scheduleHide(ERROR_HIDE_MS);
       return { ok: false, text: errorText(error) };
+    } finally {
+      busy = false;
+    }
+  }
+
+  // 0.1.49 读剪贴板：文件（多个走 NSFilenamesPboardType）、位图、HTML、纯文本。
+  function readClipboard() {
+    if (e2eClipboard) {
+      const c = e2eClipboard;
+      return { files: c.files || [], html: c.html || '', text: c.text || '', image: c.imageBase64 ? { buffer: Buffer.from(c.imageBase64, 'base64'), ext: 'png' } : null };
+    }
+    let files = [];
+    try {
+      const plist = clipboard.read('NSFilenamesPboardType');
+      if (plist) files = Array.from(plist.matchAll(/<string>([^<]*)<\/string>/g)).map((m) => xmlUnescape(m[1])).filter(Boolean);
+    } catch { /* ignore */ }
+    if (!files.length) {
+      try { const p = fileUrlPath(clipboard.read('public.file-url')); if (p) files = [p]; } catch { /* ignore */ }
+    }
+    let image = null;
+    try { const img = clipboard.readImage(); if (img && !img.isEmpty()) image = { buffer: img.toPNG(), ext: 'png' }; } catch { /* ignore */ }
+    return { files, html: clipboard.readHTML() || '', text: clipboard.readText() || '', image };
+  }
+
+  function clipHash(c) {
+    const h = crypto.createHash('sha1');
+    h.update(JSON.stringify([c.files, c.html, c.text]));
+    if (c.image) h.update(c.image.buffer);
+    return h.digest('hex');
+  }
+
+  // 三个入口（全局快捷键、面板 ⌘V/按钮、托盘菜单）都走这里。
+  async function captureClipboard(opts) {
+    const o = opts || {};
+    const sourceApp = o.via === 'hotkey' ? (o.sourceApp != null ? o.sourceApp : await frontAppName()) : '';
+    cancelHide();
+    if (!visible) show({ keepCalendar: o.via === 'panel' });
+    const c = readClipboard();
+    const items = classifyClipboard(c);
+    if (!items.length) {
+      send({ state: 'error', text: TEXT_CLIP_EMPTY });
+      scheduleHide(ERROR_HIDE_MS);
+      return { ok: false, text: TEXT_CLIP_EMPTY };
+    }
+    const hash = clipHash(c);
+    const t = Date.now();
+    if (hash === lastClip.hash && t - lastClip.at < CLIP_DUP_MS) {
+      lastClip.at = t;
+      send({ state: 'success', text: TEXT_CLIP_DUP, sub: '点开查看' });
+      scheduleHide(SUCCESS_HIDE_MS);
+      return { ok: true, dup: true, count: 0 };
+    }
+    busy = true;
+    try {
+      const resolved = await resolveItems(items);
+      const app = sourceApp && !/^(栏历|LanLi|Electron)$/i.test(sourceApp) ? sourceApp : '';
+      lastSaved = store.saveAll(resolved, { via: 'clipboard', ...(app ? { sourceApp: app } : {}) });
+      lastClip = { hash, at: t };
+      const label = captureLabel(items);
+      send({ state: 'success', text: `已收纳 · ${label}`, sub: '点开查看' });
+      if (deps.onChanged) deps.onChanged();
+      scheduleHide(SUCCESS_HIDE_MS);
+      return { ok: true, count: lastSaved.length, label, ids: lastSaved.map((m) => m.id) };
+    } catch (error) {
+      if (logger) logger.warn('[栏历] 剪贴板收纳失败：' + (error && error.message));
+      const text = error && (error.code === 'empty' || error.code === 'unsupported') ? TEXT_CLIP_EMPTY : errorText(error);
+      send({ state: 'error', text });
+      scheduleHide(ERROR_HIDE_MS);
+      return { ok: false, text };
     } finally {
       busy = false;
     }
@@ -288,7 +380,8 @@ function createInboxController(deps) {
   function register() {
     ipcMain.on('drop:enter', () => { cancelHide(); });
     ipcMain.on('drop:leave', () => { if (!busy && state.state !== 'success' && state.state !== 'error') scheduleHide(LEAVE_HIDE_MS); });
-    ipcMain.on('drop:data', (_e, payload) => { handleDrop(payload); });
+    ipcMain.on('drop:data', (_e, payload) => { handleDrop({ ...(payload || {}), via: 'drag' }); });
+    ipcMain.handle('inbox:captureClipboard', () => captureClipboard({ via: 'panel' }));
     ipcMain.on('drop:openInbox', () => { hide(); if (deps.openInbox) deps.openInbox(); });
     ipcMain.handle('inbox:list', () => listForRenderer());
     ipcMain.handle('inbox:open', (_e, id) => openEntry(id));
@@ -327,7 +420,7 @@ function createInboxController(deps) {
   }
 
   return {
-    store, register, attachTray, removeWithUndo, undoRemove, show, hide, handleDrop,
+    store, register, attachTray, removeWithUndo, undoRemove, show, hide, handleDrop, captureClipboard,
     isVisible: () => visible,
     window: () => win,
     e2e: {
@@ -337,6 +430,8 @@ function createInboxController(deps) {
       clickMenu: (id) => { const it = lastMenu && lastMenu.getMenuItemById(id); if (!it) return false; it.click(); lastMenu = null; return true; },
       copyCalls: () => e2eCopyCalls.slice(),
       lastDrop: () => lastDropPayload,
+      setClipboard: (c) => { e2eClipboard = c || null; lastClip = { hash: '', at: 0 }; return true; },
+      resetClipDup: () => { lastClip = { hash: '', at: 0 }; return true; },
       setRelinkPath: (p) => { e2eRelinkPath = p || null; return true; },
       leave: () => { if (!busy && state.state !== 'success' && state.state !== 'error') scheduleHide(LEAVE_HIDE_MS); return true; }
     }

@@ -30,8 +30,8 @@ test('C1/C2 右键：先隐藏日历，菜单项正确', async () => {
   const r = await hook('trayRightClick');
   expect(r).toEqual({ menuOpen: true, visible: false });
   const items = await hook('trayMenuItems');
-  expect(items.map((i) => i.type === 'separator' ? '---' : i.label)).toEqual(['检查更新…', '设置中心…', '---', '退出栏历']);
-  expect(items[3].accelerator).toBe('CommandOrControl+Q');
+  expect(items.map((i) => i.type === 'separator' ? '---' : i.label)).toEqual(['检查更新…', '收纳剪贴板内容', '设置中心…', '---', '退出栏历']);
+  expect(items[4].accelerator).toBe('CommandOrControl+Q');
   expect(await hook('trayEnter')).toBe(false);   // 菜单开着时悬停不开日历
 });
 

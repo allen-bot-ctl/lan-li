@@ -57,6 +57,8 @@ const settingsPageUi = document.getElementById('settings-page-ui');
 const settingsPageUpdate = document.getElementById('settings-page-update');
 const settingOpenAtLogin = document.getElementById('setting-open-at-login');
 const settingShowDate = document.getElementById('setting-show-date');
+const settingCapture = document.getElementById('setting-capture-hotkey');
+const settingCaptureHint = document.getElementById('setting-capture-hint');
 const settingsVersion = document.getElementById('settings-version');
 const settingsPageTitle = document.getElementById('settings-page-title');
 const weatherRetry = document.getElementById('weather-retry');
@@ -1146,6 +1148,8 @@ function openSettingsView() {
   api.getSettings().then((s) => {
     settingOpenAtLogin.checked = s.openAtLogin === true;
     settingShowDate.checked = s.menuBarShowDate !== false;
+    settingCapture.checked = s.captureHotkey !== false;
+    settingCaptureHint.hidden = !s.captureHotkeyBusy;
     settingsVersion.textContent = s.version;
   }).catch(() => {});
 }
@@ -1172,6 +1176,9 @@ settingsTabs.forEach((el) => {
 settingOpenAtLogin.addEventListener('change', () => {
   const el = settingOpenAtLogin;
   api.setOpenAtLogin(el.checked).then((v) => { el.checked = v === true; }).catch(() => {});
+});
+settingCapture.addEventListener('change', () => {
+  api.setCaptureHotkey(settingCapture.checked).then((r) => { settingCaptureHint.hidden = !(r && r.captureHotkeyBusy); }).catch(() => {});
 });
 settingShowDate.addEventListener('change', () => {
   api.setMenuBarShowDate(settingShowDate.checked);
@@ -1229,6 +1236,11 @@ function inboxSubtitle(m) {
   if (m.type === 'file') return m.missing ? '原文件已移动或删除' : [m.isDir ? '文件夹' : formatSize(m.size), inboxParentName(m.sourcePath)].filter(Boolean).join(' · ');
   if (m.type === 'image') return [formatSize(m.size), m.preview].filter(Boolean).join(' · ');
   if (m.type === 'link') return m.preview || m.sourceUrl || '';
+  if (m.type === 'text' && m.rich) {
+    const n = (m.assets || []).length;
+    return ['图文', n ? `含 ${n} 张图` : '', m.sourceApp ? `来自 ${m.sourceApp}` : ''].filter(Boolean).join(' · ');
+  }
+  if (m.type === 'text' && m.rest != null) return [m.rest, m.sourceApp ? `来自 ${m.sourceApp}` : ''].filter(Boolean).join(' · ');
   return m.preview || '';
 }
 
@@ -1366,12 +1378,13 @@ function buildInboxRow(m) {
   row.dataset.type = m.type;
   const icon = document.createElement('span');
   icon.className = 'inbox-row-icon';
-  if (m.thumb) {
+  const richThumb = m.type === 'text' && m.rich && m.thumb;
+  if (m.thumb && !richThumb) {
     const img = document.createElement('img');
     img.src = m.thumb; img.alt = '';
     icon.appendChild(img);
   } else {
-    icon.textContent = INBOX_TYPE_ICON[m.type] || '📄';
+    icon.textContent = m.type === 'text' && m.rich ? '🗞' : (INBOX_TYPE_ICON[m.type] || '📄');
   }
   const body = document.createElement('span');
   body.className = 'inbox-row-body';
@@ -1409,7 +1422,14 @@ function buildInboxRow(m) {
     acts.appendChild(rowAction('#', 'inbox-act-tag', (e) => openTagPop(m, e.currentTarget)));
   }
   acts.appendChild(rowAction('×', 'inbox-act-delete', () => deleteInboxEntry(m.id)));
-  row.append(icon, body, time, acts);
+  if (richThumb) {
+    const th = document.createElement('img');
+    th.className = 'inbox-row-thumb';
+    th.src = m.thumb; th.alt = '';
+    row.append(icon, body, th, time, acts);
+  } else {
+    row.append(icon, body, time, acts);
+  }
   row.addEventListener('click', () => openInboxRow(m));
   row.addEventListener('contextmenu', (e) => { e.preventDefault(); api.inboxContextMenu(m.id); });
   return row;
@@ -1517,7 +1537,12 @@ document.getElementById('inbox-clear').addEventListener('click', () => clearInbo
 document.addEventListener('keydown', (e) => {
   if (inboxView.hidden) return;
   if ((e.metaKey || e.ctrlKey) && (e.key === 'f' || e.key === 'F')) { e.preventDefault(); inboxSearch.focus(); inboxSearch.select(); }
+  // 0.1.49：焦点不在输入框时 ⌘V 收纳剪贴板
+  const typing = e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable);
+  if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && (e.key === 'v' || e.key === 'V') && !typing) { e.preventDefault(); captureFromPanel(); }
 });
+function captureFromPanel() { api.captureClipboard().then(() => refreshInbox()).catch(() => {}); }
+document.getElementById('inbox-paste').addEventListener('click', () => captureFromPanel());
 document.addEventListener('click', (e) => {
   if (!inboxMoreMenu.hidden && !e.target.closest('.inbox-more-wrap')) inboxMoreMenu.hidden = true;
   if (!inboxTagPop.hidden && !e.target.closest('#inbox-tagpop') && !e.target.closest('.inbox-act-tag')) closeTagPop();

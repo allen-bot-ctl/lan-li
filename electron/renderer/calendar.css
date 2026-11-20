@@ -1432,3 +1432,10 @@ mark.inbox-hit{background:rgba(255,200,0,.45);color:inherit;border-radius:2px;}
 .settings-body{flex:1 1 auto;min-height:0;display:flex;flex-direction:row;}
 .settings-nav{padding-top:6px;}
 .settings-page-title{height:32px;line-height:32px;margin:0 0 4px;padding:0;font-size:13px;font-weight:600;border-bottom:0;}
+
+/* 0.1.49 剪贴板收纳 */
+.inbox-head .inbox-count{padding-right:8px;}
+.inbox-paste{flex:0 0 auto;margin-right:12px;height:22px;padding:0 9px;border:0;border-radius:6px;background:var(--chip);color:var(--text);font-size:12px;cursor:pointer;}
+.inbox-paste:hover{background:var(--chip-hover);}
+.inbox-row-thumb{flex:0 0 36px;width:36px;height:36px;border-radius:6px;object-fit:cover;background:var(--chip);}
+.settings-hint{margin-left:6px;font-size:11px;color:#d9534f;}

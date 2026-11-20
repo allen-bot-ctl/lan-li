@@ -13,7 +13,8 @@ const {
   autoUpdater,
   net,
   shell,
-  powerMonitor
+  powerMonitor,
+  globalShortcut
 } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
@@ -485,6 +486,7 @@ function buildTrayMenu() {
   const template = buildTrayMenuTemplate({
     checkUpdate: () => { openSettingsFromTray(); requestUpdateCheck(); },
     openSettings: () => openSettingsFromTray(),
+    captureClipboard: () => { inbox.captureClipboard({ via: 'tray' }).catch(() => {}); },
     quit: () => quitApp()
   });
   const menu = Menu.buildFromTemplate(template);
@@ -918,7 +920,8 @@ function applyViewPayload(payload) {
 function registerIpc() {
   ipcMain.handle('app:version', () => formatVersionLabel(app.getVersion()));
 
-  ipcMain.handle('settings:get', () => ({ openAtLogin: getOpenAtLogin(), menuBarShowDate, version: app.getVersion() }));
+  ipcMain.handle('settings:get', () => ({ openAtLogin: getOpenAtLogin(), menuBarShowDate, captureHotkey: captureHotkeyEnabled(), captureHotkeyBusy: captureHotkeyEnabled() && !captureHotkeyOk && !E2E, version: app.getVersion() }));
+  ipcMain.handle('settings:setCaptureHotkey', (_e, value) => setCaptureHotkey(value));
   ipcMain.handle('settings:setOpenAtLogin', (_e, value) => applyLoginItem(Boolean(value)));
   ipcMain.handle('settings:setMenuBarShowDate', (_e, value) => setMenuBarShowDate(value));
   ipcMain.on('settings:viewState', (_e, open) => { settingsViewOpen = Boolean(open); });
@@ -1199,6 +1202,8 @@ function registerE2eHooks() {
     inboxDrop(payload) { return inbox.handleDrop(payload); },
     dropzoneState() { return inbox.e2e.state(); },
     lastDropPayload() { return inbox.e2e.lastDrop(); },
+    setClipboardData(c) { return inbox.e2e.setClipboard(c); },
+    captureClipboard(o) { return inbox.captureClipboard(o || { via: 'hotkey', sourceApp: 'Safari' }); },
     hideDropzone() { inbox.hide(); return true; },
     inboxRoot() { return inbox.store.root; },
     inboxList() { return inbox.store.list(); },
@@ -1243,6 +1248,24 @@ function registerE2eHooks() {
       return ids.map((id) => ({ id, pool: buildAlmanac(currentNow(), id).quotePool || [] }));
     }
   };
+}
+
+// 0.1.49：全局快捷键 ⌃⌥V 收纳剪贴板（不用 ⌥⌘V：Finder「移动到这里」）。
+const CAPTURE_ACCELERATOR = 'Control+Alt+V';
+let captureHotkeyOk = false;
+function captureHotkeyEnabled() { return readPreferences().captureHotkey !== false; }
+function setCaptureHotkey(value) {
+  writePreferences({ ...readPreferences(), captureHotkey: Boolean(value) });
+  if (!E2E) { try { globalShortcut.unregister(CAPTURE_ACCELERATOR); } catch { /* ignore */ } captureHotkeyOk = false; }
+  if (value) registerCaptureHotkey();
+  return { captureHotkey: Boolean(value), captureHotkeyBusy: Boolean(value) && !captureHotkeyOk && !E2E };
+}
+function registerCaptureHotkey() {
+  if (E2E || !captureHotkeyEnabled()) return;
+  try {
+    captureHotkeyOk = globalShortcut.register(CAPTURE_ACCELERATOR, () => { inbox.captureClipboard({ via: 'hotkey' }).catch(() => {}); });
+  } catch { captureHotkeyOk = false; }
+  if (!captureHotkeyOk) logger.warn('[栏历] 快捷键 ⌃⌥V 被占用，未注册');
 }
 
 function inboxRoot() {
@@ -1290,6 +1313,7 @@ async function bootstrap() {
   setupWeather();
   registerIpc();
   setupInbox();
+  registerCaptureHotkey();
   createCalendarWindow();
   createTray();
   registerDisplayListeners();
@@ -1330,6 +1354,7 @@ if (!gotLock) {
     // Tray application: keep running when the calendar window is hidden.
   });
 
+  app.on('will-quit', () => { try { globalShortcut.unregisterAll(); } catch { /* ignore */ } });
   app.on('before-quit', () => {
     if (updater) {
       updater.stop();
