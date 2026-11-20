@@ -273,6 +273,29 @@ function createInboxController(deps) {
     }
   }
 
+  // 0.1.50 框选收纳：截好的 PNG 存为图片条目（via=region），接纳框成功态。
+  async function saveRegionImage(o) {
+    const app = o.sourceApp && !/^(栏历|LanLi|Electron)$/i.test(o.sourceApp) ? o.sourceApp : '';
+    cancelHide();
+    if (!visible) show({ keepCalendar: true });
+    busy = true;
+    try {
+      lastSaved = store.saveAll([{ kind: 'image', buffer: o.buffer, ext: 'png', name: '框选图片' }], { via: 'region', ...(app ? { sourceApp: app } : {}), ...(o.width ? { width: o.width, height: o.height } : {}) });
+      send({ state: 'success', text: '已收纳 · 框选图片', sub: '点开查看' });
+      if (deps.onChanged) deps.onChanged();
+      scheduleHide(SUCCESS_HIDE_MS);
+      return { ids: lastSaved.map((m) => m.id) };
+    } catch (error) {
+      send({ state: 'error', text: errorText(error) });
+      scheduleHide(ERROR_HIDE_MS);
+      throw error;
+    } finally {
+      busy = false;
+    }
+  }
+
+  function showError(text) { cancelHide(); if (!visible) show({ keepCalendar: true }); send({ state: 'error', text }); scheduleHide(ERROR_HIDE_MS); }
+
   function openEntry(id) {
     const e = store.get(id);
     const m = e.meta;
@@ -420,7 +443,7 @@ function createInboxController(deps) {
   }
 
   return {
-    store, register, attachTray, removeWithUndo, undoRemove, show, hide, handleDrop, captureClipboard,
+    store, register, attachTray, removeWithUndo, undoRemove, show, hide, handleDrop, captureClipboard, saveRegionImage, showError,
     isVisible: () => visible,
     window: () => win,
     e2e: {
@@ -438,4 +461,4 @@ function createInboxController(deps) {
   };
 }
 
-module.exports = { createInboxController, computeDropzoneBounds, errorText, DZ_W, DZ_H, DZ_GAP };
+module.exports = { createInboxController, frontAppName, computeDropzoneBounds, errorText, DZ_W, DZ_H, DZ_GAP };

@@ -212,7 +212,8 @@
         <div class="settings-page" id="settings-page-ui">
           <label class="settings-row"><span class="settings-label">开机自启动</span><input class="settings-switch" id="setting-open-at-login" type="checkbox" role="switch"><span class="switch-track" aria-hidden="true"></span></label>
           <label class="settings-row"><span class="settings-label">菜单栏显示日期</span><input class="settings-switch" id="setting-show-date" type="checkbox" role="switch"><span class="switch-track" aria-hidden="true"></span></label>
-          <label class="settings-row"><span class="settings-label">⌃⌥V 收纳剪贴板 <span class="settings-hint" id="setting-capture-hint" hidden>快捷键被占用</span></span><input class="settings-switch" id="setting-capture-hotkey" type="checkbox" role="switch"><span class="switch-track" aria-hidden="true"></span></label>
+          <div class="settings-row settings-hotkey-row" data-hotkey="capture"><span class="settings-label">收纳剪贴板快捷键 <span class="settings-hint" id="setting-capture-hint" hidden>快捷键被占用</span></span><span class="hotkey-ctrls"><button class="hotkey-key" id="setting-capture-key" type="button" title="点击后按下新组合">⌃⌥V</button><button class="hotkey-clear" id="setting-capture-clear" type="button">清空</button></span></div>
+          <div class="settings-row settings-hotkey-row" data-hotkey="region"><span class="settings-label">框选收纳快捷键 <span class="settings-hint" id="setting-region-hint" hidden>快捷键被占用</span></span><span class="hotkey-ctrls"><button class="hotkey-key" id="setting-region-key" type="button" title="点击后按下新组合">⌃⌥S</button><button class="hotkey-clear" id="setting-region-clear" type="button">清空</button></span></div>
         </div>
         <div class="settings-page" id="settings-page-update" hidden>
           <div class="settings-row"><span class="settings-label">当前版本 <span id="settings-version"></span></span></div>
@@ -286,6 +287,7 @@
 
   <script src="toast.js"></script>
   <script src="inbox-query.js"></script>
+  <script src="region-helpers-browser.js"></script>
   <script src="calendar.js"></script>
 </body>
 </html>

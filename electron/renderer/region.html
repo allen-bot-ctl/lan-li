@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'">
+<title>框选收纳</title>
+<style>
+html,body{margin:0;height:100%;overflow:hidden;background:transparent;cursor:crosshair;user-select:none;font:13px -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif}
+#dim{position:fixed;inset:0;background:rgba(0,0,0,.2)}
+body.has-rect #dim{display:none}
+#hint{position:fixed;top:24px;left:50%;transform:translateX(-50%);padding:6px 14px;border-radius:8px;background:rgba(30,30,30,.82);color:#fff;pointer-events:none;white-space:nowrap}
+#rect{position:fixed;display:none;border:1.5px solid #ff8a00;box-sizing:border-box;box-shadow:0 0 0 99999px rgba(0,0,0,.2);pointer-events:none}
+#size{position:fixed;display:none;padding:2px 6px;border-radius:4px;background:rgba(30,30,30,.82);color:#fff;font-size:12px;pointer-events:none;white-space:nowrap}
+#bar{position:fixed;display:none;gap:6px;padding:4px;border-radius:8px;background:rgba(36,36,36,.92);box-shadow:0 4px 16px rgba(0,0,0,.3);cursor:default}
+#bar button{border:0;border-radius:6px;padding:6px 14px;font:inherit;color:#fff;background:rgba(255,255,255,.12);cursor:pointer}
+#bar button.primary{background:#ff8a00}
+@media (prefers-color-scheme: light){#hint,#size{background:rgba(255,255,255,.92);color:#222}#bar{background:rgba(255,255,255,.96)}#bar button{color:#222;background:rgba(0,0,0,.07)}#bar button.primary{color:#fff;background:#ff8a00}}
+</style></head>
+<body>
+<div id="dim"></div>
+<div id="hint">拖动框选要收纳的区域 · Esc 取消</div>
+<div id="rect"></div>
+<div id="size"></div>
+<div id="bar"><button id="bar-ok" class="primary" type="button">收纳</button><button id="bar-redo" type="button">重选</button><button id="bar-cancel" type="button">取消</button></div>
+<script src="region-helpers-browser.js"></script>
+<script src="region.js"></script>
+</body></html>

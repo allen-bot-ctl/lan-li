@@ -14,7 +14,9 @@ const {
   net,
   shell,
   powerMonitor,
-  globalShortcut
+  globalShortcut,
+  desktopCapturer,
+  systemPreferences
 } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
@@ -81,7 +83,9 @@ const {
 const { createLoginItem } = require('./login-item');
 const { createWeatherRefresher } = require('./weather-refresh');
 const { buildAtlas, createClockImageMaker } = require('./tray-clock-image');
-const { createInboxController } = require('./inbox-main');
+const { createInboxController, frontAppName } = require('./inbox-main');
+const { createRegionController } = require('./region-capture');
+const { normalizeAccelerator } = require('./region-helpers');
 
 const WINDOW_WIDTH = 580;
 // 0.1.24's 400px content plus the 32px full-width top bar.
@@ -110,6 +114,7 @@ let settingsViewOpen = false;
 // 直到鼠标进入窗口再离开（或 Esc / 隐藏）。
 let trayMenuOpen = false;
 let inbox = null; // 0.1.42 收纳
+let region = null; // 0.1.50 框选收纳
 let inboxViewOpen = false;
 let trayMenuHold = false;
 let e2eTrayMenu = null;
@@ -487,8 +492,9 @@ function buildTrayMenu() {
     checkUpdate: () => { openSettingsFromTray(); requestUpdateCheck(); },
     openSettings: () => openSettingsFromTray(),
     captureClipboard: () => { inbox.captureClipboard({ via: 'tray' }).catch(() => {}); },
+    regionCapture: () => { startRegionCapture(); },
     quit: () => quitApp()
-  });
+  }, { captureAccelerator: hotkeyAccelerator('capture'), regionAccelerator: hotkeyAccelerator('region') });
   const menu = Menu.buildFromTemplate(template);
   menu.on('menu-will-close', () => { trayMenuOpen = false; });
   return menu;
@@ -920,8 +926,9 @@ function applyViewPayload(payload) {
 function registerIpc() {
   ipcMain.handle('app:version', () => formatVersionLabel(app.getVersion()));
 
-  ipcMain.handle('settings:get', () => ({ openAtLogin: getOpenAtLogin(), menuBarShowDate, captureHotkey: captureHotkeyEnabled(), captureHotkeyBusy: captureHotkeyEnabled() && !captureHotkeyOk && !E2E, version: app.getVersion() }));
+  ipcMain.handle('settings:get', () => ({ openAtLogin: getOpenAtLogin(), menuBarShowDate, captureHotkey: captureHotkeyEnabled(), captureHotkeyBusy: hotkeyState('capture').busy, hotkeys: { capture: hotkeyState('capture'), region: hotkeyState('region') }, version: app.getVersion() }));
   ipcMain.handle('settings:setCaptureHotkey', (_e, value) => setCaptureHotkey(value));
+  ipcMain.handle('settings:setHotkey', (_e, a) => setHotkey(a && a.kind, a && a.accelerator));
   ipcMain.handle('settings:setOpenAtLogin', (_e, value) => applyLoginItem(Boolean(value)));
   ipcMain.handle('settings:setMenuBarShowDate', (_e, value) => setMenuBarShowDate(value));
   ipcMain.on('settings:viewState', (_e, open) => { settingsViewOpen = Boolean(open); });
@@ -1204,6 +1211,16 @@ function registerE2eHooks() {
     lastDropPayload() { return inbox.e2e.lastDrop(); },
     setClipboardData(c) { return inbox.e2e.setClipboard(c); },
     captureClipboard(o) { return inbox.captureClipboard(o || { via: 'hotkey', sourceApp: 'Safari' }); },
+    openRegionCapture(o) { return startRegionCapture(o || { sourceApp: 'Safari' }); },
+    regionState() { return region.e2e.state(); },
+    regionSetPermission(v) { return region.e2e.setPermission(v); },
+    regionSetScaleFactor(v) { return region.e2e.setScaleFactor(v); },
+    regionOpenCalls() { return region.e2e.openCalls(); },
+    regionDisplay() { const d = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()); return { bounds: d.bounds, scaleFactor: d.scaleFactor }; },
+    hotkeys() { return { registered: [...e2eHotkeys.keys()], capture: hotkeyState('capture'), region: hotkeyState('region') }; },
+    pressHotkey(acc) { const fn = e2eHotkeys.get(acc); if (!fn) return false; fn(); return true; },
+    setBusyAccelerators(list) { e2eBusyAccels.clear(); for (const a of list || []) e2eBusyAccels.add(a); return true; },
+    setHotkey(a) { return setHotkey(a.kind, a.accelerator); },
     hideDropzone() { inbox.hide(); return true; },
     inboxRoot() { return inbox.store.root; },
     inboxList() { return inbox.store.list(); },
@@ -1251,21 +1268,81 @@ function registerE2eHooks() {
 }
 
 // 0.1.49：全局快捷键 ⌃⌥V 收纳剪贴板（不用 ⌥⌘V：Finder「移动到这里」）。
-const CAPTURE_ACCELERATOR = 'Control+Alt+V';
-let captureHotkeyOk = false;
-function captureHotkeyEnabled() { return readPreferences().captureHotkey !== false; }
-function setCaptureHotkey(value) {
-  writePreferences({ ...readPreferences(), captureHotkey: Boolean(value) });
-  if (!E2E) { try { globalShortcut.unregister(CAPTURE_ACCELERATOR); } catch { /* ignore */ } captureHotkeyOk = false; }
-  if (value) registerCaptureHotkey();
-  return { captureHotkey: Boolean(value), captureHotkeyBusy: Boolean(value) && !captureHotkeyOk && !E2E };
+// 0.1.50：两个快捷键（收纳剪贴板 / 框选收纳）可改、可清空，存 prefs.captureAccelerator / prefs.regionAccelerator。
+// 兼容 0.1.49：captureHotkey === false 且没有 captureAccelerator → 视为已清空。
+const HOTKEYS = {
+  capture: { pref: 'captureAccelerator', def: 'Control+Alt+V', name: '收纳剪贴板', run: () => { inbox.captureClipboard({ via: 'hotkey' }).catch(() => {}); } },
+  region: { pref: 'regionAccelerator', def: 'Control+Alt+S', name: '框选收纳', run: () => { startRegionCapture(); } }
+};
+const CAPTURE_ACCELERATOR = HOTKEYS.capture.def;
+const hotkeyRegistered = { capture: '', region: '' };
+const hotkeyBusy = { capture: false, region: false };
+const e2eHotkeys = new Map();      // E2E：不碰系统 globalShortcut，记在这里
+const e2eBusyAccels = new Set();   // E2E：模拟被占用
+function hotkeyAccelerator(kind) {
+  const h = HOTKEYS[kind]; const p = readPreferences();
+  if (typeof p[h.pref] === 'string') return normalizeAccelerator(p[h.pref]);
+  if (kind === 'capture' && p.captureHotkey === false) return '';
+  return h.def;
 }
-function registerCaptureHotkey() {
-  if (E2E || !captureHotkeyEnabled()) return;
-  try {
-    captureHotkeyOk = globalShortcut.register(CAPTURE_ACCELERATOR, () => { inbox.captureClipboard({ via: 'hotkey' }).catch(() => {}); });
-  } catch { captureHotkeyOk = false; }
-  if (!captureHotkeyOk) logger.warn('[栏历] 快捷键 ⌃⌥V 被占用，未注册');
+function captureHotkeyEnabled() { return hotkeyAccelerator('capture') !== ''; }
+function hotkeyState(kind) { return { accelerator: hotkeyAccelerator(kind), busy: hotkeyBusy[kind] }; }
+function shortcutRegister(acc, fn) {
+  if (E2E) { if (e2eBusyAccels.has(acc) || e2eHotkeys.has(acc)) return false; e2eHotkeys.set(acc, fn); return true; }
+  try { return globalShortcut.register(acc, fn); } catch { return false; }
+}
+function shortcutUnregister(acc) {
+  if (E2E) { e2eHotkeys.delete(acc); return; }
+  try { globalShortcut.unregister(acc); } catch { /* ignore */ }
+}
+function registerHotkey(kind) {
+  if (hotkeyRegistered[kind]) { shortcutUnregister(hotkeyRegistered[kind]); hotkeyRegistered[kind] = ''; }
+  hotkeyBusy[kind] = false;
+  const acc = hotkeyAccelerator(kind);
+  if (!acc) return;
+  if (shortcutRegister(acc, HOTKEYS[kind].run)) hotkeyRegistered[kind] = acc;
+  else { hotkeyBusy[kind] = true; logger.warn(`[栏历] 快捷键 ${acc}（${HOTKEYS[kind].name}）被占用，未注册`); }
+}
+function setHotkey(kind, accelerator) {
+  if (!HOTKEYS[kind]) return { ok: false };
+  const acc = accelerator ? normalizeAccelerator(accelerator) : '';
+  if (accelerator && !acc) return { ok: false, invalid: true, ...hotkeyState(kind) };
+  const other = kind === 'capture' ? 'region' : 'capture';
+  if (acc && acc === hotkeyAccelerator(other)) return { ok: false, conflict: true, ...hotkeyState(kind), busy: true };
+  const prefs = { ...readPreferences(), [HOTKEYS[kind].pref]: acc };
+  if (kind === 'capture') prefs.captureHotkey = acc !== '';
+  writePreferences(prefs);
+  registerHotkey(kind);
+  return { ok: !hotkeyBusy[kind], ...hotkeyState(kind) };
+}
+function setCaptureHotkey(value) {
+  const r = setHotkey('capture', value ? CAPTURE_ACCELERATOR : '');
+  return { captureHotkey: Boolean(value), captureHotkeyBusy: r.busy };
+}
+function registerCaptureHotkey() { registerHotkey('capture'); registerHotkey('region'); }
+
+async function startRegionCapture(opts) {
+  if (!region) return { ok: false };
+  // 来源应用要在铺窗之前取（铺窗后最前面就是栏历自己）
+  const o = { ...(opts || {}) };
+  if (o.sourceApp == null) o.sourceApp = await frontAppName();
+  if (calendarWindow && !calendarWindow.isDestroyed() && calendarWindow.isVisible() && !pinned) hideCalendar();
+  return region.open(o);
+}
+
+function setupRegion() {
+  region = createRegionController({
+    BrowserWindow, screen, desktopCapturer, systemPreferences, shell, ipcMain, nativeImage, logger, E2E,
+    frontAppName,
+    saveImage: (o) => inbox.saveRegionImage(o),
+    onError: () => inbox.showError('截取失败，请检查屏幕录制权限'),
+    e2eFakeScreen: E2E ? (size) => {
+      // 测试用：按显示器像素生成一张灰图（每像素 BGRA）
+      const buf = Buffer.alloc(size.width * size.height * 4, 0x80);
+      return nativeImage.createFromBitmap(buf, { width: size.width, height: size.height });
+    } : null
+  });
+  region.register();
 }
 
 function inboxRoot() {
@@ -1313,6 +1390,7 @@ async function bootstrap() {
   setupWeather();
   registerIpc();
   setupInbox();
+  setupRegion();
   registerCaptureHotkey();
   createCalendarWindow();
   createTray();

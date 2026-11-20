@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'">
+<title>框选需要屏幕录制权限</title>
+<style>
+html,body{margin:0;height:100%;font:13px -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;background:#fff;color:#1d1d1f}
+.card{padding:20px 22px;box-sizing:border-box;height:100%;display:flex;flex-direction:column;gap:10px}
+h1{font-size:15px;margin:0}
+p{margin:0;line-height:1.5}
+.note{color:#6e6e73;font-size:12px}
+.acts{margin-top:auto;display:flex;justify-content:flex-end;gap:8px}
+button{border:0;border-radius:6px;padding:6px 14px;font:inherit;background:rgba(0,0,0,.07);color:inherit;cursor:pointer}
+button.primary{background:#ff8a00;color:#fff}
+@media (prefers-color-scheme: dark){html,body{background:#2a2a2c;color:#f5f5f7}.note{color:#a1a1a6}button{background:rgba(255,255,255,.12)}}
+</style></head>
+<body><div class="card">
+<h1>需要屏幕录制权限</h1>
+<p id="perm-text">框选需要屏幕录制权限，用于截取你框住的那一块画面，不会上传</p>
+<p class="note" id="perm-note">在「系统设置 › 隐私与安全性 › 屏幕录制」里打开栏历后，需要重启栏历才能生效。</p>
+<div class="acts"><button id="perm-close" type="button">知道了</button><button id="perm-open" class="primary" type="button">打开系统设置</button></div>
+</div>
+<script src="region-permission.js"></script>
+</body></html>

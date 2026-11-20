@@ -57,7 +57,6 @@ const settingsPageUi = document.getElementById('settings-page-ui');
 const settingsPageUpdate = document.getElementById('settings-page-update');
 const settingOpenAtLogin = document.getElementById('setting-open-at-login');
 const settingShowDate = document.getElementById('setting-show-date');
-const settingCapture = document.getElementById('setting-capture-hotkey');
 const settingCaptureHint = document.getElementById('setting-capture-hint');
 const settingsVersion = document.getElementById('settings-version');
 const settingsPageTitle = document.getElementById('settings-page-title');
@@ -1148,8 +1147,7 @@ function openSettingsView() {
   api.getSettings().then((s) => {
     settingOpenAtLogin.checked = s.openAtLogin === true;
     settingShowDate.checked = s.menuBarShowDate !== false;
-    settingCapture.checked = s.captureHotkey !== false;
-    settingCaptureHint.hidden = !s.captureHotkeyBusy;
+    renderHotkeys(s.hotkeys);
     settingsVersion.textContent = s.version;
   }).catch(() => {});
 }
@@ -1177,8 +1175,51 @@ settingOpenAtLogin.addEventListener('change', () => {
   const el = settingOpenAtLogin;
   api.setOpenAtLogin(el.checked).then((v) => { el.checked = v === true; }).catch(() => {});
 });
-settingCapture.addEventListener('change', () => {
-  api.setCaptureHotkey(settingCapture.checked).then((r) => { settingCaptureHint.hidden = !(r && r.captureHotkeyBusy); }).catch(() => {});
+// 0.1.50：两个快捷键可录入新组合、可清空，立即生效；注册失败显示「快捷键被占用」。
+const RH = window.LanliRegionHelpers;
+const hotkeyUi = {
+  capture: { key: document.getElementById('setting-capture-key'), clear: document.getElementById('setting-capture-clear'), hint: settingCaptureHint },
+  region: { key: document.getElementById('setting-region-key'), clear: document.getElementById('setting-region-clear'), hint: document.getElementById('setting-region-hint') }
+};
+let hotkeyRecording = null;
+function renderHotkey(kind, st) {
+  const u = hotkeyUi[kind]; const acc = st && st.accelerator;
+  u.key.classList.remove('recording');
+  u.key.classList.toggle('empty', !acc);
+  u.key.textContent = acc ? RH.acceleratorLabel(acc) : '未设置';
+  u.key.dataset.accelerator = acc || '';
+  u.clear.hidden = !acc;
+  u.hint.hidden = !(st && st.busy);
+}
+function renderHotkeys(h) { if (!h) return; renderHotkey('capture', h.capture); renderHotkey('region', h.region); }
+function stopHotkeyRecording() {
+  if (!hotkeyRecording) return;
+  const kind = hotkeyRecording; hotkeyRecording = null;
+  api.getSettings().then((s) => renderHotkey(kind, s.hotkeys && s.hotkeys[kind])).catch(() => {});
+}
+function applyHotkey(kind, accelerator) {
+  return api.setHotkey(kind, accelerator).then((r) => { renderHotkey(kind, r); return r; }).catch(() => {});
+}
+Object.keys(hotkeyUi).forEach((kind) => {
+  const u = hotkeyUi[kind];
+  u.key.addEventListener('click', () => {
+    if (hotkeyRecording && hotkeyRecording !== kind) stopHotkeyRecording();
+    hotkeyRecording = kind;
+    u.key.classList.add('recording');
+    u.key.textContent = '按下新组合…';
+    u.key.focus();
+  });
+  u.key.addEventListener('blur', () => { if (hotkeyRecording === kind) stopHotkeyRecording(); });
+  u.key.addEventListener('keydown', (e) => {
+    if (hotkeyRecording !== kind) return;
+    e.preventDefault(); e.stopPropagation();
+    if (e.key === 'Escape') { stopHotkeyRecording(); return; }
+    const acc = RH.eventToAccelerator(e);
+    if (!acc) return;   // 只按了修饰键，继续等
+    hotkeyRecording = null;
+    applyHotkey(kind, acc);
+  });
+  u.clear.addEventListener('click', () => { hotkeyRecording = null; applyHotkey(kind, ''); });
 });
 settingShowDate.addEventListener('change', () => {
   api.setMenuBarShowDate(settingShowDate.checked);
@@ -1234,6 +1275,7 @@ function inboxParentName(p) {
 
 function inboxSubtitle(m) {
   if (m.type === 'file') return m.missing ? '原文件已移动或删除' : [m.isDir ? '文件夹' : formatSize(m.size), inboxParentName(m.sourcePath)].filter(Boolean).join(' · ');
+  if (m.type === 'image' && m.via === 'region') return ['框选', m.sourceApp ? `来自 ${m.sourceApp}` : ''].filter(Boolean).join(' · ');
   if (m.type === 'image') return [formatSize(m.size), m.preview].filter(Boolean).join(' · ');
   if (m.type === 'link') return m.preview || m.sourceUrl || '';
   if (m.type === 'text' && m.rich) {

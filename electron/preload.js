@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('lanli', {
   setOpenAtLogin: (value) => ipcRenderer.invoke('settings:setOpenAtLogin', value),
   setMenuBarShowDate: (value) => ipcRenderer.invoke('settings:setMenuBarShowDate', value),
   setCaptureHotkey: (value) => ipcRenderer.invoke('settings:setCaptureHotkey', value),
+  setHotkey: (kind, accelerator) => ipcRenderer.invoke('settings:setHotkey', { kind, accelerator }),
   setSettingsView: (open) => ipcRenderer.send('settings:viewState', open),
   searchClocks: (payload) => ipcRenderer.invoke('clocks:search', payload),
   getWeather: () => ipcRenderer.invoke('weather:get'),
