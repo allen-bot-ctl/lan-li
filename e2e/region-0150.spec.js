@@ -198,66 +198,64 @@ test('R-C4 小于 8×8 不出询问条，回到可画框', async () => {
   await waitClosed();
 });
 
-test('R-C5/R-C7 无屏幕录制权限：出说明卡，不铺窗体；截图 57', async () => {
+test('R-C5/R-C7 + 0.1.53 Q-C1~Q-C5 无屏幕录制权限：只出说明卡，去授权按顺序；截图 57', async () => {
+  const URL = 'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture';
   await hook('regionSetPermission', 'denied');
   for (const theme of ['dark', 'light']) {
     await setTheme(theme);
     await hook('regionResetProbeCalls');
-    // 0.1.53：第一次按 ⌃⌥S 只触发系统授权框，不出我们的说明卡
-    await hook('regionSetPrompted', false);
-    const first = await hook('openRegionCapture');
-    expect(first).toEqual({ ok: false, permission: 'denied', systemPrompt: true });
-    expect(await hook('regionProbeCalls')).toBe(1);
-    expect(await hook('regionPrompted')).toBe(true);
-    await page.waitForTimeout(300);
-    expect((await rstate()).permissionVisible).toBe(false);
-    expect(app.windows().some((w) => !w.isClosed() && w.url().endsWith('region-permission.html'))).toBe(false);
-    // 第二次仍未授权（系统不会再弹）才出说明卡
-    await hook('regionResetProbeCalls');
     const r = await hook('openRegionCapture');
     expect(r).toEqual({ ok: false, permission: 'denied' });
-    // P-C1：先真正登记一次截屏，再出说明卡
-    expect(await hook('regionProbeCalls')).toBe(1);
+    // Q-C1：只出说明卡，不截屏
+    expect(await hook('regionProbeCalls')).toBe(0);
     const s = await rstate();
     expect(s.overlayVisible).toBe(false);
     expect(s.permissionVisible).toBe(true);
     const p = await winPage('region-permission.html');
     await expect(p.locator('#perm-text')).toHaveText('框选收纳要截取你框住的那一块画面，不会上传。');
-    await expect(p.locator('#perm-steps')).toHaveText('在「屏幕录制」列表里打开「栏历」的开关，按提示重新打开栏历。');
-    // S-C3（0.1.52）：说明卡不再出现「+」兜底
+    await expect(p.locator('#perm-steps')).toHaveText('点「去授权」，在「屏幕录制」列表里打开「栏历」，再按提示重新打开栏历。');
+    await expect(p.locator('#perm-close')).toHaveText('以后再说');
+    await expect(p.locator('#perm-open')).toHaveText('去授权');
     expect(await p.locator('body').innerText()).not.toContain('+');
-    expect(await p.locator('#perm-note').count()).toBe(0);
-    // P-C4：小字和按钮都不截断
     const fit = await p.evaluate(() => { const n = document.getElementById('perm-steps'); const a = document.querySelector('.acts').getBoundingClientRect(); return n.scrollWidth <= n.clientWidth && a.bottom <= window.innerHeight; });
     expect(fit).toBe(true);
     await p.emulateMedia({ colorScheme: theme });
+    // Q-C5
     await shotWin('region-permission.html', `57-region-permission-card-${theme}.png`);
     if (theme === 'dark') {
+      // Q-C2：去授权 → 先关卡、再登记、最后打开设置
       await p.click('#perm-open');
-      await expect.poll(() => hook('regionOpenCalls')).toEqual(['x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture']);
-      // 点「打开系统设置」后说明卡立即消失
-      await expect.poll(async () => (await rstate()).permissionVisible).toBe(false);
+      await expect.poll(() => hook('regionOpenCalls')).toEqual([URL]);
+      expect(await hook('regionProbeCalls')).toBe(1);
+      expect(await hook('regionOrder')).toEqual(['close', 'probe', 'open']);
+      expect((await rstate()).permissionVisible).toBe(false);
     } else {
+      // Q-C4：以后再说 / Esc 都关卡，不登记、不打开设置
       await p.click('#perm-close');
       await expect.poll(async () => (await rstate()).permissionVisible).toBe(false);
-      const old = p;
-      await expect.poll(() => old.isClosed()).toBe(true);
+      await expect.poll(() => p.isClosed()).toBe(true);
       await hook('openRegionCapture');
       await expect.poll(async () => (await rstate()).permissionVisible).toBe(true);
       const p2 = await winPage('region-permission.html');
       await p2.locator('#perm-open').waitFor();
       await p2.keyboard.press('Escape').catch(() => {}); // Esc 关窗时 press 本身会报页面已关闭
       await expect.poll(async () => (await rstate()).permissionVisible).toBe(false);
+      expect(await hook('regionProbeCalls')).toBe(0);
+      expect(await hook('regionOpenCalls')).toEqual([]);
     }
   }
   await setTheme('system');
-  // P-C2：登记后权限变成 granted，直接进框选层，不出说明卡
+  // Q-C3：去授权后登记让权限变成 granted，直接进框选层，不打开设置
+  await hook('regionResetProbeCalls');
   await hook('regionSetPermissionAfterProbe', 'granted');
-  const r2 = await hook('openRegionCapture');
-  expect(r2.ok).toBe(true);
-  const s2 = await rstate();
-  expect(s2.permissionVisible).toBe(false);
-  expect(s2.overlayVisible).toBe(true);
+  await hook('openRegionCapture');
+  const p3 = await winPage('region-permission.html');
+  await p3.locator('#perm-open').waitFor();
+  await p3.keyboard.press('Enter').catch(() => {}); // 回车 = 去授权
+  await expect.poll(async () => (await rstate()).overlayVisible).toBe(true);
+  expect((await rstate()).permissionVisible).toBe(false);
+  expect(await hook('regionOpenCalls')).toEqual([]);
+  expect(await hook('regionOrder')).toEqual(['close', 'probe']);
   await hook('regionSetPermissionAfterProbe', null);
   const ov = await winPage('region.html');
   await ov.keyboard.press('Escape');

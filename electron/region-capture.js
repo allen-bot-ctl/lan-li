@@ -18,7 +18,7 @@ function createRegionController(deps) {
   let display = null; let sourceApp = '';
   let lastState = { phase: 'closed', rect: null, bar: null };
   let lastResult = null;
-  const e2e = { permission: 'granted', permissionAfterProbe: null, scaleFactor: null, openCalls: [], probeCalls: 0 };
+  const e2e = { permission: 'granted', permissionAfterProbe: null, scaleFactor: null, openCalls: [], probeCalls: 0, order: [] };
 
   function screenAccess() {
     if (E2E) return e2e.permission;
@@ -78,25 +78,15 @@ function createRegionController(deps) {
     display = screen.getDisplayNearestPoint(pt);
     sourceApp = o.sourceApp != null ? o.sourceApp : (deps.frontAppName ? await deps.frontAppName() : '');
     if (/^(栏历|LanLi|Electron)$/i.test(sourceApp || '')) sourceApp = '';
-    let access = screenAccess();
-    if (access !== 'granted') {
-      // 0.1.51：macOS 只有在应用真正尝试截屏后，才把它加进「屏幕录制」列表并弹系统授权框
-      const before = access;
-      await probeScreenAccess();
-      access = screenAccess();
-      if (logger) logger.info(`[栏历] 框选：权限 ${before} → 登记截屏 → ${access}`);
-      if (access !== 'granted') {
-        // 0.1.53：第一次只让系统弹它自己的授权框，我们的说明卡不弹，免得两个框叠在一起
-        const prompted = deps.wasScreenPromptShown ? deps.wasScreenPromptShown() : true;
-        if (!prompted) {
-          if (deps.markScreenPromptShown) deps.markScreenPromptShown();
-          if (logger) logger.info('[栏历] 框选：首次请求，交给系统授权框，不弹说明卡');
-          return { ok: false, permission: access, systemPrompt: true };
-        }
-        showPermissionCard(display);
-        return { ok: false, permission: access };
-      }
+    // 0.1.53：未授权时只弹栏历的说明卡，不截屏，系统框不会同时出现；点「去授权」才登记
+    if (screenAccess() !== 'granted') {
+      showPermissionCard(display);
+      return { ok: false, permission: screenAccess() };
     }
+    return showOverlay();
+  }
+
+  async function showOverlay() {
     closePermission();
     const w = ensureOverlay();
     w.setBounds(display.bounds);
@@ -147,11 +137,20 @@ function createRegionController(deps) {
     ipcMain.on('region:cancel', () => close());
     ipcMain.on('region:state', (_e, s) => { if (overlay && overlay.isVisible()) lastState = s; });
     ipcMain.on('region:closePermission', () => closePermission());
-    ipcMain.on('region:openPermissionSettings', () => {
-      // 0.1.51：打开系统设置后说明卡立即关闭，不压在设置窗口上
-      closePermission();
-      if (E2E) e2e.openCalls.push(PERMISSION_URL); else shell.openExternal(PERMISSION_URL);
-    });
+    ipcMain.on('region:openPermissionSettings', () => { grantFlow(); });
+  }
+
+  // 0.1.53「去授权」：先关卡 → 登记截屏 → 复查权限 → 已授权进框选，否则打开设置页
+  async function grantFlow() {
+    closePermission(); e2e.order.push('close');
+    await probeScreenAccess(); e2e.order.push('probe');
+    const access = screenAccess();
+    const next = access === 'granted' ? '进入框选' : '打开设置';
+    if (logger) logger.info(`[栏历] 框选：说明卡 → 去授权 → 登记截屏 → ${access} → ${next}`);
+    if (access === 'granted') return showOverlay();
+    e2e.order.push('open');
+    if (E2E) e2e.openCalls.push(PERMISSION_URL); else shell.openExternal(PERMISSION_URL);
+    return null;
   }
 
   return {
@@ -160,7 +159,8 @@ function createRegionController(deps) {
     e2e: {
       setPermission: (v) => { e2e.permission = v || 'granted'; return true; },
       setPermissionAfterProbe: (v) => { e2e.permissionAfterProbe = v || null; return true; },
-      resetProbeCalls: () => { e2e.probeCalls = 0; return true; },
+      resetProbeCalls: () => { e2e.probeCalls = 0; e2e.openCalls = []; e2e.order = []; return true; },
+      order: () => e2e.order.slice(),
       setScaleFactor: (v) => { e2e.scaleFactor = v || null; return true; },
       state: () => ({ ...lastState, overlayVisible: Boolean(overlay && !overlay.isDestroyed() && overlay.isVisible()), permissionVisible: Boolean(permWin && !permWin.isDestroyed() && permWin.isVisible()), sourceApp, result: lastResult }),
       openCalls: () => e2e.openCalls.slice(),

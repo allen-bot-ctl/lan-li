@@ -1219,8 +1219,7 @@ function registerE2eHooks() {
     regionProbeCalls() { return region.e2e.probeCalls(); },
     regionSetPermissionAfterProbe(v) { return region.e2e.setPermissionAfterProbe(v); },
     regionResetProbeCalls() { return region.e2e.resetProbeCalls(); },
-    regionSetPrompted(v) { writePreferences({ ...readPreferences(), screenPermissionPrompted: Boolean(v) }); return true; },
-    regionPrompted() { return readPreferences().screenPermissionPrompted === true; },
+    regionOrder() { return region.e2e.order(); },
     regionDisplay() { const d = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()); return { bounds: d.bounds, scaleFactor: d.scaleFactor }; },
     hotkeys() { return { registered: [...e2eHotkeys.keys()], capture: hotkeyState('capture'), region: hotkeyState('region') }; },
     pressHotkey(acc) { const fn = e2eHotkeys.get(acc); if (!fn) return false; fn(); return true; },
@@ -1339,9 +1338,6 @@ function setupRegion() {
   region = createRegionController({
     BrowserWindow, screen, desktopCapturer, systemPreferences, shell, ipcMain, nativeImage, logger, E2E,
     frontAppName,
-    // 0.1.53：是否已经让系统弹过一次屏幕录制授权框（系统只会弹一次）
-    wasScreenPromptShown: () => readPreferences().screenPermissionPrompted === true,
-    markScreenPromptShown: () => writePreferences({ ...readPreferences(), screenPermissionPrompted: true }),
     saveImage: (o) => inbox.saveRegionImage(o),
     onError: () => inbox.showError('截取失败，请检查屏幕录制权限'),
     e2eFakeScreen: E2E ? (size) => {
