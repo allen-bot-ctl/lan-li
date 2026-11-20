@@ -26,7 +26,7 @@ const setTheme = (t) => mainEval(({ nativeTheme }, v) => { nativeTheme.themeSour
 
 async function winPage(suffix) {
   for (let i = 0; i < 50; i += 1) {
-    const w = app.windows().find((p) => p.url().endsWith(suffix));
+    const w = app.windows().find((p) => !p.isClosed() && p.url().endsWith(suffix));
     if (w) { await w.waitForLoadState('domcontentloaded'); return w; }
     await page.waitForTimeout(100);
   }
@@ -202,18 +202,23 @@ test('R-C5/R-C7 无屏幕录制权限：出说明卡，不铺窗体；截图 57'
   await hook('regionSetPermission', 'denied');
   for (const theme of ['dark', 'light']) {
     await setTheme(theme);
+    await hook('regionResetProbeCalls');
     const r = await hook('openRegionCapture');
     expect(r).toEqual({ ok: false, permission: 'denied' });
+    // P-C1：先真正登记一次截屏，再出说明卡
+    expect(await hook('regionProbeCalls')).toBe(1);
     const s = await rstate();
     expect(s.overlayVisible).toBe(false);
     expect(s.permissionVisible).toBe(true);
     const p = await winPage('region-permission.html');
-    await expect(p.locator('#perm-text')).toHaveText('框选需要屏幕录制权限，用于截取你框住的那一块画面，不会上传');
-    await expect(p.locator('#perm-note')).toContainText('重启栏历');
+    await expect(p.locator('#perm-text')).toHaveText('框选收纳要截取你框住的那一块画面，不会上传。');
+    await expect(p.locator('#perm-steps')).toHaveText('在「屏幕录制」列表里打开「栏历」的开关，按提示重新打开栏历。');
+    await expect(p.locator('#perm-note')).toHaveText('列表里没有栏历？点列表下方的「+」，在「应用程序」里选「栏历」。');
+    // P-C4：小字和按钮都不截断
+    const fit = await p.evaluate(() => { const n = document.getElementById('perm-note'); const a = document.querySelector('.acts').getBoundingClientRect(); return n.scrollWidth <= n.clientWidth && a.bottom <= window.innerHeight; });
+    expect(fit).toBe(true);
     await p.emulateMedia({ colorScheme: theme });
     await shotWin('region-permission.html', `57-region-permission-card-${theme}.png`);
-    // 0.1.51：真正申请过一次截屏，系统才会把栏历放进「屏幕录制」列表
-    expect(await hook('regionProbeCalls')).toBeGreaterThan(0);
     if (theme === 'dark') {
       await p.click('#perm-open');
       await expect.poll(() => hook('regionOpenCalls')).toEqual(['x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture']);
@@ -222,9 +227,28 @@ test('R-C5/R-C7 无屏幕录制权限：出说明卡，不铺窗体；截图 57'
     } else {
       await p.click('#perm-close');
       await expect.poll(async () => (await rstate()).permissionVisible).toBe(false);
+      const old = p;
+      await expect.poll(() => old.isClosed()).toBe(true);
+      await hook('openRegionCapture');
+      await expect.poll(async () => (await rstate()).permissionVisible).toBe(true);
+      const p2 = await winPage('region-permission.html');
+      await p2.locator('#perm-open').waitFor();
+      await p2.keyboard.press('Escape').catch(() => {}); // Esc 关窗时 press 本身会报页面已关闭
+      await expect.poll(async () => (await rstate()).permissionVisible).toBe(false);
     }
   }
   await setTheme('system');
+  // P-C2：登记后权限变成 granted，直接进框选层，不出说明卡
+  await hook('regionSetPermissionAfterProbe', 'granted');
+  const r2 = await hook('openRegionCapture');
+  expect(r2.ok).toBe(true);
+  const s2 = await rstate();
+  expect(s2.permissionVisible).toBe(false);
+  expect(s2.overlayVisible).toBe(true);
+  await hook('regionSetPermissionAfterProbe', null);
+  const ov = await winPage('region.html');
+  await ov.keyboard.press('Escape');
+  await expect.poll(async () => (await rstate()).overlayVisible).toBe(false);
   await hook('regionSetPermission', 'granted');
 });
 

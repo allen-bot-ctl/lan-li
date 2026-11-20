@@ -4,7 +4,7 @@
 <title>框选需要屏幕录制权限</title>
 <style>
 html,body{margin:0;height:100%;font:13px -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;background:#fff;color:#1d1d1f}
-.card{padding:20px 22px;box-sizing:border-box;height:100%;display:flex;flex-direction:column;gap:10px}
+.card{padding:18px 22px;box-sizing:border-box;height:100%;display:flex;flex-direction:column;gap:10px}
 h1{font-size:15px;margin:0}
 p{margin:0;line-height:1.5}
 .note{color:#6e6e73;font-size:12px}
@@ -15,8 +15,9 @@ button.primary{background:#ff8a00;color:#fff}
 </style></head>
 <body><div class="card">
 <h1>需要屏幕录制权限</h1>
-<p id="perm-text">框选需要屏幕录制权限，用于截取你框住的那一块画面，不会上传</p>
-<p class="note" id="perm-note">在「系统设置 › 隐私与安全性 › 屏幕录制」里打开栏历后，需要重启栏历才能生效。</p>
+<p id="perm-text">框选收纳要截取你框住的那一块画面，不会上传。</p>
+<p id="perm-steps">在「屏幕录制」列表里打开「栏历」的开关，按提示重新打开栏历。</p>
+<p class="note" id="perm-note">列表里没有栏历？点列表下方的「+」，在「应用程序」里选「栏历」。</p>
 <div class="acts"><button id="perm-close" type="button">知道了</button><button id="perm-open" class="primary" type="button">打开系统设置</button></div>
 </div>
 <script src="region-permission.js"></script>

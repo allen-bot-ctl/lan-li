@@ -18,7 +18,7 @@ function createRegionController(deps) {
   let display = null; let sourceApp = '';
   let lastState = { phase: 'closed', rect: null, bar: null };
   let lastResult = null;
-  const e2e = { permission: 'granted', scaleFactor: null, openCalls: [], probeCalls: 0 };
+  const e2e = { permission: 'granted', permissionAfterProbe: null, scaleFactor: null, openCalls: [], probeCalls: 0 };
 
   function screenAccess() {
     if (E2E) return e2e.permission;
@@ -46,7 +46,7 @@ function createRegionController(deps) {
   function showPermissionCard(d) {
     if (!permWin || permWin.isDestroyed()) {
       permWin = new BrowserWindow({
-        width: 380, height: 190, show: false, frame: false, resizable: false, skipTaskbar: true, alwaysOnTop: true,
+        width: 380, height: 236, show: false, frame: false, resizable: false, skipTaskbar: true, alwaysOnTop: true,
         minimizable: false, maximizable: false, fullscreenable: false,
         webPreferences: { preload: path.join(__dirname, 'region-preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true }
       });
@@ -56,17 +56,17 @@ function createRegionController(deps) {
       permWin.on('closed', () => { permWin = null; });
     }
     const wa = d.workArea;
-    permWin.setBounds({ x: Math.round(wa.x + (wa.width - 380) / 2), y: Math.round(wa.y + wa.height / 4), width: 380, height: 190 });
+    permWin.setBounds({ x: Math.round(wa.x + (wa.width - 380) / 2), y: Math.round(wa.y + wa.height / 4), width: 380, height: 236 });
     permWin.show(); permWin.focus();
     return permWin;
   }
 
-  function probeScreenAccess() {
+  async function probeScreenAccess() {
     e2e.probeCalls += 1;
-    if (E2E) return;
-    withTimeout(desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 1, height: 1 } }), CAPTURE_TIMEOUT_MS)
-      .then(() => { if (logger) logger.info('[栏历] 框选：已向系统申请屏幕录制权限'); })
-      .catch((err) => { if (logger) logger.info(`[栏历] 框选：申请屏幕录制权限 ${err && err.message}`); });
+    if (E2E) { if (e2e.permissionAfterProbe) e2e.permission = e2e.permissionAfterProbe; return; }
+    try { await withTimeout(desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 1, height: 1 } }), 1500); } catch (err) {
+      if (logger) logger.info(`[栏历] 框选：登记截屏 ${err && err.message}`);
+    }
   }
 
   function closePermission() { if (permWin && !permWin.isDestroyed()) permWin.close(); permWin = null; }
@@ -78,13 +78,17 @@ function createRegionController(deps) {
     display = screen.getDisplayNearestPoint(pt);
     sourceApp = o.sourceApp != null ? o.sourceApp : (deps.frontAppName ? await deps.frontAppName() : '');
     if (/^(栏历|LanLi|Electron)$/i.test(sourceApp || '')) sourceApp = '';
-    const access = screenAccess();
+    let access = screenAccess();
     if (access !== 'granted') {
-      if (logger) logger.info(`[栏历] 框选：屏幕录制权限 ${access}，显示说明卡`);
       // 0.1.51：macOS 只有在应用真正尝试截屏后，才把它加进「屏幕录制」列表并弹系统授权框
-      probeScreenAccess();
-      showPermissionCard(display);
-      return { ok: false, permission: access };
+      const before = access;
+      await probeScreenAccess();
+      access = screenAccess();
+      if (logger) logger.info(`[栏历] 框选：权限 ${before} → 登记截屏 → ${access}`);
+      if (access !== 'granted') {
+        showPermissionCard(display);
+        return { ok: false, permission: access };
+      }
     }
     closePermission();
     const w = ensureOverlay();
@@ -148,6 +152,8 @@ function createRegionController(deps) {
     overlay: () => overlay, permissionWindow: () => permWin,
     e2e: {
       setPermission: (v) => { e2e.permission = v || 'granted'; return true; },
+      setPermissionAfterProbe: (v) => { e2e.permissionAfterProbe = v || null; return true; },
+      resetProbeCalls: () => { e2e.probeCalls = 0; return true; },
       setScaleFactor: (v) => { e2e.scaleFactor = v || null; return true; },
       state: () => ({ ...lastState, overlayVisible: Boolean(overlay && !overlay.isDestroyed() && overlay.isVisible()), permissionVisible: Boolean(permWin && !permWin.isDestroyed() && permWin.isVisible()), sourceApp, result: lastResult }),
       openCalls: () => e2e.openCalls.slice(),
