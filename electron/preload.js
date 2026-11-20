@@ -62,6 +62,7 @@ contextBridge.exposeInMainWorld('lanli', {
   inboxTagMenu: (tag) => ipcRenderer.send('inbox:tagMenu', tag),
   setInboxView: (open) => ipcRenderer.send('inbox:viewState', open),
   onInboxEscape: (callback) => { ipcRenderer.on('inbox:escape', () => callback()); },
+  onInboxRequestDelete: (callback) => { ipcRenderer.on('inbox:requestDelete', (_e, id) => callback(id)); },
   onInboxChanged: (callback) => {
     ipcRenderer.on('inbox:changed', () => callback());
   }

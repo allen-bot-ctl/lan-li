@@ -1603,6 +1603,8 @@ inboxButton.addEventListener('click', () => {
   if (inboxView.hidden) openInboxView(); else closeInboxView();
 });
 api.onInboxChanged(() => { refreshInbox(); });
+// 右键「删除这条」和悬停 × 走同一条可撤销删除
+if (api.onInboxRequestDelete) api.onInboxRequestDelete((id) => deleteInboxEntry(id));
 api.onInboxEscape(() => {
   if (!inboxTagPop.hidden) { closeTagPop(); return; }
   if (!inboxMoreMenu.hidden) { inboxMoreMenu.hidden = true; return; }

@@ -185,6 +185,8 @@ test('A-C9 列表时间倒序，四类各走对应打开方式，原文件移走
   expect((await hook('inboxMenuItems')).filter((i) => i.type !== 'separator').map((i) => i.label)).toEqual(['在 Finder 中显示', '删除这条']);
   expect(await hook('clickInboxMenuItem', 'inbox-delete')).toBe(true);
   await expect(page.locator('.inbox-row', { hasText: '季度报告.pdf' })).toHaveCount(0);
+  // 0.1.45：右键删除与悬停 × 同一路径，也出「已删除 · 撤销」
+  await expect(page.locator('#inbox-undo')).toBeVisible();
   expect(fs.existsSync(path.join(work, '挪走了.pdf'))).toBe(true);
 });
 

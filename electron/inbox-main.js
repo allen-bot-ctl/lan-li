@@ -305,7 +305,7 @@ function createInboxController(deps) {
       const menu = Menu.buildFromTemplate([
         { id: 'inbox-reveal', label: '在 Finder 中显示', click: () => reveal(id) },
         { type: 'separator' },
-        { id: 'inbox-delete', label: '删除这条', click: () => { store.remove(id); if (deps.onChanged) deps.onChanged(); } }
+        { id: 'inbox-delete', label: '删除这条', click: () => { if (!event.sender.isDestroyed()) event.sender.send('inbox:requestDelete', id); } }
       ]);
       if (E2E) { lastMenu = menu; return; }
       menu.popup({ window: BrowserWindow.fromWebContents(event.sender) });
