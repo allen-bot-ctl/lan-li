@@ -203,6 +203,17 @@ test('R-C5/R-C7 无屏幕录制权限：出说明卡，不铺窗体；截图 57'
   for (const theme of ['dark', 'light']) {
     await setTheme(theme);
     await hook('regionResetProbeCalls');
+    // 0.1.53：第一次按 ⌃⌥S 只触发系统授权框，不出我们的说明卡
+    await hook('regionSetPrompted', false);
+    const first = await hook('openRegionCapture');
+    expect(first).toEqual({ ok: false, permission: 'denied', systemPrompt: true });
+    expect(await hook('regionProbeCalls')).toBe(1);
+    expect(await hook('regionPrompted')).toBe(true);
+    await page.waitForTimeout(300);
+    expect((await rstate()).permissionVisible).toBe(false);
+    expect(app.windows().some((w) => !w.isClosed() && w.url().endsWith('region-permission.html'))).toBe(false);
+    // 第二次仍未授权（系统不会再弹）才出说明卡
+    await hook('regionResetProbeCalls');
     const r = await hook('openRegionCapture');
     expect(r).toEqual({ ok: false, permission: 'denied' });
     // P-C1：先真正登记一次截屏，再出说明卡

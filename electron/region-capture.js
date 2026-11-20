@@ -86,6 +86,13 @@ function createRegionController(deps) {
       access = screenAccess();
       if (logger) logger.info(`[栏历] 框选：权限 ${before} → 登记截屏 → ${access}`);
       if (access !== 'granted') {
+        // 0.1.53：第一次只让系统弹它自己的授权框，我们的说明卡不弹，免得两个框叠在一起
+        const prompted = deps.wasScreenPromptShown ? deps.wasScreenPromptShown() : true;
+        if (!prompted) {
+          if (deps.markScreenPromptShown) deps.markScreenPromptShown();
+          if (logger) logger.info('[栏历] 框选：首次请求，交给系统授权框，不弹说明卡');
+          return { ok: false, permission: access, systemPrompt: true };
+        }
         showPermissionCard(display);
         return { ok: false, permission: access };
       }
