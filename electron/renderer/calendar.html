@@ -155,8 +155,31 @@
         <span class="inbox-title" id="inbox-title">收纳</span>
         <span class="inbox-count" id="inbox-count"></span>
       </div>
+      <div class="inbox-toolbar" id="inbox-toolbar">
+        <input class="inbox-search" id="inbox-search" type="search" placeholder="搜索收纳（⌘F）" autocomplete="off" spellcheck="false">
+        <div class="inbox-types" id="inbox-types" role="radiogroup" aria-label="类型">
+          <button type="button" class="inbox-pill inbox-type is-active" data-type="all">全部</button>
+          <button type="button" class="inbox-pill inbox-type" data-type="file">文件</button>
+          <button type="button" class="inbox-pill inbox-type" data-type="image">图片</button>
+          <button type="button" class="inbox-pill inbox-type" data-type="text">文字</button>
+          <button type="button" class="inbox-pill inbox-type" data-type="link">链接</button>
+        </div>
+        <button type="button" class="inbox-cal-toggle" id="inbox-cal-toggle" title="按日期筛选" aria-label="按日期筛选">📅</button>
+      </div>
+      <div class="inbox-tagrow" id="inbox-tagrow">
+        <span class="inbox-day-chip" id="inbox-day-chip" hidden><span id="inbox-day-chip-text"></span><button type="button" class="inbox-day-chip-x" id="inbox-day-chip-x" aria-label="取消日期筛选">×</button></span>
+        <span class="inbox-tags" id="inbox-tags"></span>
+        <span class="inbox-more-wrap"><button type="button" class="inbox-pill inbox-more" id="inbox-more" hidden></button><span class="inbox-more-menu" id="inbox-more-menu" hidden></span></span>
+      </div>
+      <div class="inbox-minical" id="inbox-minical" hidden>
+        <div class="inbox-minical-head"><button type="button" id="inbox-minical-prev">‹</button><span id="inbox-minical-title"></span><button type="button" id="inbox-minical-next">›</button></div>
+        <div class="inbox-minical-grid" id="inbox-minical-grid"></div>
+      </div>
       <div class="inbox-list" id="inbox-list" role="list"></div>
       <div class="inbox-empty" id="inbox-empty" hidden>把文件、图片、文字或链接拖到菜单栏时钟上，就会收在这里</div>
+      <div class="inbox-noresult" id="inbox-noresult" hidden><span>没有符合条件的收纳</span><button type="button" class="inbox-clear" id="inbox-clear">清除筛选</button></div>
+      <div class="inbox-undo" id="inbox-undo" hidden><span>已删除 · </span><button type="button" id="inbox-undo-btn">撤销</button></div>
+      <div class="inbox-tagpop" id="inbox-tagpop" hidden><input id="inbox-tag-input" type="text" maxlength="8" placeholder="加标签，回车" autocomplete="off"><span class="inbox-tag-suggest" id="inbox-tag-suggest"></span><span class="inbox-tagpop-err" id="inbox-tagpop-err"></span></div>
       <div class="inbox-detail" id="inbox-detail" hidden>
         <iframe class="inbox-detail-frame" id="inbox-detail-frame" sandbox="" title="收纳内容"></iframe>
       </div>
@@ -248,6 +271,7 @@
   </div>
 
   <script src="toast.js"></script>
+  <script src="inbox-query.js"></script>
   <script src="calendar.js"></script>
 </body>
 </html>

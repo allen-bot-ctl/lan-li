@@ -9,6 +9,7 @@ const {
   screen,
   ipcMain,
   dialog,
+  clipboard,
   autoUpdater,
   net,
   shell,
@@ -108,6 +109,7 @@ let settingsViewOpen = false;
 // 直到鼠标进入窗口再离开（或 Esc / 隐藏）。
 let trayMenuOpen = false;
 let inbox = null; // 0.1.42 收纳
+let inboxViewOpen = false;
 let trayMenuHold = false;
 let e2eTrayMenu = null;
 let e2eQuitCalls = 0;
@@ -434,7 +436,10 @@ function createCalendarWindow() {
   calendarWindow.webContents.on('before-input-event', (event, input) => {
     if (input.type === 'keyDown' && (input.key === 'Escape' || input.key === 'Esc')) {
       event.preventDefault();
-      if (settingsViewOpen) {
+      if (settingsViewOpen && inboxViewOpen) {
+        // 0.1.44：收纳面板里 Esc 先关标签输入框/清空搜索，再退出面板（由渲染层决定）
+        calendarWindow.webContents.send('inbox:escape');
+      } else if (settingsViewOpen) {
         settingsViewOpen = false;
         sendPanel('calendar');
       } else {
@@ -917,6 +922,7 @@ function registerIpc() {
   ipcMain.handle('settings:setOpenAtLogin', (_e, value) => applyLoginItem(Boolean(value)));
   ipcMain.handle('settings:setMenuBarShowDate', (_e, value) => setMenuBarShowDate(value));
   ipcMain.on('settings:viewState', (_e, open) => { settingsViewOpen = Boolean(open); });
+  ipcMain.on('inbox:viewState', (_e, open) => { inboxViewOpen = Boolean(open); });
 
   ipcMain.handle('weather:get', () => {
     if (!weatherService) return unavailableWeather();
@@ -1199,6 +1205,11 @@ function registerE2eHooks() {
     inboxMenuItems() { return inbox.e2e.menuItems(); },
     clickInboxMenuItem(id) { return inbox.e2e.clickMenu(id); },
     openInboxPanel() { openInboxPanel(); return true; },
+    inboxCopyCalls() { return inbox.e2e.copyCalls(); },
+    setInboxRelinkPath(p) { return inbox.e2e.setRelinkPath(p); },
+    inboxAddTag(a) { return inbox.store.addTag(a.id, a.tag); },
+    inboxIndexPath() { return path.join(inbox.store.root, 'index.json'); },
+    clipboardText() { return clipboard.readText(); },
     trayMenuStats() { return { quitCalls: e2eQuitCalls, updateChecks: e2eUpdateChecks - e2eUpdateChecks0, hold: trayMenuHold }; },
     clickSettingsMenuItem(id) { const item = e2eSettingsMenu && e2eSettingsMenu.getMenuItemById(id); if (!item) return false; item.click(); return true; },
     emitUpdateStatus(status) {
@@ -1240,7 +1251,7 @@ function inboxRoot() {
 
 function setupInbox() {
   inbox = createInboxController({
-    BrowserWindow, screen, nativeImage, net, shell, Menu, ipcMain, logger, E2E,
+    BrowserWindow, screen, nativeImage, net, shell, Menu, ipcMain, logger, E2E, clipboard, dialog,
     root: inboxRoot(),
     getTray: () => tray,
     onShow: () => { if (calendarWindow && !calendarWindow.isDestroyed() && calendarWindow.isVisible() && !pinned) hideCalendar(); },

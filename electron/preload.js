@@ -54,6 +54,14 @@ contextBridge.exposeInMainWorld('lanli', {
   revealInboxEntry: (id) => ipcRenderer.invoke('inbox:reveal', id),
   removeInboxEntry: (id) => ipcRenderer.invoke('inbox:remove', id),
   inboxContextMenu: (id) => ipcRenderer.send('inbox:contextMenu', id),
+  undoRemoveInboxEntry: (id) => ipcRenderer.invoke('inbox:undo', id),
+  addInboxTag: (id, tag) => ipcRenderer.invoke('inbox:addTag', id, tag),
+  copyInboxEntry: (id) => ipcRenderer.invoke('inbox:copy', id),
+  relinkInboxEntry: (id) => ipcRenderer.invoke('inbox:relink', id),
+  inboxDays: () => ipcRenderer.invoke('inbox:days'),
+  inboxTagMenu: (tag) => ipcRenderer.send('inbox:tagMenu', tag),
+  setInboxView: (open) => ipcRenderer.send('inbox:viewState', open),
+  onInboxEscape: (callback) => { ipcRenderer.on('inbox:escape', () => callback()); },
   onInboxChanged: (callback) => {
     ipcRenderer.on('inbox:changed', () => callback());
   }

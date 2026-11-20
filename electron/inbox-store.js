@@ -9,6 +9,7 @@
 // 写盘先写 <id>.tmp/ 再 rename；单次最多 50 项，单张图片 ≤ 50MB。
 const path = require('node:path');
 const nodeFs = require('node:fs');
+const Q = require('./renderer/inbox-query');
 
 const SCHEMA = 1;
 const MAX_ITEMS = 50;
@@ -47,6 +48,11 @@ function htmlToPlain(html) {
   return String(html || '').replace(/<(br|\/p|\/div|\/li|\/h[1-6])\b[^>]*>/gi, '\n').replace(/<[^>]+>/g, ' ')
     .replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&')
     .replace(/[ \t]+/g, ' ').replace(/\s*\n\s*/g, '\n').trim();
+}
+
+// 行内标签（<b> 等）直接去掉，不换成空格，免得「本周完成<b>收纳</b>功能」变成「本周完成 收纳 功能」
+function stripInline(html) {
+  return String(html || '').replace(/<\/?(b|i|u|s|em|strong|span|a|code|mark|small|sub|sup|font)\b[^>]*>/gi, '');
 }
 
 function imgSources(html) {
@@ -124,6 +130,7 @@ function createInboxStore(opts) {
   function commit(entry) {
     fs.writeFileSync(path.join(entry.tmp, 'meta.json'), JSON.stringify(entry.meta, null, 2));
     fs.renameSync(entry.tmp, path.join(root, entry.id));
+    stale = true;
     return entry.meta;
   }
 
@@ -162,7 +169,7 @@ function createInboxStore(opts) {
   function addText(input) {
     const i = typeof input === 'string' ? { text: input } : (input || {});
     let html = i.html ? sanitizeHtml(i.html) : textToHtml(i.text || '');
-    const plain = i.html ? htmlToPlain(html) : String(i.text || '').trim();
+    const plain = i.html ? htmlToPlain(stripInline(html)) : String(i.text || '').trim();
     return run('text', { title: plain.split('\n')[0].slice(0, 60) || '图文', file: 'content.html', assets: [], rich: Boolean(i.html), preview: plain.replace(/\s+/g, ' ').slice(0, 120) }, (e) => {
       const imgs = i.images || [];
       if (imgs.length) fs.mkdirSync(path.join(e.tmp, 'assets'), { recursive: true });
@@ -210,17 +217,57 @@ function createInboxStore(opts) {
     try { fs.realpathSync(path.join(root, meta.id, meta.file)); return false; } catch { return true; }
   }
 
-  function list() {
+  // B 段：index.json 缓存（随时可由各条 meta.json 重建）。文字条目额外存正文纯文本 body 供检索。
+  const INDEX = 'index.json';
+  const TRASH = '.trash';
+  let cache = null;
+  let stale = false;
+
+  function scanMetas() {
     if (!fs.existsSync(root)) return [];
     const out = [];
     for (const id of fs.readdirSync(root)) {
-      if (id.endsWith('.tmp')) continue;
+      if (id.endsWith('.tmp') || id.startsWith('.') || id === INDEX) continue;
       try {
         const meta = JSON.parse(fs.readFileSync(path.join(root, id, 'meta.json'), 'utf8'));
-        meta.missing = checkMissing(meta);
+        if (meta.type === 'text') {
+          try { meta.body = htmlToPlain(stripInline(fs.readFileSync(path.join(root, id, 'content.html'), 'utf8'))).slice(0, 5000); } catch { /* 没正文 */ }
+        }
         out.push(meta);
       } catch { /* 跳过坏条目 */ }
     }
+    return out;
+  }
+
+  function writeIndex(entries) {
+    cache = entries;
+    try { ensureRoot(); fs.writeFileSync(path.join(root, INDEX), JSON.stringify({ schema: SCHEMA, entries })); } catch { /* 只是缓存 */ }
+  }
+
+  function rebuildIndex() { const e = scanMetas(); writeIndex(e); return e; }
+
+  function dirIds() {
+    return fs.readdirSync(root).filter((id) => !id.endsWith('.tmp') && !id.startsWith('.') && id !== INDEX).sort().join('|');
+  }
+  const idsOf = (entries) => entries.map((m) => m.id).sort().join('|');
+
+  // 内存缓存 → index.json → 由 meta.json 重建；条目目录有增删（含外部改动）时自动重建。
+  function readIndex() {
+    const ids = fs.existsSync(root) ? dirIds() : '';
+    if (cache && !stale && idsOf(cache) === ids) return cache;
+    if (cache || stale) { stale = false; return rebuildIndex(); }
+    try {
+      const j = JSON.parse(fs.readFileSync(path.join(root, INDEX), 'utf8'));
+      if (j && Array.isArray(j.entries) && idsOf(j.entries) === ids) { cache = j.entries; return cache; }
+    } catch { /* 丢了或坏了就重建 */ }
+    return rebuildIndex();
+  }
+
+  function invalidate() { cache = null; rebuildIndex(); }
+
+  function list() {
+    if (!fs.existsSync(root)) return [];
+    const out = readIndex().map((m) => ({ ...m, missing: checkMissing(m) }));
     return out.sort((a, b) => (b.createdMs || 0) - (a.createdMs || 0) || (a.id < b.id ? 1 : -1));
   }
 
@@ -239,23 +286,94 @@ function createInboxStore(opts) {
     return res;
   }
 
-  function remove(id) { fs.rmSync(path.join(root, safeId(id)), { recursive: true, force: true }); }
+  function remove(id) { fs.rmSync(path.join(root, safeId(id)), { recursive: true, force: true }); invalidate(); }
 
-  function setTags(id, tags) {
+  function readMeta(id) {
     const dir = path.join(root, safeId(id));
-    const meta = JSON.parse(fs.readFileSync(path.join(dir, 'meta.json'), 'utf8'));
-    meta.tags = [...new Set((tags || []).map((t) => String(t).trim()).filter(Boolean))];
-    fs.writeFileSync(path.join(dir, 'meta.json'), JSON.stringify(meta, null, 2));
-    return meta;
+    return { dir, meta: JSON.parse(fs.readFileSync(path.join(dir, 'meta.json'), 'utf8')) };
+  }
+  function writeMeta(dir, meta) {
+    const m = { ...meta }; delete m.body;
+    fs.writeFileSync(path.join(dir, 'meta.json'), JSON.stringify(m, null, 2));
+    invalidate();
+    return m;
   }
 
-  // 启动时清掉上次崩溃留下的 .tmp
+  // 每条最多 5 个标签，单个最长 8 字（超限抛 tag-limit / tag-too-long）。
+  function setTags(id, tags) {
+    const { dir, meta } = readMeta(id);
+    meta.tags = Q.cleanTags(tags);
+    return writeMeta(dir, meta);
+  }
+
+  function addTag(id, tag) {
+    const { dir, meta } = readMeta(id);
+    meta.tags = Q.addTag(meta.tags, tag);
+    return writeMeta(dir, meta);
+  }
+
+  // 标签胶囊右键「删除这个标签」= 从所有条目移除
+  function removeTagEverywhere(tag) {
+    let n = 0;
+    for (const m of scanMetas()) {
+      if (!(m.tags || []).includes(tag)) continue;
+      const dir = path.join(root, m.id);
+      const meta = JSON.parse(fs.readFileSync(path.join(dir, 'meta.json'), 'utf8'));
+      meta.tags = (meta.tags || []).filter((t) => t !== tag);
+      fs.writeFileSync(path.join(dir, 'meta.json'), JSON.stringify(meta, null, 2));
+      n += 1;
+    }
+    invalidate();
+    return n;
+  }
+
+  // 删除可撤销：先挪进 .trash/<id>，5 秒后由调用方 purge；撤销则 restore。
+  function trash(id) {
+    const sid = safeId(id);
+    fs.mkdirSync(path.join(root, TRASH), { recursive: true });
+    const dest = path.join(root, TRASH, sid);
+    fs.rmSync(dest, { recursive: true, force: true });
+    fs.renameSync(path.join(root, sid), dest);
+    invalidate();
+    return true;
+  }
+  function restore(id) {
+    const sid = safeId(id);
+    const src = path.join(root, TRASH, sid);
+    if (!fs.existsSync(src)) return false;
+    fs.renameSync(src, path.join(root, sid));
+    invalidate();
+    return true;
+  }
+  function purge(id) {
+    if (id) { fs.rmSync(path.join(root, TRASH, safeId(id)), { recursive: true, force: true }); return; }
+    fs.rmSync(path.join(root, TRASH), { recursive: true, force: true });
+  }
+
+  // 失联条目「重新指定原文件…」：重建软链接，更新 sourcePath，清 missing。
+  function relink(id, newPath) {
+    const { dir, meta } = readMeta(id);
+    if (meta.type !== 'file') throw new InboxError('unsupported', 'not a file entry');
+    const st = fs.statSync(newPath);
+    const link = path.join(dir, meta.file);
+    fs.rmSync(link, { force: true });
+    fs.symlinkSync(newPath, link);
+    meta.sourcePath = newPath;
+    meta.size = st.isFile() ? st.size : 0;
+    meta.isDir = st.isDirectory();
+    meta.preview = path.dirname(newPath);
+    meta.missing = false;
+    return writeMeta(dir, meta);
+  }
+
+  // 启动时清掉上次崩溃留下的 .tmp 和没来得及清的 .trash
   function cleanup() {
     if (!fs.existsSync(root)) return;
     for (const id of fs.readdirSync(root)) if (id.endsWith('.tmp')) fs.rmSync(path.join(root, id), { recursive: true, force: true });
+    purge();
   }
 
-  return { root, save, saveAll, addFile, addImage, addText, addLink, list, get, remove, setTags, cleanup };
+  return { root, save, saveAll, addFile, addImage, addText, addLink, list, get, remove, setTags, addTag, removeTagEverywhere, trash, restore, purge, relink, cleanup, rebuildIndex, readIndex };
 }
 
 // 渲染进程「松开即保存 · 3 个文件」里的类型描述

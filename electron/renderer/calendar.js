@@ -430,6 +430,14 @@ function renderCells(next) {
     secondaryText.textContent = cell.secondaryText;
 
     button.append(dayText, secondaryText);
+    // 0.1.44：有收纳的日期在数字下方画灰色 4px 圆点
+    button.dataset.day = `${cell.year}-${cell.month}-${cell.day}`;
+    if (typeof inboxDaySet !== 'undefined' && inboxDaySet.has(button.dataset.day)) {
+      button.classList.add('has-inbox');
+      const dot = document.createElement('span');
+      dot.className = 'cell-inbox-dot';
+      button.appendChild(dot);
+    }
     button.addEventListener('click', () => selectCell(cell));
 
     grid.append(button);
@@ -1214,45 +1222,329 @@ function inboxSubtitle(m) {
   return m.preview || '';
 }
 
-function renderInbox(entries) {
-  inboxList.textContent = '';
-  inboxCount.textContent = entries.length ? `${entries.length} 项` : '';
-  inboxEmpty.hidden = entries.length > 0;
-  for (const m of entries) {
-    const row = document.createElement('div');
-    row.className = 'inbox-row' + (m.missing ? ' is-missing' : '');
-    row.setAttribute('role', 'listitem');
-    row.dataset.id = m.id;
-    row.dataset.type = m.type;
-    const icon = document.createElement('span');
-    icon.className = 'inbox-row-icon';
-    if (m.thumb) {
-      const img = document.createElement('img');
-      img.src = m.thumb; img.alt = '';
-      icon.appendChild(img);
-    } else {
-      icon.textContent = INBOX_TYPE_ICON[m.type] || '📄';
-    }
-    const body = document.createElement('span');
-    body.className = 'inbox-row-body';
-    const title = document.createElement('span');
-    title.className = 'inbox-row-title';
-    title.textContent = m.title || '（无标题）';
-    const sub = document.createElement('span');
-    sub.className = 'inbox-row-sub';
-    sub.textContent = inboxSubtitle(m);
-    body.append(title, sub);
-    const time = document.createElement('span');
-    time.className = 'inbox-row-time';
-    time.textContent = formatInboxTime(m.createdAt);
-    row.append(icon, body, time);
-    row.addEventListener('click', () => openInboxRow(m));
-    row.addEventListener('contextmenu', (e) => { e.preventDefault(); api.inboxContextMenu(m.id); });
-    inboxList.appendChild(row);
+// ---- 0.1.44 收纳 B 段：检索、类型/标签/日期筛选、日期分组、行操作 ----
+const IQ = window.LanliInboxQuery;
+const inboxSearch = document.getElementById('inbox-search');
+const inboxTypes = document.getElementById('inbox-types');
+const inboxTagsEl = document.getElementById('inbox-tags');
+const inboxMore = document.getElementById('inbox-more');
+const inboxMoreMenu = document.getElementById('inbox-more-menu');
+const inboxDayChip = document.getElementById('inbox-day-chip');
+const inboxDayChipText = document.getElementById('inbox-day-chip-text');
+const inboxNoResult = document.getElementById('inbox-noresult');
+const inboxUndo = document.getElementById('inbox-undo');
+const inboxTagPop = document.getElementById('inbox-tagpop');
+const inboxTagInput = document.getElementById('inbox-tag-input');
+const inboxTagSuggest = document.getElementById('inbox-tag-suggest');
+const inboxTagErr = document.getElementById('inbox-tagpop-err');
+const inboxMiniCal = document.getElementById('inbox-minical');
+const inboxMiniGrid = document.getElementById('inbox-minical-grid');
+const inboxMiniTitle = document.getElementById('inbox-minical-title');
+const INBOX_TAG_SHOW = 6;
+let inboxEntries = [];
+const inboxFilter = { query: '', type: 'all', tags: [], day: null };
+let inboxTagTarget = null;
+let inboxTagCounts = [];
+let inboxUndoId = null;
+let inboxUndoTimer = null;
+var inboxDaySet = new Set(); // var：月历 renderCells 可能先于这里执行
+let miniMonth = null; // { y, m(0-11) }
+
+function appendHighlighted(el, text, query) {
+  el.textContent = '';
+  for (const part of IQ.highlightParts(text, query)) {
+    if (part.hit) { const mark = document.createElement('mark'); mark.className = 'inbox-hit'; mark.textContent = part.text; el.appendChild(mark); }
+    else el.appendChild(document.createTextNode(part.text));
   }
 }
 
+function inboxFilterActive() {
+  return Boolean(inboxFilter.query.trim() || inboxFilter.type !== 'all' || inboxFilter.tags.length || inboxFilter.day);
+}
+
+function renderInboxTags() {
+  const counts = IQ.tagCounts(inboxEntries);
+  inboxTagsEl.textContent = '';
+  inboxMoreMenu.textContent = '';
+  // 选中的标签即使排在 6 名以后也显示出来
+  const shown = counts.slice(0, INBOX_TAG_SHOW);
+  const rest = counts.slice(INBOX_TAG_SHOW);
+  const makePill = (c, inMenu) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = (inMenu ? 'inbox-more-item' : 'inbox-pill inbox-tag') + (inboxFilter.tags.includes(c.tag) ? ' is-active' : '');
+    b.dataset.tag = c.tag;
+    b.title = `#${c.tag}（${c.count}）`;
+    b.textContent = `#${c.tag}`;
+    b.addEventListener('click', (e) => { e.stopPropagation(); toggleInboxTag(c.tag); });
+    b.addEventListener('contextmenu', (e) => { e.preventDefault(); api.inboxTagMenu(c.tag); });
+    return b;
+  };
+  for (const c of shown) inboxTagsEl.appendChild(makePill(c, false));
+  for (const c of rest) inboxMoreMenu.appendChild(makePill(c, true));
+  inboxMore.hidden = rest.length === 0;
+  inboxMore.textContent = `+${rest.length}`;
+  inboxMore.classList.toggle('is-active', rest.some((c) => inboxFilter.tags.includes(c.tag)));
+  if (!rest.length) inboxMoreMenu.hidden = true;
+  inboxTagCounts = counts;
+  // 已不存在的标签从筛选里去掉
+  inboxFilter.tags = inboxFilter.tags.filter((t) => counts.some((c) => c.tag === t));
+}
+
+function toggleInboxTag(tag) {
+  const i = inboxFilter.tags.indexOf(tag);
+  if (i >= 0) inboxFilter.tags.splice(i, 1); else inboxFilter.tags.push(tag);
+  renderInbox();
+}
+
+function setInboxType(type) {
+  inboxFilter.type = type;
+  for (const b of inboxTypes.querySelectorAll('.inbox-type')) {
+    const on = b.dataset.type === type;
+    b.classList.toggle('is-active', on);
+    b.setAttribute('aria-checked', on ? 'true' : 'false');
+  }
+  renderInbox();
+}
+
+function setInboxDay(key) {
+  inboxFilter.day = key || null;
+  inboxDayChip.hidden = !inboxFilter.day;
+  inboxDayChipText.textContent = inboxFilter.day ? IQ.dayChipLabel(inboxFilter.day) : '';
+  renderMiniCal();
+  renderInbox();
+}
+
+function clearInboxFilters() {
+  inboxFilter.query = ''; inboxSearch.value = '';
+  inboxFilter.tags = [];
+  setInboxType('all');
+  setInboxDay(null);
+}
+
+function rowAction(label, cls, onClick) {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'inbox-act ' + cls;
+  b.textContent = label;
+  b.title = label;
+  b.addEventListener('click', (e) => { e.stopPropagation(); onClick(e); });
+  return b;
+}
+
+function buildInboxRow(m) {
+  const q = inboxFilter.query;
+  const row = document.createElement('div');
+  row.className = 'inbox-row' + (m.missing ? ' is-missing' : '');
+  row.setAttribute('role', 'listitem');
+  row.dataset.id = m.id;
+  row.dataset.type = m.type;
+  const icon = document.createElement('span');
+  icon.className = 'inbox-row-icon';
+  if (m.thumb) {
+    const img = document.createElement('img');
+    img.src = m.thumb; img.alt = '';
+    icon.appendChild(img);
+  } else {
+    icon.textContent = INBOX_TYPE_ICON[m.type] || '📄';
+  }
+  const body = document.createElement('span');
+  body.className = 'inbox-row-body';
+  const title = document.createElement('span');
+  title.className = 'inbox-row-title';
+  appendHighlighted(title, m.title || '（无标题）', q);
+  const sub = document.createElement('span');
+  sub.className = 'inbox-row-sub';
+  appendHighlighted(sub, inboxSubtitle(m), q);
+  if ((m.tags || []).length) {
+    const tags = document.createElement('span');
+    tags.className = 'inbox-row-tags';
+    appendHighlighted(tags, m.tags.map((t) => '#' + t).join(' '), q);
+    sub.appendChild(tags);
+  }
+  body.append(title, sub);
+  const time = document.createElement('span');
+  time.className = 'inbox-row-time';
+  time.textContent = formatInboxTime(m.createdAt);
+  const acts = document.createElement('span');
+  acts.className = 'inbox-row-actions';
+  if (m.missing) {
+    acts.appendChild(rowAction('重新指定原文件…', 'inbox-act-relink', () => {
+      api.relinkInboxEntry(m.id).then((r) => {
+        if (r && r.ok) refreshInbox();
+        else if (r && r.text) showToast({ type: 'warning', title: r.text });
+      }).catch(() => {});
+    }));
+  } else {
+    acts.appendChild(rowAction('在 Finder 中显示', 'inbox-act-reveal', () => api.revealInboxEntry(m.id)));
+    acts.appendChild(rowAction('复制', 'inbox-act-copy', () => {
+      api.copyInboxEntry(m.id).then(() => showToast({ type: 'success', title: '已复制' })).catch(() => {});
+    }));
+    acts.appendChild(rowAction('#', 'inbox-act-tag', (e) => openTagPop(m, e.currentTarget)));
+  }
+  acts.appendChild(rowAction('×', 'inbox-act-delete', () => deleteInboxEntry(m.id)));
+  row.append(icon, body, time, acts);
+  row.addEventListener('click', () => openInboxRow(m));
+  row.addEventListener('contextmenu', (e) => { e.preventDefault(); api.inboxContextMenu(m.id); });
+  return row;
+}
+
+function renderInbox(entries) {
+  if (Array.isArray(entries)) inboxEntries = entries;
+  renderInboxTags();
+  const shown = IQ.filterEntries(inboxEntries, inboxFilter);
+  inboxList.textContent = '';
+  inboxCount.textContent = inboxEntries.length ? (inboxFilterActive() ? `${shown.length}/${inboxEntries.length} 项` : `${inboxEntries.length} 项`) : '';
+  const detailOpen = !inboxDetail.hidden;
+  inboxEmpty.hidden = detailOpen || inboxEntries.length > 0;
+  inboxNoResult.hidden = detailOpen || !(inboxEntries.length > 0 && shown.length === 0);
+  for (const g of IQ.groupByDate(shown, new Date())) {
+    const head = document.createElement('div');
+    head.className = 'inbox-group';
+    head.textContent = g.label;
+    inboxList.appendChild(head);
+    for (const m of g.entries) inboxList.appendChild(buildInboxRow(m));
+  }
+}
+
+function deleteInboxEntry(id) {
+  if (inboxUndoId && inboxUndoId !== id) inboxUndoId = null;
+  api.removeInboxEntry(id).then(() => {
+    inboxEntries = inboxEntries.filter((m) => m.id !== id);
+    renderInbox();
+    inboxUndoId = id;
+    inboxUndo.hidden = false;
+    if (inboxUndoTimer) clearTimeout(inboxUndoTimer);
+    inboxUndoTimer = setTimeout(() => { inboxUndo.hidden = true; inboxUndoId = null; }, 5000);
+  }).catch(() => {});
+}
+
+document.getElementById('inbox-undo-btn').addEventListener('click', () => {
+  const id = inboxUndoId;
+  inboxUndo.hidden = true; inboxUndoId = null;
+  if (inboxUndoTimer) { clearTimeout(inboxUndoTimer); inboxUndoTimer = null; }
+  if (id) api.undoRemoveInboxEntry(id).then(() => refreshInbox()).catch(() => {});
+});
+
+function openTagPop(m, anchor) {
+  inboxTagTarget = m.id;
+  inboxTagErr.textContent = '';
+  inboxTagInput.value = '';
+  inboxTagPop.hidden = false;
+  renderTagSuggest();
+  const vr = inboxView.getBoundingClientRect();
+  const ar = anchor.getBoundingClientRect();
+  inboxTagPop.style.top = `${Math.min(ar.bottom - vr.top + 4, vr.height - 64)}px`;
+  inboxTagPop.style.right = `${Math.max(8, vr.right - ar.right)}px`;
+  inboxTagInput.focus();
+}
+// 输入时联想已有标签（不用 datalist：自绘候选，点一下即填入并添加）
+function renderTagSuggest() {
+  const q = inboxTagInput.value.trim().replace(/^#+/, '').toLowerCase();
+  const target = inboxEntries.find((m) => m.id === inboxTagTarget);
+  const have = (target && target.tags) || [];
+  inboxTagSuggest.textContent = '';
+  for (const c of inboxTagCounts) {
+    if (have.includes(c.tag) || (q && !c.tag.toLowerCase().includes(q))) continue;
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'inbox-tag-suggest-item';
+    b.dataset.tag = c.tag;
+    b.textContent = '#' + c.tag;
+    b.addEventListener('click', (e) => { e.stopPropagation(); inboxTagInput.value = c.tag; submitTag(); });
+    inboxTagSuggest.appendChild(b);
+    if (inboxTagSuggest.children.length >= 6) break;
+  }
+}
+inboxTagInput.addEventListener('input', renderTagSuggest);
+
+function submitTag() {
+  const id = inboxTagTarget; const tag = inboxTagInput.value;
+  if (!id) return;
+  api.addInboxTag(id, tag).then((r) => {
+    if (r && r.ok) { closeTagPop(); refreshInbox(); }
+    else inboxTagErr.textContent = (r && r.text) || '没加上';
+  }).catch(() => {});
+}
+
+function closeTagPop() { inboxTagPop.hidden = true; inboxTagTarget = null; }
+
+inboxTagInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeTagPop(); return; }
+  if (e.key !== 'Enter' || e.isComposing) return;
+  e.preventDefault();
+  submitTag();
+});
+
+inboxSearch.addEventListener('input', () => { inboxFilter.query = inboxSearch.value; renderInbox(); });
+inboxSearch.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); inboxSearch.value = ''; inboxFilter.query = ''; renderInbox(); }
+});
+inboxTypes.addEventListener('click', (e) => {
+  const b = e.target.closest('.inbox-type');
+  if (b) setInboxType(b.dataset.type);
+});
+inboxMore.addEventListener('click', (e) => { e.stopPropagation(); inboxMoreMenu.hidden = !inboxMoreMenu.hidden; });
+document.getElementById('inbox-day-chip-x').addEventListener('click', () => setInboxDay(null));
+document.getElementById('inbox-clear').addEventListener('click', () => clearInboxFilters());
+document.addEventListener('keydown', (e) => {
+  if (inboxView.hidden) return;
+  if ((e.metaKey || e.ctrlKey) && (e.key === 'f' || e.key === 'F')) { e.preventDefault(); inboxSearch.focus(); inboxSearch.select(); }
+});
+document.addEventListener('click', (e) => {
+  if (!inboxMoreMenu.hidden && !e.target.closest('.inbox-more-wrap')) inboxMoreMenu.hidden = true;
+  if (!inboxTagPop.hidden && !e.target.closest('#inbox-tagpop') && !e.target.closest('.inbox-act-tag')) closeTagPop();
+});
+
+// 日历联动：收纳面板里的月历（主界面月历同样画小圆点）。只有收纳面板打开时点日期才筛到当天。
+function renderMiniCal() {
+  if (!miniMonth) { const n = new Date(); miniMonth = { y: n.getFullYear(), m: n.getMonth() }; }
+  const { y, m } = miniMonth;
+  inboxMiniTitle.textContent = `${y}年${m + 1}月`;
+  inboxMiniGrid.textContent = '';
+  for (const w of ['一', '二', '三', '四', '五', '六', '日']) { const h = document.createElement('span'); h.className = 'inbox-minical-dow'; h.textContent = w; inboxMiniGrid.appendChild(h); }
+  const first = new Date(y, m, 1);
+  const lead = (first.getDay() + 6) % 7;
+  for (let i = 0; i < lead; i += 1) inboxMiniGrid.appendChild(document.createElement('span'));
+  const daysIn = new Date(y, m + 1, 0).getDate();
+  const todayKey = IQ.dayKeyOf(new Date());
+  for (let d = 1; d <= daysIn; d += 1) {
+    const key = `${y}-${m + 1}-${d}`;
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'inbox-minical-day' + (inboxDaySet.has(key) ? ' has-inbox' : '') + (inboxFilter.day === key ? ' is-active' : '') + (key === todayKey ? ' is-today' : '');
+    b.dataset.day = key;
+    const num = document.createElement('span'); num.textContent = String(d);
+    b.appendChild(num);
+    if (inboxDaySet.has(key)) { const dot = document.createElement('span'); dot.className = 'inbox-dot'; b.appendChild(dot); }
+    b.addEventListener('click', () => { if (!inboxView.hidden) setInboxDay(inboxFilter.day === key ? null : key); });
+    inboxMiniGrid.appendChild(b);
+  }
+}
+document.getElementById('inbox-cal-toggle').addEventListener('click', () => {
+  inboxMiniCal.hidden = !inboxMiniCal.hidden;
+  document.getElementById('inbox-cal-toggle').classList.toggle('is-active', !inboxMiniCal.hidden);
+  renderMiniCal();
+});
+document.getElementById('inbox-minical-prev').addEventListener('click', () => { const d = new Date(miniMonth.y, miniMonth.m - 1, 1); miniMonth = { y: d.getFullYear(), m: d.getMonth() }; renderMiniCal(); });
+document.getElementById('inbox-minical-next').addEventListener('click', () => { const d = new Date(miniMonth.y, miniMonth.m + 1, 1); miniMonth = { y: d.getFullYear(), m: d.getMonth() }; renderMiniCal(); });
+
+function refreshInboxDays() {
+  return api.inboxDays().then((keys) => {
+    inboxDaySet = new Set(keys || []);
+    for (const cell of grid.querySelectorAll('.cell')) {
+      const has = inboxDaySet.has(cell.dataset.day);
+      cell.classList.toggle('has-inbox', has);
+      let dot = cell.querySelector('.cell-inbox-dot');
+      if (has && !dot) { dot = document.createElement('span'); dot.className = 'cell-inbox-dot'; cell.appendChild(dot); }
+      if (!has && dot) dot.remove();
+    }
+    if (!inboxMiniCal.hidden) renderMiniCal();
+  }).catch(() => {});
+}
+
 function refreshInbox() {
+  refreshInboxDays();
   if (inboxView.hidden) return Promise.resolve();
   return api.listInbox().then(renderInbox).catch(() => renderInbox([]));
 }
@@ -1272,6 +1564,7 @@ function openInboxRow(m) {
     if (r && typeof r.html === 'string') {
       inboxList.hidden = true;
       inboxEmpty.hidden = true;
+      inboxNoResult.hidden = true;
       inboxDetail.hidden = false;
       inboxTitle.textContent = m.title || '文字';
       inboxBack.textContent = '‹ 收纳';
@@ -1286,6 +1579,7 @@ function openInboxView() {
   appBody.hidden = true;
   inboxView.hidden = false;
   api.setSettingsView(true);
+  api.setInboxView(true);
   showInboxList();
 }
 
@@ -1294,8 +1588,11 @@ function closeInboxView() {
   inboxView.hidden = true;
   inboxDetail.hidden = true;
   inboxDetailFrame.srcdoc = '';
+  closeTagPop();
+  inboxMoreMenu.hidden = true;
   appBody.hidden = false;
   api.setSettingsView(false);
+  api.setInboxView(false);
 }
 
 inboxBack.addEventListener('click', () => {
@@ -1306,6 +1603,14 @@ inboxButton.addEventListener('click', () => {
   if (inboxView.hidden) openInboxView(); else closeInboxView();
 });
 api.onInboxChanged(() => { refreshInbox(); });
+api.onInboxEscape(() => {
+  if (!inboxTagPop.hidden) { closeTagPop(); return; }
+  if (!inboxMoreMenu.hidden) { inboxMoreMenu.hidden = true; return; }
+  if (inboxSearch.value) { inboxSearch.value = ''; inboxFilter.query = ''; renderInbox(); return; }
+  if (!inboxDetail.hidden) { showInboxList(); return; }
+  closeInboxView();
+});
+refreshInboxDays();
 
 api.onOpenPanel((panel) => {
   clearSettingsHighlight();

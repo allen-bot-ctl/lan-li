@@ -2,7 +2,9 @@
 // 0.1.42 收纳：主进程部分（接纳框窗口、托盘拖拽事件、落盘、列表 IPC）。
 const path = require('node:path');
 const fs = require('node:fs');
-const { createInboxStore, classifyDrop, imgSources, MAX_IMAGE_BYTES, InboxError } = require('./inbox-store');
+const { createInboxStore, classifyDrop, imgSources, htmlToPlain, MAX_IMAGE_BYTES, InboxError } = require('./inbox-store');
+const Q = require('./renderer/inbox-query');
+const UNDO_MS = 5000;
 
 const DZ_W = 240;
 const DZ_H = 120;
@@ -40,7 +42,7 @@ function extFromMime(mime, url) {
 }
 
 function createInboxController(deps) {
-  const { BrowserWindow, screen, nativeImage, net, shell, Menu, ipcMain, logger } = deps;
+  const { BrowserWindow, screen, nativeImage, net, shell, Menu, ipcMain, logger, clipboard, dialog } = deps;
   const E2E = Boolean(deps.E2E);
   const store = createInboxStore({
     root: deps.root,
@@ -61,6 +63,9 @@ function createInboxController(deps) {
   let busy = false;
   let lastSaved = [];
   let e2eOpenCalls = [];
+  let e2eCopyCalls = [];
+  let e2eRelinkPath = null;
+  const purgeTimers = new Map();
 
   function ensureWindow() {
     if (win && !win.isDestroyed()) return win;
@@ -226,6 +231,57 @@ function createInboxController(deps) {
     });
   }
 
+  function changed() { if (deps.onChanged) deps.onChanged(); }
+
+  // B 段：删除可撤销（5 秒内），之后才真正删掉条目目录；原文件永远不动。
+  function removeWithUndo(id) {
+    store.trash(id);
+    if (purgeTimers.has(id)) clearTimeout(purgeTimers.get(id));
+    purgeTimers.set(id, setTimeout(() => { purgeTimers.delete(id); try { store.purge(id); } catch { /* ignore */ } }, UNDO_MS));
+    changed();
+    return true;
+  }
+  function undoRemove(id) {
+    if (purgeTimers.has(id)) { clearTimeout(purgeTimers.get(id)); purgeTimers.delete(id); }
+    const ok = store.restore(id);
+    changed();
+    return ok;
+  }
+
+  function addTag(id, tag) {
+    try { const meta = store.addTag(id, tag); changed(); return { ok: true, tags: meta.tags }; }
+    catch (error) { return { ok: false, code: error.code, text: error.message }; }
+  }
+  function removeTag(tag) { const n = store.removeTagEverywhere(tag); changed(); return n; }
+
+  // 复制：文件复制路径、图片复制图片、文字复制富文本、链接复制 URL
+  function copyEntry(id) {
+    const e = store.get(id);
+    const m = e.meta;
+    let call;
+    if (m.type === 'file') { call = { kind: 'text', text: m.sourcePath || '' }; clipboard.writeText(call.text); }
+    else if (m.type === 'image') { call = { kind: 'image', file: e.filePath }; clipboard.writeImage(nativeImage.createFromPath(e.filePath)); }
+    else if (m.type === 'text') { call = { kind: 'html', text: htmlToPlain(e.html) }; clipboard.write({ html: e.html, text: call.text }); }
+    else { call = { kind: 'text', text: m.sourceUrl || '' }; clipboard.writeText(call.text); }
+    e2eCopyCalls.push({ id, type: m.type, ...call });
+    return { ok: true, kind: call.kind };
+  }
+
+  async function relink(id, event) {
+    let picked = null;
+    if (E2E) picked = e2eRelinkPath;
+    else {
+      const parent = event && BrowserWindow.fromWebContents(event.sender);
+      const r = await dialog.showOpenDialog(parent || undefined, { title: '重新指定原文件', properties: ['openFile', 'openDirectory'] });
+      if (!r.canceled && r.filePaths && r.filePaths[0]) picked = r.filePaths[0];
+    }
+    if (!picked) return { ok: false, canceled: true };
+    try { store.relink(id, picked); changed(); return { ok: true }; }
+    catch (error) { return { ok: false, text: '没能重新指定：' + error.message }; }
+  }
+
+  function days() { return [...new Set(store.list().map((m) => Q.entryDayKey(m)))]; }
+
   function register() {
     ipcMain.on('drop:enter', () => { cancelHide(); });
     ipcMain.on('drop:leave', () => { if (!busy && state.state !== 'success' && state.state !== 'error') scheduleHide(LEAVE_HIDE_MS); });
@@ -234,7 +290,17 @@ function createInboxController(deps) {
     ipcMain.handle('inbox:list', () => listForRenderer());
     ipcMain.handle('inbox:open', (_e, id) => openEntry(id));
     ipcMain.handle('inbox:reveal', (_e, id) => reveal(id));
-    ipcMain.handle('inbox:remove', (_e, id) => { store.remove(id); if (deps.onChanged) deps.onChanged(); return true; });
+    ipcMain.handle('inbox:remove', (_e, id) => removeWithUndo(id));
+    ipcMain.handle('inbox:undo', (_e, id) => undoRemove(id));
+    ipcMain.handle('inbox:addTag', (_e, id, tag) => addTag(id, tag));
+    ipcMain.handle('inbox:copy', (_e, id) => copyEntry(id));
+    ipcMain.handle('inbox:relink', (e, id) => relink(id, e));
+    ipcMain.handle('inbox:days', () => days());
+    ipcMain.on('inbox:tagMenu', (event, tag) => {
+      const menu = Menu.buildFromTemplate([{ id: 'inbox-tag-delete', label: '删除这个标签', click: () => removeTag(tag) }]);
+      if (E2E) { lastMenu = menu; return; }
+      menu.popup({ window: BrowserWindow.fromWebContents(event.sender) });
+    });
     ipcMain.on('inbox:contextMenu', (event, id) => {
       const menu = Menu.buildFromTemplate([
         { id: 'inbox-reveal', label: '在 Finder 中显示', click: () => reveal(id) },
@@ -258,7 +324,7 @@ function createInboxController(deps) {
   }
 
   return {
-    store, register, attachTray, show, hide, handleDrop,
+    store, register, attachTray, removeWithUndo, undoRemove, show, hide, handleDrop,
     isVisible: () => visible,
     window: () => win,
     e2e: {
@@ -266,6 +332,8 @@ function createInboxController(deps) {
       openCalls: () => e2eOpenCalls.slice(),
       menuItems: () => (lastMenu ? lastMenu.items.map((i) => ({ id: i.id, label: i.label, type: i.type })) : null),
       clickMenu: (id) => { const it = lastMenu && lastMenu.getMenuItemById(id); if (!it) return false; it.click(); lastMenu = null; return true; },
+      copyCalls: () => e2eCopyCalls.slice(),
+      setRelinkPath: (p) => { e2eRelinkPath = p || null; return true; },
       leave: () => { if (!busy && state.state !== 'success' && state.state !== 'error') scheduleHide(LEAVE_HIDE_MS); return true; }
     }
   };
