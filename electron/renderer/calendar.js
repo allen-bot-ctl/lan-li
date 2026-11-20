@@ -1128,6 +1128,7 @@ function selectSettingsTab(tab) {
 }
 
 function openSettingsView() {
+  if (typeof closeInboxView === 'function') closeInboxView();
   closeAllPickers();
   clearSettingsHighlight();
   appBody.hidden = true;
@@ -1175,8 +1176,141 @@ settingsCheckUpdate.addEventListener('click', () => {
   api.checkUpdate();
 });
 
+// ---- 0.1.42 收纳：最简列表 ----
+const inboxView = document.getElementById('inbox-view');
+const inboxList = document.getElementById('inbox-list');
+const inboxEmpty = document.getElementById('inbox-empty');
+const inboxCount = document.getElementById('inbox-count');
+const inboxDetail = document.getElementById('inbox-detail');
+const inboxDetailFrame = document.getElementById('inbox-detail-frame');
+const inboxBack = document.getElementById('inbox-back');
+const inboxTitle = document.getElementById('inbox-title');
+const inboxButton = document.getElementById('inbox-button');
+const INBOX_TYPE_ICON = { file: '📄', image: '🖼', text: '📝', link: '🔗' };
+
+function formatInboxTime(iso, now = new Date()) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const day = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const diff = Math.round((day(now) - day(d)) / 86400000);
+  if (diff === 0) return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  if (diff === 1) return '昨天';
+  if (d.getFullYear() === now.getFullYear()) return `${d.getMonth() + 1}月${d.getDate()}日`;
+  return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
+}
+
+function formatSize(n) {
+  if (!n) return '';
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(n < 10240 ? 1 : 0)} KB`;
+  if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`;
+  return `${(n / 1024 / 1024 / 1024).toFixed(1)} GB`;
+}
+
+function inboxSubtitle(m) {
+  if (m.type === 'file') return m.missing ? '原文件已移动或删除' : [m.isDir ? '文件夹' : formatSize(m.size), m.preview].filter(Boolean).join(' · ');
+  if (m.type === 'image') return [formatSize(m.size), m.preview].filter(Boolean).join(' · ');
+  if (m.type === 'link') return m.preview || m.sourceUrl || '';
+  return m.preview || '';
+}
+
+function renderInbox(entries) {
+  inboxList.textContent = '';
+  inboxCount.textContent = entries.length ? `${entries.length} 项` : '';
+  inboxEmpty.hidden = entries.length > 0;
+  for (const m of entries) {
+    const row = document.createElement('div');
+    row.className = 'inbox-row' + (m.missing ? ' is-missing' : '');
+    row.setAttribute('role', 'listitem');
+    row.dataset.id = m.id;
+    row.dataset.type = m.type;
+    const icon = document.createElement('span');
+    icon.className = 'inbox-row-icon';
+    if (m.thumb) {
+      const img = document.createElement('img');
+      img.src = m.thumb; img.alt = '';
+      icon.appendChild(img);
+    } else {
+      icon.textContent = INBOX_TYPE_ICON[m.type] || '📄';
+    }
+    const body = document.createElement('span');
+    body.className = 'inbox-row-body';
+    const title = document.createElement('span');
+    title.className = 'inbox-row-title';
+    title.textContent = m.title || '（无标题）';
+    const sub = document.createElement('span');
+    sub.className = 'inbox-row-sub';
+    sub.textContent = inboxSubtitle(m);
+    body.append(title, sub);
+    const time = document.createElement('span');
+    time.className = 'inbox-row-time';
+    time.textContent = formatInboxTime(m.createdAt);
+    row.append(icon, body, time);
+    row.addEventListener('click', () => openInboxRow(m));
+    row.addEventListener('contextmenu', (e) => { e.preventDefault(); api.inboxContextMenu(m.id); });
+    inboxList.appendChild(row);
+  }
+}
+
+function refreshInbox() {
+  if (inboxView.hidden) return Promise.resolve();
+  return api.listInbox().then(renderInbox).catch(() => renderInbox([]));
+}
+
+function showInboxList() {
+  inboxDetail.hidden = true;
+  inboxDetailFrame.srcdoc = '';
+  inboxList.hidden = false;
+  inboxTitle.textContent = '收纳';
+  inboxBack.textContent = '‹ 返回';
+  refreshInbox();
+}
+
+function openInboxRow(m) {
+  if (m.missing) { showToast({ type: 'warning', title: '原文件已移动或删除', detail: '右键可删除这条' }); return; }
+  api.openInboxEntry(m.id).then((r) => {
+    if (r && typeof r.html === 'string') {
+      inboxList.hidden = true;
+      inboxEmpty.hidden = true;
+      inboxDetail.hidden = false;
+      inboxTitle.textContent = m.title || '文字';
+      inboxBack.textContent = '‹ 收纳';
+      inboxDetailFrame.srcdoc = `<!doctype html><meta charset="utf-8"><style>body{font:13px -apple-system,"PingFang SC",sans-serif;margin:12px 16px;color:#1d1d1f;word-break:break-word}img{max-width:100%;height:auto}@media (prefers-color-scheme:dark){body{color:#f5f5f7}a{color:#6ab0ff}}</style>${r.html}`;
+    }
+  }).catch(() => {});
+}
+
+function openInboxView() {
+  closeAllPickers();
+  closeSettingsView();
+  appBody.hidden = true;
+  inboxView.hidden = false;
+  api.setSettingsView(true);
+  showInboxList();
+}
+
+function closeInboxView() {
+  if (inboxView.hidden) return;
+  inboxView.hidden = true;
+  inboxDetail.hidden = true;
+  inboxDetailFrame.srcdoc = '';
+  appBody.hidden = false;
+  api.setSettingsView(false);
+}
+
+inboxBack.addEventListener('click', () => {
+  if (!inboxDetail.hidden) { showInboxList(); return; }
+  closeInboxView();
+});
+inboxButton.addEventListener('click', () => {
+  if (inboxView.hidden) openInboxView(); else closeInboxView();
+});
+api.onInboxChanged(() => { refreshInbox(); });
+
 api.onOpenPanel((panel) => {
   clearSettingsHighlight();
+  if (panel === 'inbox') { openInboxView(); return; }
+  closeInboxView();
   if (panel === 'settings') { openSettingsView(); return; }
   closeSettingsView();
   if (panel === 'calendar') return;

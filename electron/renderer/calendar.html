@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>栏历</title>
   <link rel="stylesheet" href="calendar.css">
@@ -16,6 +16,17 @@
         <span class="topbar-title">栏历</span>
       </div>
       <div class="topbar-right">
+        <button
+          class="topbar-icon inbox-button"
+          id="inbox-button"
+          type="button"
+          aria-label="收纳"
+        >
+          <svg class="inbox-icon" viewBox="0 0 14 14" aria-hidden="true" focusable="false">
+            <path d="M2 8v3a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V8"/>
+            <path d="M2 8l1.6-5h6.8L12 8H9.2l-.7 1.4H5.5L4.8 8z"/>
+          </svg>
+        </button>
         <button
           class="topbar-icon check-update"
           id="check-update"
@@ -136,6 +147,19 @@
         <span class="app-version" id="app-version" aria-label="当前版本"></span>
       </div>
     </aside>
+    </div>
+
+    <div class="inbox-view" id="inbox-view" hidden>
+      <div class="inbox-head">
+        <button class="settings-back inbox-back" id="inbox-back" type="button">‹ 返回</button>
+        <span class="inbox-title" id="inbox-title">收纳</span>
+        <span class="inbox-count" id="inbox-count"></span>
+      </div>
+      <div class="inbox-list" id="inbox-list" role="list"></div>
+      <div class="inbox-empty" id="inbox-empty" hidden>把文件、图片、文字或链接拖到菜单栏时钟上，就会收在这里</div>
+      <div class="inbox-detail" id="inbox-detail" hidden>
+        <iframe class="inbox-detail-frame" id="inbox-detail-frame" sandbox="" title="收纳内容"></iframe>
+      </div>
     </div>
 
     <div class="settings-view" id="settings-view" hidden>

@@ -79,6 +79,7 @@ const {
 const { createLoginItem } = require('./login-item');
 const { createWeatherRefresher } = require('./weather-refresh');
 const { buildAtlas, createClockImageMaker } = require('./tray-clock-image');
+const { createInboxController } = require('./inbox-main');
 
 const WINDOW_WIDTH = 580;
 // 0.1.24's 400px content plus the 32px full-width top bar.
@@ -106,6 +107,7 @@ let settingsViewOpen = false;
 // 0.1.40 托盘右键菜单：菜单开着时悬停不开日历；从菜单打开设置后保持打开，
 // 直到鼠标进入窗口再离开（或 Esc / 隐藏）。
 let trayMenuOpen = false;
+let inbox = null; // 0.1.42 收纳
 let trayMenuHold = false;
 let e2eTrayMenu = null;
 let e2eQuitCalls = 0;
@@ -467,6 +469,7 @@ function createTray() {
   tray.on('mouse-enter', openCalendar);
   tray.on('mouse-leave', scheduleClose);
   tray.on('right-click', () => openTrayMenu());
+  if (inbox) inbox.attachTray(tray);
   tray.on('click', () => {
     if (!calendarWindow || calendarWindow.isDestroyed()) return;
     if (!calendarWindow.isVisible()) openCalendar();
@@ -501,9 +504,23 @@ function openSettingsFromTray() {
   sendPanel('settings');
 }
 
+// 0.1.42 A-C10：托盘「退出栏历」和自更新共用这一个退出函数。
+// A tray app can occasionally keep a native handle alive after quit, so
+// force an exit as a last resort after giving app.quit() a short chance.
+function quitWithFallback() {
+  app.quit();
+  setTimeout(() => {
+    try {
+      app.exit(0);
+    } catch {
+      // Process already gone.
+    }
+  }, 3000);
+}
+
 function quitApp() {
   if (E2E) { e2eQuitCalls += 1; return; }
-  app.quit();
+  quitWithFallback();
 }
 
 function sendUpdateNotice() {
@@ -701,19 +718,9 @@ function setupUpdates() {
       logger: (message) => logger.info('[栏历] 自更新：' + message),
       getLogsPath: () => app.getPath('logs'),
       pid: process.pid,
-      quit: () => {
-        app.quit();
-        // A tray app can occasionally keep a native handle alive after quit.
-        // The installer is already detached, so force an exit as a last resort
-        // after giving app.quit() a short chance to finish cleanly.
-        setTimeout(() => {
-          try {
-            app.exit(0);
-          } catch {
-            // Process already gone.
-          }
-        }, 3000);
-      }
+      // The installer is already detached; quitWithFallback force-exits
+      // after 3s if app.quit() does not finish cleanly.
+      quit: () => quitWithFallback()
     });
   } catch (error) {
     selfUpdater = null;
@@ -793,6 +800,7 @@ function positionCalendar() {
 function openCalendar() {
   if (!calendarWindow || calendarWindow.isDestroyed()) return;
   if (trayMenuOpen) return;   // 0.1.40：托盘右键菜单开着时悬停不开日历
+  if (inbox && inbox.isVisible()) return;   // 0.1.42：接纳框出现时暂停悬停开日历
 
   cancelClose();
   const wasVisible = calendarWindow.isVisible();
@@ -1178,6 +1186,19 @@ function registerE2eHooks() {
     trayRightClick() { openTrayMenu(); return { menuOpen: trayMenuOpen, visible: Boolean(calendarWindow && !calendarWindow.isDestroyed() && calendarWindow.isVisible()) }; },
     trayMenuItems() { return e2eTrayMenu ? e2eTrayMenu.items.map((i) => ({ id: i.id, label: i.label, type: i.type, accelerator: i.accelerator || null })) : null; },
     clickTrayMenuItem(id) { const item = e2eTrayMenu && e2eTrayMenu.getMenuItemById(id); if (!item) return false; e2eUpdateChecks0 = e2eUpdateChecks; item.click(); trayMenuOpen = false; e2eTrayMenu = null; return true; },
+    trayDragEnter() { inbox.show(); return inbox.e2e.state(); },
+    trayDragLeave() { return inbox.e2e.leave(); },
+    trayDropFiles(files) { return inbox.handleDrop({ files }); },
+    trayDropText(text) { return inbox.handleDrop({ text }); },
+    inboxDrop(payload) { return inbox.handleDrop(payload); },
+    dropzoneState() { return inbox.e2e.state(); },
+    hideDropzone() { inbox.hide(); return true; },
+    inboxRoot() { return inbox.store.root; },
+    inboxList() { return inbox.store.list(); },
+    inboxOpenCalls() { return inbox.e2e.openCalls(); },
+    inboxMenuItems() { return inbox.e2e.menuItems(); },
+    clickInboxMenuItem(id) { return inbox.e2e.clickMenu(id); },
+    openInboxPanel() { openInboxPanel(); return true; },
     trayMenuStats() { return { quitCalls: e2eQuitCalls, updateChecks: e2eUpdateChecks - e2eUpdateChecks0, hold: trayMenuHold }; },
     clickSettingsMenuItem(id) { const item = e2eSettingsMenu && e2eSettingsMenu.getMenuItemById(id); if (!item) return false; item.click(); return true; },
     emitUpdateStatus(status) {
@@ -1212,6 +1233,30 @@ function registerE2eHooks() {
   };
 }
 
+function inboxRoot() {
+  if (E2E && process.env.LANLI_INBOX_DIR) return process.env.LANLI_INBOX_DIR;
+  return path.join(app.getPath('userData'), 'inbox');
+}
+
+function setupInbox() {
+  inbox = createInboxController({
+    BrowserWindow, screen, nativeImage, net, shell, Menu, ipcMain, logger, E2E,
+    root: inboxRoot(),
+    getTray: () => tray,
+    onShow: () => { if (calendarWindow && !calendarWindow.isDestroyed() && calendarWindow.isVisible() && !pinned) hideCalendar(); },
+    onChanged: () => { if (calendarWindow && !calendarWindow.isDestroyed()) calendarWindow.webContents.send('inbox:changed'); },
+    openInbox: () => openInboxPanel()
+  });
+  inbox.register();
+}
+
+function openInboxPanel() {
+  trayMenuHold = true;
+  openCalendar();
+  settingsViewOpen = true;
+  sendPanel('inbox');
+}
+
 async function bootstrap() {
   if (process.platform !== 'darwin' && !E2E) {
     dialog.showErrorBox('栏历', '栏历首发只支持 macOS。');
@@ -1232,6 +1277,7 @@ async function bootstrap() {
   initializeAlmanacStyle();
   setupWeather();
   registerIpc();
+  setupInbox();
   createCalendarWindow();
   createTray();
   registerDisplayListeners();

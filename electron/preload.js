@@ -47,5 +47,14 @@ contextBridge.exposeInMainWorld('lanli', {
   },
   checkUpdate: () => ipcRenderer.send('update:check'),
   restartToUpdate: () => ipcRenderer.send('update:restart'),
-  openLatestRelease: () => ipcRenderer.send('update:openLatest')
+  openLatestRelease: () => ipcRenderer.send('update:openLatest'),
+  // 0.1.42 收纳
+  listInbox: () => ipcRenderer.invoke('inbox:list'),
+  openInboxEntry: (id) => ipcRenderer.invoke('inbox:open', id),
+  revealInboxEntry: (id) => ipcRenderer.invoke('inbox:reveal', id),
+  removeInboxEntry: (id) => ipcRenderer.invoke('inbox:remove', id),
+  inboxContextMenu: (id) => ipcRenderer.send('inbox:contextMenu', id),
+  onInboxChanged: (callback) => {
+    ipcRenderer.on('inbox:changed', () => callback());
+  }
 });

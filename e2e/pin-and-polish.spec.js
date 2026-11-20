@@ -192,7 +192,7 @@ test('C2 顶栏 32px 全宽：左上是应用图标＋栏历，右上检查更�
   expect(layout.appIconSize).toEqual({ width: 16, height: 16 });
   expect(layout.titleText).toBe('栏历');
   expect(layout.titleFollowsIcon).toBe(true);
-  expect(layout.rightOrder).toEqual(['check-update', 'pin-button', 'settings-button']);
+  expect(layout.rightOrder).toEqual(['inbox-button', 'check-update', 'pin-button', 'settings-button']);
   expect(layout.rightLastIsSettings).toBe(true);
   expect(layout.checkToPinGap).toBe(4);
   expect(layout.pinToSettingsGap).toBe(8);
