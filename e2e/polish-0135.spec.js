@@ -331,9 +331,17 @@ test('C10 天气当前温度与区间温度间距 8px，区间 11px --muted', as
   await page.evaluate(() => renderWeather({
     ok: true, temperature: 12, city: '上海', weather: '多云', emoji: '⛅️', rangeText: '6°~13°'
   }));
-  const temp = await box('#weather-temp');
-  const range = await box('#weather-range');
-  expect(Math.abs(range.left - temp.right - 8)).toBeLessThanOrEqual(1);
+  // CI 偶发：字体/天气真实刷新晚到会改写一帧，等字体就绪、重渲染后再量（0.1.45 偶发失败）
+  await expect.poll(async () => {
+    await page.evaluate(async () => {
+      await document.fonts.ready;
+      renderWeather({ ok: true, temperature: 12, city: '上海', weather: '多云', emoji: '⛅️', rangeText: '6°~13°' });
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    });
+    const temp = await box('#weather-temp');
+    const range = await box('#weather-range');
+    return Math.abs(range.left - temp.right - 8);
+  }, { timeout: 5000 }).toBeLessThanOrEqual(1);
   const m = await page.evaluate(() => {
     const probe = document.createElement('span');
     probe.style.color = 'var(--muted)';
