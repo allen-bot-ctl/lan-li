@@ -42,18 +42,8 @@ window.addEventListener('dragleave', (e) => {
   depth = Math.max(0, depth - 1);
   if (depth === 0) { setState({ state: 'idle', text: '拖到这里，放进收纳' }); api.leave(); }
 });
-window.addEventListener('drop', (e) => {
-  e.preventDefault();
-  depth = 0;
-  const dt = e.dataTransfer;
-  const payload = {
-    files: api.pathsOf(dt.files),
-    html: dt.getData('text/html') || '',
-    text: dt.getData('text/plain') || '',
-    uriList: (dt.getData('text/uri-list') || '').split(/\r?\n/).filter(Boolean)
-  };
-  api.drop(payload);
-});
+// 取数在 preload 里做（0.1.48），这里只负责界面。
+window.addEventListener('drop', (e) => { e.preventDefault(); depth = 0; });
 
 box.addEventListener('click', () => { if (box.dataset.state === 'success') api.openInbox(); });
 api.onState(setState);

@@ -63,6 +63,7 @@ function createInboxController(deps) {
   let busy = false;
   let lastSaved = [];
   let e2eOpenCalls = [];
+  let lastDropPayload = null;
   let e2eCopyCalls = [];
   let e2eRelinkPath = null;
   const purgeTimers = new Map();
@@ -158,6 +159,7 @@ function createInboxController(deps) {
   }
 
   async function handleDrop(payload) {
+    lastDropPayload = payload || null;
     cancelHide();
     busy = true;
     if (!visible) show();
@@ -169,7 +171,8 @@ function createInboxController(deps) {
       scheduleHide(SUCCESS_HIDE_MS);
       return { ok: true, count: lastSaved.length, ids: lastSaved.map((m) => m.id) };
     } catch (error) {
-      if (logger) logger.warn('[栏历] 收纳失败：' + (error && error.message));
+      const p = payload || {};
+      if (logger) logger.warn('[栏历] 收纳失败：' + (error && error.message) + ` (files=${(p.files || []).length}/${p.fileCount == null ? '-' : p.fileCount} html=${(p.html || '').length} text=${(p.text || '').length} uriList=${(p.uriList || []).length})`);
       send({ state: 'error', text: errorText(error) });
       scheduleHide(ERROR_HIDE_MS);
       return { ok: false, text: errorText(error) };
@@ -333,6 +336,7 @@ function createInboxController(deps) {
       menuItems: () => (lastMenu ? lastMenu.items.map((i) => ({ id: i.id, label: i.label, type: i.type })) : null),
       clickMenu: (id) => { const it = lastMenu && lastMenu.getMenuItemById(id); if (!it) return false; it.click(); lastMenu = null; return true; },
       copyCalls: () => e2eCopyCalls.slice(),
+      lastDrop: () => lastDropPayload,
       setRelinkPath: (p) => { e2eRelinkPath = p || null; return true; },
       leave: () => { if (!busy && state.state !== 'success' && state.state !== 'error') scheduleHide(LEAVE_HIDE_MS); return true; }
     }

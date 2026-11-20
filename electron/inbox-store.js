@@ -67,9 +67,17 @@ function hostOf(url) { try { return new URL(url).hostname.replace(/^www\./, '');
 
 // 一次拖放的原始数据 → 要保存的条目列表（契约第三节）。
 // drop: { files: [path], html, text, uriList: [url] }
+function fileUrlToPath(u) {
+  const s = String(u || '').trim();
+  if (!/^file:\/\//i.test(s)) return '';
+  try { return decodeURIComponent(new URL(s).pathname).replace(/\/$/, '') || ''; } catch { return ''; }
+}
+
 function classifyDrop(drop) {
   const d = drop || {};
-  const files = (d.files || []).filter(Boolean);
+  let files = (d.files || []).filter(Boolean);
+  // 0.1.48 兜底：路径没取到时，从 uri-list 里的 file:// 还原本地路径
+  if (!files.length) files = (d.uriList || []).map(fileUrlToPath).filter(Boolean);
   if (files.length) return files.map((p) => ({ kind: isImagePath(p) ? 'image' : 'file', path: p }));
   const html = typeof d.html === 'string' ? d.html.trim() : '';
   const text = typeof d.text === 'string' ? d.text.trim() : '';

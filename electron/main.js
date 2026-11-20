@@ -1198,6 +1198,7 @@ function registerE2eHooks() {
     trayDropText(text) { return inbox.handleDrop({ text }); },
     inboxDrop(payload) { return inbox.handleDrop(payload); },
     dropzoneState() { return inbox.e2e.state(); },
+    lastDropPayload() { return inbox.e2e.lastDrop(); },
     hideDropzone() { inbox.hide(); return true; },
     inboxRoot() { return inbox.store.root; },
     inboxList() { return inbox.store.list(); },

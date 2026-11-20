@@ -106,3 +106,9 @@ test('A-C9 列表时间倒序；标签去重；删除不动原文件', () => {
 test('sanitizeHtml 去掉 style/iframe', () => {
   assert.strictEqual(sanitizeHtml('<style>p{}</style><iframe src="x"></iframe><p>好</p>'), '<p>好</p>');
 });
+
+test('0.1.48 classifyDrop：路径为空时用 uri-list 里的 file:// 兜底（含中文、空格、文件夹结尾斜杠）', () => {
+  const r = classifyDrop({ files: [], uriList: ['file:///Users/a/%E4%B8%8B%E8%BD%BD/a%20b.md', 'file:///Users/a/dir/', 'https://x.com'] });
+  assert.deepStrictEqual(r, [{ kind: 'file', path: '/Users/a/下载/a b.md' }, { kind: 'file', path: '/Users/a/dir' }]);
+  assert.deepStrictEqual(classifyDrop({ files: ['/x/y.png'], uriList: ['file:///z'] }).map((x) => x.path), ['/x/y.png']);
+});
