@@ -213,9 +213,11 @@ test('R-C5/R-C7 无屏幕录制权限：出说明卡，不铺窗体；截图 57'
     const p = await winPage('region-permission.html');
     await expect(p.locator('#perm-text')).toHaveText('框选收纳要截取你框住的那一块画面，不会上传。');
     await expect(p.locator('#perm-steps')).toHaveText('在「屏幕录制」列表里打开「栏历」的开关，按提示重新打开栏历。');
-    await expect(p.locator('#perm-note')).toHaveText('列表里没有栏历？点列表下方的「+」，在「应用程序」里选「栏历」。');
+    // S-C3（0.1.52）：说明卡不再出现「+」兜底
+    expect(await p.locator('body').innerText()).not.toContain('+');
+    expect(await p.locator('#perm-note').count()).toBe(0);
     // P-C4：小字和按钮都不截断
-    const fit = await p.evaluate(() => { const n = document.getElementById('perm-note'); const a = document.querySelector('.acts').getBoundingClientRect(); return n.scrollWidth <= n.clientWidth && a.bottom <= window.innerHeight; });
+    const fit = await p.evaluate(() => { const n = document.getElementById('perm-steps'); const a = document.querySelector('.acts').getBoundingClientRect(); return n.scrollWidth <= n.clientWidth && a.bottom <= window.innerHeight; });
     expect(fit).toBe(true);
     await p.emulateMedia({ colorScheme: theme });
     await shotWin('region-permission.html', `57-region-permission-card-${theme}.png`);

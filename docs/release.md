@@ -31,7 +31,7 @@ dist/LanLi-0.1.31-mac-arm64.zip
 本地可校验 ad-hoc 签名：
 
 ```bash
-codesign -dv --verbose=2 "dist/mac/栏历.app" 2>&1 | grep "Signature=adhoc"
+codesign -dv --verbose=2 "dist/mac/栏历.app" 2>&1 | grep "Authority=LanLi Self-Signed"  # 0.1.52 起固定自签证书
 ```
 
 本地不会自动生成 `.zip.sha256`；正式发布由 workflow 生成。**本地 `npm run dist` 不是正式发布**，也不能替代真机验收。

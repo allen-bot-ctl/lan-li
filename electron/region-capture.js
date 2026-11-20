@@ -46,7 +46,7 @@ function createRegionController(deps) {
   function showPermissionCard(d) {
     if (!permWin || permWin.isDestroyed()) {
       permWin = new BrowserWindow({
-        width: 380, height: 236, show: false, frame: false, resizable: false, skipTaskbar: true, alwaysOnTop: true,
+        width: 380, height: 200, show: false, frame: false, resizable: false, skipTaskbar: true, alwaysOnTop: true,
         minimizable: false, maximizable: false, fullscreenable: false,
         webPreferences: { preload: path.join(__dirname, 'region-preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true }
       });
@@ -56,7 +56,7 @@ function createRegionController(deps) {
       permWin.on('closed', () => { permWin = null; });
     }
     const wa = d.workArea;
-    permWin.setBounds({ x: Math.round(wa.x + (wa.width - 380) / 2), y: Math.round(wa.y + wa.height / 4), width: 380, height: 236 });
+    permWin.setBounds({ x: Math.round(wa.x + (wa.width - 380) / 2), y: Math.round(wa.y + wa.height / 4), width: 380, height: 200 });
     permWin.show(); permWin.focus();
     return permWin;
   }

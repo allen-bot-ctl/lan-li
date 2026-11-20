@@ -73,10 +73,35 @@ jobs:
           if-no-files-found: warn
           path: e2e/screenshots/
 
+      - name: Import stable signing certificate
+        shell: bash
+        env:
+          LANLI_SIGN_P12: ${{ secrets.LANLI_SIGN_P12 }}
+          LANLI_SIGN_PASSWORD: ${{ secrets.LANLI_SIGN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          [ -n "$LANLI_SIGN_P12" ] || { echo "::error::LANLI_SIGN_P12 secret missing"; exit 1; }
+          kc="$RUNNER_TEMP/lanli-sign.keychain-db"
+          kcpass=$(openssl rand -hex 16)
+          echo "$LANLI_SIGN_P12" | base64 --decode > "$RUNNER_TEMP/lanli-sign.p12"
+          security create-keychain -p "$kcpass" "$kc"
+          security set-keychain-settings -lut 21600 "$kc"
+          security unlock-keychain -p "$kcpass" "$kc"
+          security import "$RUNNER_TEMP/lanli-sign.p12" -k "$kc" -P "$LANLI_SIGN_PASSWORD" -T /usr/bin/codesign -f pkcs12
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$kcpass" "$kc" >/dev/null
+          security list-keychains -d user -s "$kc" $(security list-keychains -d user | tr -d '"')
+          openssl pkcs12 -in "$RUNNER_TEMP/lanli-sign.p12" -nokeys -passin env:LANLI_SIGN_PASSWORD -legacy -out "$RUNNER_TEMP/lanli-sign.pem" 2>/dev/null \
+            || openssl pkcs12 -in "$RUNNER_TEMP/lanli-sign.p12" -nokeys -passin env:LANLI_SIGN_PASSWORD -out "$RUNNER_TEMP/lanli-sign.pem"
+          sudo security add-trusted-cert -d -r trustRoot -p codeSign -k /Library/Keychains/System.keychain "$RUNNER_TEMP/lanli-sign.pem"
+          rm -f "$RUNNER_TEMP/lanli-sign.p12"
+          security find-identity -p codesigning "$kc"
+          echo "LANLI_SIGN_KEYCHAIN=$kc" >> "$GITHUB_ENV"
+
       - name: Build macOS Intel dmg and zip
         run: npx electron-builder --mac dmg zip --x64 --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          LANLI_SIGN_IDENTITY: "LanLi Self-Signed"
 
       - name: Verify x64 binaries with lipo
         shell: bash
@@ -106,15 +131,26 @@ jobs:
           done
           echo "RELEASE: lipo=x86_64"
 
-      - name: Verify ad-hoc signature
+      - name: Verify stable signature
         shell: bash
         run: |
           set -euo pipefail
           app=$(find dist -maxdepth 2 -type d -name '*.app' -print -quit)
           [ -n "$app" ] || { echo "::error::no .app found under dist"; exit 1; }
           codesign -dv --verbose=2 "$app" 2>&1 | tee /tmp/codesign.log
-          grep -q "Signature=adhoc" /tmp/codesign.log
-          echo "RELEASE: codesign=adhoc"
+          grep -q "Authority=LanLi Self-Signed" /tmp/codesign.log || { echo "::error::not signed by LanLi Self-Signed"; exit 1; }
+          if grep -q "Signature=adhoc" /tmp/codesign.log; then echo "::error::still ad-hoc"; exit 1; fi
+          codesign -d -r- "$app" 2>&1 | tee /tmp/dr1.txt
+          grep -q "certificate leaf" /tmp/dr1.txt || { echo "::error::designated has no certificate leaf"; exit 1; }
+          if grep -q "cdhash" /tmp/dr1.txt; then echo "::error::designated still uses cdhash"; exit 1; fi
+          codesign --verify --deep --strict "$app"
+          echo "RELEASE: designated=$(grep designated /tmp/dr1.txt)"
+          # S-C2：同一份产物再签一遍，designated 必须一字不差
+          cp -R "$app" "$RUNNER_TEMP/again.app"
+          codesign --force --deep --sign "LanLi Self-Signed" --timestamp=none --keychain "$LANLI_SIGN_KEYCHAIN" "$RUNNER_TEMP/again.app"
+          codesign -d -r- "$RUNNER_TEMP/again.app" 2>&1 | grep designated > /tmp/dr2.txt
+          grep designated /tmp/dr1.txt | diff - /tmp/dr2.txt || { echo "::error::designated differs between two signings"; exit 1; }
+          echo "RELEASE: codesign=stable"
 
       - name: Smoke test x64 app under Rosetta
         shell: bash
