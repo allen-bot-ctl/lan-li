@@ -212,12 +212,17 @@ test('R-C5/R-C7 无屏幕录制权限：出说明卡，不铺窗体；截图 57'
     await expect(p.locator('#perm-note')).toContainText('重启栏历');
     await p.emulateMedia({ colorScheme: theme });
     await shotWin('region-permission.html', `57-region-permission-card-${theme}.png`);
+    // 0.1.51：真正申请过一次截屏，系统才会把栏历放进「屏幕录制」列表
+    expect(await hook('regionProbeCalls')).toBeGreaterThan(0);
     if (theme === 'dark') {
       await p.click('#perm-open');
       await expect.poll(() => hook('regionOpenCalls')).toEqual(['x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture']);
+      // 点「打开系统设置」后说明卡立即消失
+      await expect.poll(async () => (await rstate()).permissionVisible).toBe(false);
+    } else {
+      await p.click('#perm-close');
+      await expect.poll(async () => (await rstate()).permissionVisible).toBe(false);
     }
-    await p.click('#perm-close');
-    await expect.poll(async () => (await rstate()).permissionVisible).toBe(false);
   }
   await setTheme('system');
   await hook('regionSetPermission', 'granted');

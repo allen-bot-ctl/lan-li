@@ -18,7 +18,7 @@ function createRegionController(deps) {
   let display = null; let sourceApp = '';
   let lastState = { phase: 'closed', rect: null, bar: null };
   let lastResult = null;
-  const e2e = { permission: 'granted', scaleFactor: null, openCalls: [] };
+  const e2e = { permission: 'granted', scaleFactor: null, openCalls: [], probeCalls: 0 };
 
   function screenAccess() {
     if (E2E) return e2e.permission;
@@ -61,6 +61,14 @@ function createRegionController(deps) {
     return permWin;
   }
 
+  function probeScreenAccess() {
+    e2e.probeCalls += 1;
+    if (E2E) return;
+    withTimeout(desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 1, height: 1 } }), CAPTURE_TIMEOUT_MS)
+      .then(() => { if (logger) logger.info('[栏历] 框选：已向系统申请屏幕录制权限'); })
+      .catch((err) => { if (logger) logger.info(`[栏历] 框选：申请屏幕录制权限 ${err && err.message}`); });
+  }
+
   function closePermission() { if (permWin && !permWin.isDestroyed()) permWin.close(); permWin = null; }
 
   // opts.sourceApp：启动前最前面的应用（由调用方在铺窗前取好）
@@ -73,6 +81,8 @@ function createRegionController(deps) {
     const access = screenAccess();
     if (access !== 'granted') {
       if (logger) logger.info(`[栏历] 框选：屏幕录制权限 ${access}，显示说明卡`);
+      // 0.1.51：macOS 只有在应用真正尝试截屏后，才把它加进「屏幕录制」列表并弹系统授权框
+      probeScreenAccess();
       showPermissionCard(display);
       return { ok: false, permission: access };
     }
@@ -127,6 +137,8 @@ function createRegionController(deps) {
     ipcMain.on('region:state', (_e, s) => { if (overlay && overlay.isVisible()) lastState = s; });
     ipcMain.on('region:closePermission', () => closePermission());
     ipcMain.on('region:openPermissionSettings', () => {
+      // 0.1.51：打开系统设置后说明卡立即关闭，不压在设置窗口上
+      closePermission();
       if (E2E) e2e.openCalls.push(PERMISSION_URL); else shell.openExternal(PERMISSION_URL);
     });
   }
@@ -138,7 +150,8 @@ function createRegionController(deps) {
       setPermission: (v) => { e2e.permission = v || 'granted'; return true; },
       setScaleFactor: (v) => { e2e.scaleFactor = v || null; return true; },
       state: () => ({ ...lastState, overlayVisible: Boolean(overlay && !overlay.isDestroyed() && overlay.isVisible()), permissionVisible: Boolean(permWin && !permWin.isDestroyed() && permWin.isVisible()), sourceApp, result: lastResult }),
-      openCalls: () => e2e.openCalls.slice()
+      openCalls: () => e2e.openCalls.slice(),
+      probeCalls: () => e2e.probeCalls
     }
   };
 }

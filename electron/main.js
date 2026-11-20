@@ -1216,6 +1216,7 @@ function registerE2eHooks() {
     regionSetPermission(v) { return region.e2e.setPermission(v); },
     regionSetScaleFactor(v) { return region.e2e.setScaleFactor(v); },
     regionOpenCalls() { return region.e2e.openCalls(); },
+    regionProbeCalls() { return region.e2e.probeCalls(); },
     regionDisplay() { const d = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()); return { bounds: d.bounds, scaleFactor: d.scaleFactor }; },
     hotkeys() { return { registered: [...e2eHotkeys.keys()], capture: hotkeyState('capture'), region: hotkeyState('region') }; },
     pressHotkey(acc) { const fn = e2eHotkeys.get(acc); if (!fn) return false; fn(); return true; },
