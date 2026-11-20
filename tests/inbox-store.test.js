@@ -9,7 +9,7 @@ const { createInboxStore, classifyDrop, describeItems, sanitizeHtml, MAX_ITEMS }
 
 function tmp() { return fs.mkdtempSync(path.join(os.tmpdir(), 'lanli-inbox-')); }
 function store(root, extra) {
-  let t = Date.parse('2026-11-19T21:00:00-05:00'); let r = 0;
+  let t = new Date(2026, 10, 19, 21, 0, 0).getTime(); let r = 0;
   return createInboxStore(Object.assign({ root, now: () => new Date((t += 1000)), rand: () => 'r' + String(r++).padStart(3, '0') }, extra));
 }
 const noTmp = (root) => fs.readdirSync(root).filter((n) => n.endsWith('.tmp'));
