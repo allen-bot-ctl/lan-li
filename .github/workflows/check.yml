@@ -1,9 +1,7 @@
 name: Check
 
 on:
-  push:
-    branches:
-      - "ci/**"
+  # 0.1.47：只手动触发；出包流程本身会跑完整测试，功能稳定后再考虑恢复自动
   workflow_dispatch:
 
 permissions:

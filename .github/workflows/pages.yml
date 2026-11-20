@@ -4,6 +4,10 @@ on:
   push:
     branches:
       - master
+    # 0.1.47：只有落地页变了才部署，代码提交不再触发
+    paths:
+      - "site/**"
+      - ".github/workflows/pages.yml"
   workflow_dispatch:
 
 permissions:

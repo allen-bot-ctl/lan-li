@@ -187,6 +187,7 @@ test('A-C9 列表时间倒序，四类各走对应打开方式，原文件移走
   await expect(page.locator('.inbox-row', { hasText: '季度报告.pdf' })).toHaveCount(0);
   // 0.1.45：右键删除与悬停 × 同一路径，也出「已删除 · 撤销」
   await expect(page.locator('#inbox-undo')).toBeVisible();
+  expect((await page.locator('#inbox-undo').textContent()).replace(/\u00a0/g, ' ')).toBe('已删除 · 撤销');
   expect(fs.existsSync(path.join(work, '挪走了.pdf'))).toBe(true);
 });
 

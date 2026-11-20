@@ -1524,7 +1524,16 @@ document.addEventListener('click', (e) => {
 });
 
 // 日历联动：收纳面板里的月历（主界面月历同样画小圆点）。只有收纳面板打开时点日期才筛到当天。
+function syncInboxPresets() {
+  const r = inboxFilter.range;
+  for (const b of document.querySelectorAll('.inbox-preset')) {
+    const p = b.dataset.preset;
+    const on = p === 'custom' ? Boolean(r && !r.preset) : Boolean(r && r.preset === p);
+    b.classList.toggle('is-active', on);
+  }
+}
 function renderMiniCal() {
+  syncInboxPresets();
   if (!miniMonth) { const n = new Date(); miniMonth = { y: n.getFullYear(), m: n.getMonth() }; }
   const { y, m } = miniMonth;
   inboxMiniTitle.textContent = `${y}年${m + 1}月`;
@@ -1569,8 +1578,10 @@ document.getElementById('inbox-cal-toggle').addEventListener('click', (ev) => {
   const tb = document.getElementById('inbox-toolbar').getBoundingClientRect();
   inboxMiniCal.style.top = `${Math.round(tb.bottom - inboxView.getBoundingClientRect().top + 4)}px`;
   inboxPickStart = null;
-  inboxCustom.hidden = true;
-  document.getElementById('inbox-preset-custom').classList.remove('is-active');
+  // 0.1.47：已有区间时直接展开月历把区间标出来，月份跳到区间终点所在月
+  const cur = inboxFilter.range;
+  inboxCustom.hidden = false; // 0.1.47：月历始终可见
+  if (cur) { const e = cur.to.split('-').map(Number); miniMonth = { y: e[0], m: e[1] - 1 }; }
   inboxMiniCal.hidden = false;
   document.getElementById('inbox-cal-toggle').classList.add('is-active');
   renderMiniCal();
@@ -1579,8 +1590,7 @@ for (const btn of document.querySelectorAll('.inbox-preset')) {
   btn.addEventListener('click', (ev) => {
     ev.stopPropagation();
     if (btn.dataset.preset === 'custom') {
-      inboxCustom.hidden = !inboxCustom.hidden;
-      btn.classList.toggle('is-active', !inboxCustom.hidden);
+      inboxCustom.hidden = false;
       inboxPickStart = null;
       renderMiniCal();
       return;

@@ -259,6 +259,8 @@ test('B-C5 有收纳的日期显示小点；收纳面板打开时点日期筛到
   // P-C4 快捷项：今天 / 近 7 天 / 近 30 天，点完立即筛选并关闭
   await page.locator('#inbox-cal-toggle').click();
   await expect(page.locator('.inbox-preset')).toHaveText(['今天', '近 7 天', '近 30 天', '自定义']);
+  await expect(page.locator('#inbox-custom')).toBeVisible();
+  await expect(page.locator('.inbox-preset.is-active')).toHaveCount(0);
   await page.locator('.inbox-preset[data-preset="today"]').click();
   await expect(page.locator('#inbox-minical')).toBeHidden();
   await expect(page.locator('#inbox-day-chip-text')).toHaveText('今天 · 4 项');
@@ -269,6 +271,35 @@ test('B-C5 有收纳的日期显示小点；收纳面板打开时点日期筛到
   await page.locator('#inbox-cal-toggle').click();
   await page.locator('.inbox-preset[data-preset="d7"]').click();
   await expect(page.locator('#inbox-day-chip-text')).toHaveText('近 7 天 · 4 项');
+  // 0.1.47：再打开时当前快捷项高亮、月历标出区间；深色模式弹层是深底、快捷项文字清晰
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.locator('#inbox-cal-toggle').click();
+  await expect(page.locator('.inbox-preset[data-preset="d7"]')).toHaveClass(/is-active/);
+  await expect(page.locator('#inbox-preset-custom')).not.toHaveClass(/is-active/);
+  await expect(page.locator('#inbox-custom')).toBeVisible();
+  const inRange = await page.locator('.inbox-minical-day.is-in-range, .inbox-minical-day.is-active').count();
+  expect(inRange).toBe(Math.min(7, d.getDate()));
+  // D-C1 对比度 ≥ 4.5:1（深浅两套）
+  const contrast = () => page.evaluate(() => {
+    const rgb = (c) => c.match(/[\d.]+/g).slice(0, 3).map(Number);
+    const lum = (c) => { const [r, g, b] = rgb(c).map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+    const bg = getComputedStyle(document.getElementById('inbox-minical')).backgroundColor;
+    const out = [];
+    for (const b of document.querySelectorAll('.inbox-preset:not(.is-active)')) {
+      const a = lum(getComputedStyle(b).color); const z = lum(bg);
+      out.push((Math.max(a, z) + 0.05) / (Math.min(a, z) + 0.05));
+    }
+    return Math.min(...out);
+  });
+  expect(await contrast()).toBeGreaterThanOrEqual(4.5);
+  await page.screenshot({ path: path.join(SHOTS, '49-date-popover-dark.png') });
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.waitForTimeout(100);
+  expect(await contrast()).toBeGreaterThanOrEqual(4.5);
+  await page.screenshot({ path: path.join(SHOTS, '50-date-popover-light-range.png') });
+  await page.emulateMedia({ colorScheme: null });
+  await page.locator('#inbox-cal-toggle').click();
+  await expect(page.locator('#inbox-minical')).toBeHidden();
   // 自定义：今天之后不可点，无收纳日期 50% 但可选；先点开始再点结束；比开始早的日期改为新开始
   await page.locator('#inbox-cal-toggle').click();
   await page.locator('#inbox-preset-custom').click();
