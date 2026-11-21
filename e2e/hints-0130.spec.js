@@ -161,8 +161,8 @@ test('C13 最长签语两行内完整显示，右栏不超出窗口', async () =
   expect(m.over).toBeLessThanOrEqual(0);
 });
 
-test('C3 年月标题后有「⌄」；标题、左右箭头、今天分别出气泡', async () => {
-  await expect(page.locator('.month-title-caret')).toHaveText('⌄');
+test('C3 年月标题后有下拉箭头（0.1.54 起为 SVG）；标题、左右箭头、今天分别出气泡', async () => {
+  await expect(page.locator('svg.month-title-caret')).toBeVisible();
   await hoverAndTip('.month-title', '选择年份');
   const bg = await page.evaluate(() => getComputedStyle(document.querySelector('.month-title')).backgroundColor);
   expect(bg).not.toBe('rgba(0, 0, 0, 0)');

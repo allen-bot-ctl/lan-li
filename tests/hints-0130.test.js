@@ -32,7 +32,7 @@ test('0.1.35 C8 黄历卡不再可点：标题无 ›、无悬停底色、无「
 });
 
 test('0.1.30 C3 年月标题带 ⌄，标题与翻月按钮都有气泡文字', () => {
-  assert.match(html, /<span class="month-title-caret" aria-hidden="true">⌄<\/span>/);
+  assert.match(html, /<svg class="month-title-caret" aria-hidden="true" viewBox="0 0 12 8"[^>]*><path d="M1.5 1.75 L6 6.25 L10.5 1.75"/);
   assert.match(cssRule('.month-title:hover'), /background:\s*var\(--chip-hover\)/);
   assert.match(html, /<label class="month-title" data-tooltip="选择年份">/);
   assert.match(html, /id="prev-month"[^>]*data-tooltip="上个月"/);

@@ -211,7 +211,7 @@ function formatClockOffset(offsetMinutes) {
 }
 
 // Relative label shown under each city: the 快/慢 offset against the local
-// zone. Same-zone cities only show 本地; a zero offset reads 时间相同.
+// zone, or the city's own 月/日 when it is on a different calendar day. Same-zone cities only show 本地; a zero offset reads 时间相同.
 // dayText/dayDelta still expose the calendar-day difference for callers.
 function describeClockRelative(now, timeZone, localTimeZone) {
   if (!(now instanceof Date) || Number.isNaN(now.getTime())) return null;
@@ -224,13 +224,17 @@ function describeClockRelative(now, timeZone, localTimeZone) {
   const dayText = dayDelta > 0 ? '明天' : dayDelta < 0 ? '昨天' : '';
   const offsetMinutes = offsetMinutesAt(now, timeZone) - offsetMinutesAt(now, localTimeZone);
   const offsetText = formatClockOffset(offsetMinutes);
-  const text = isLocal ? '本地' : (offsetText || '时间相同');
+  // 0.1.54: a city on a different calendar day shows its own date (月/日)
+  // instead of the 快/慢 offset; same-day cities keep the offset text.
+  const dateText = `${zone.month}/${zone.day}`;
+  const text = isLocal ? '本地' : (dayDelta !== 0 ? dateText : (offsetText || '时间相同'));
 
   return {
     dayText,
     dayDelta,
     offsetMinutes,
     offsetText,
+    dateText,
     isLocal,
     text
   };

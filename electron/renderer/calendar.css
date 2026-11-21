@@ -266,10 +266,16 @@ select {
 }
 
 .month-title-caret {
-  margin-left: 4px;
+  display: inline-block;
+  width: 12px;
+  height: 8px;
+  margin-left: 6px;
   color: var(--muted-strong);
-  font-size: 10px;
+  overflow: visible;
+  /* 0.1.54: 箭头垂直中心对齐汉字中线（不是基线） */
   vertical-align: middle;
+  position: relative;
+  top: -2px;
 }
 
 .month-title-text {

@@ -140,16 +140,22 @@ test('describeClockRelative labels same-day cities with 快/慢 offsets', () => 
   );
 });
 
-test('不再显示昨天/明天，只显示时差', () => {
-  const now = instant('2026-11-16T20:30:00Z');
+test('0.1.54 不在同一天的城市显示它所在的 月/日，不再显示快/慢', () => {
+  const now = instant('2026-11-16T20:30:00Z'); // 上海 11/17 04:30，纽约 11/16 15:30
 
-  const text = describeClockRelative(now, 'America/New_York', 'Asia/Shanghai').text;
-  assert.equal(text, '慢 13 小时');
-  assert.ok(!text.includes('明天') && !text.includes('昨天'));
+  const ny = describeClockRelative(now, 'America/New_York', 'Asia/Shanghai');
+  assert.equal(ny.text, '11/16');
+  assert.equal(ny.dayDelta, -1);
+  assert.ok(!ny.text.includes('快') && !ny.text.includes('慢'));
+  assert.ok(!ny.text.includes('明天') && !ny.text.includes('昨天'));
   assert.equal(
     describeClockRelative(now, 'Asia/Tokyo', 'Asia/Shanghai').text,
     '快 1 小时'
   );
+  // 纽约为本地、北京已到第二天：显示北京的日期，月日不补零
+  const beijing = describeClockRelative(instant('2026-11-21T18:24:00Z'), 'Asia/Shanghai', 'America/New_York');
+  assert.equal(beijing.text, '11/22');
+  assert.equal(describeClockRelative(instant('2027-01-01T03:00:00Z'), 'Asia/Shanghai', 'America/New_York').text, '1/1');
 });
 
 test('describeClockRelative follows DST when computing the offset', () => {
@@ -174,12 +180,12 @@ test('C3 纽约为本地：固定时刻 2026-11-18 02:22 与 23:00（冬令时�
   check1('Asia/Tokyo', '快 14 小时');
   check1('Asia/Kolkata', '快 10 小时 30 分');
   check1('Europe/London', '快 5 小时');
-  check1('America/Los_Angeles', '慢 3 小时');
+  check1('America/Los_Angeles', '11/17');
   check1('America/Toronto', '时间相同');
 
   const now2 = instant('2026-11-19T04:00:00Z');
   const shanghai2 = describeClockRelative(now2, 'Asia/Shanghai', local).text;
-  assert.equal(shanghai2, '快 13 小时');
+  assert.equal(shanghai2, '11/19');
   assert.ok(!shanghai2.includes('今天'));
   const la2 = describeClockRelative(now2, 'America/Los_Angeles', local).text;
   assert.equal(la2, '慢 3 小时');
@@ -190,7 +196,7 @@ test('C3 纽约为本地：固定时刻 2026-11-18 02:22 与 23:00（冬令时�
     'America/New_York',
     'Asia/Shanghai'
   ).text;
-  assert.equal(yesterday, '慢 13 小时');
+  assert.equal(yesterday, '11/17');
   assert.ok(!yesterday.includes('今天'));
 });
 
@@ -510,4 +516,30 @@ test('formatTrayTooltipInZone renders year/month/day and Chinese weekday', () =>
   assert.equal(formatTrayTooltipInZone(instant, undefined, 'Asia/Shanghai'), '2026年11月19日 周四');
   assert.equal(formatTrayTooltipInZone(new Date('nope'), 'UTC', 'Asia/Shanghai'), '');
   assert.equal(formatTrayTooltipInZone(undefined, 'UTC', 'Asia/Shanghai'), '');
+});
+
+test('0.1.54 W-C1 本地纽约 11/21 13:24：本地、同天快慢、明天、昨天、跨月、跨年、半小时时区、午夜切换', () => {
+  const ny = 'America/New_York';
+  const now = instant('2026-11-21T18:24:00Z'); // 纽约 11/21 13:24
+  const t = (zone, local = ny, at = now) => describeClockRelative(at, zone, local).text;
+  assert.equal(t(ny), '本地');
+  assert.equal(t('Europe/London'), '快 5 小时'); // 伦敦 18:24 同一天
+  assert.equal(t('America/Los_Angeles'), '慢 3 小时');
+  assert.equal(t('Asia/Shanghai'), '11/22');
+  assert.equal(t('Asia/Tokyo'), '11/22');
+  // 本机在北京时纽约是昨天
+  assert.equal(t(ny, 'Asia/Shanghai'), '11/21');
+  // 跨月、跨年
+  assert.equal(t('Asia/Shanghai', ny, instant('2026-11-30T17:00:00Z')), '12/1');
+  assert.equal(t('Asia/Tokyo', ny, instant('2026-12-31T16:00:00Z')), '1/1');
+  // 半小时时区跨天：新德里 11/22 00:30，纽约 11/21 14:00
+  assert.equal(t('Asia/Kolkata', ny, instant('2026-11-21T19:00:00Z')), '11/22');
+  // 新德里同一天仍写「快 10 小时 30 分」
+  assert.equal(t('Asia/Kolkata', ny, instant('2026-11-21T12:00:00Z')), '快 10 小时 30 分');
+  // 午夜切换：北京 23:59 还是快 13 小时，00:00 起显示 11/22
+  assert.equal(t('Asia/Shanghai', ny, instant('2026-11-21T15:59:00Z')), '快 13 小时');
+  assert.equal(t('Asia/Shanghai', ny, instant('2026-11-21T16:00:00Z')), '11/22');
+  // 本机过午夜：纽约 11/22 00:00 时北京 13:00 同一天，回到快 13 小时
+  assert.equal(t('Asia/Shanghai', ny, instant('2026-11-22T04:59:00Z')), '11/22');
+  assert.equal(t('Asia/Shanghai', ny, instant('2026-11-22T05:00:00Z')), '快 13 小时');
 });
