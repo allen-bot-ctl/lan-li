@@ -307,7 +307,7 @@ test('C9 纽约 20:38：东京、北京副行只显示按时差算出的文案�
       const row = rows.find((r) => r.label === item.label);
       const day = (z) => new Intl.DateTimeFormat('en-US', { timeZone: z, month: 'numeric', day: 'numeric' }).formatToParts(new Date(iso)).filter((p) => p.type !== 'literal').map((p) => p.value).join('/');
       // 0.1.54：不在同一天的城市显示它的 月/日
-      const expected = id === local ? '本地' : (day(id) !== day(local) ? day(id) : offsetText(offsetMinutes(iso, id) - offsetMinutes(iso, local)));
+      const expected = id === local ? '当前时区' : (day(id) !== day(local) ? day(id) : offsetText(offsetMinutes(iso, id) - offsetMinutes(iso, local)));
       expect(row.sub).toBe(expected);
       expect(row.sub.includes('明天') || row.sub.includes('昨天')).toBe(false);
     }

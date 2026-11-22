@@ -363,6 +363,7 @@ function currentClockSnapshot(now = new Date()) {
         label: clock.label,
         time: formatClockTime(now, clock.id),
         relativeText: relative ? relative.text : '',
+        isLocal: Boolean(relative && relative.isLocal),
         isMenuBar: sameTimeZone(clock.id, resolvedZone)
       };
     })

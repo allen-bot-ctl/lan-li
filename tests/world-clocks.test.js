@@ -124,7 +124,7 @@ test('describeClockRelative labels same-day cities with 快/慢 offsets', () => 
 
   assert.equal(
     describeClockRelative(now, 'Asia/Shanghai', 'Asia/Shanghai').text,
-    '本地'
+    '当前时区'
   );
   assert.equal(
     describeClockRelative(now, 'Asia/Tokyo', 'Asia/Shanghai').text,
@@ -176,7 +176,7 @@ test('C3 纽约为本地：固定时刻 2026-11-18 02:22 与 23:00（冬令时�
   };
 
   check1('Asia/Shanghai', '快 13 小时');
-  check1('America/New_York', '本地');
+  check1('America/New_York', '当前时区');
   check1('Asia/Tokyo', '快 14 小时');
   check1('Asia/Kolkata', '快 10 小时 30 分');
   check1('Europe/London', '快 5 小时');
@@ -522,7 +522,7 @@ test('0.1.54 W-C1 本地纽约 11/21 13:24：本地、同天快慢、明天、�
   const ny = 'America/New_York';
   const now = instant('2026-11-21T18:24:00Z'); // 纽约 11/21 13:24
   const t = (zone, local = ny, at = now) => describeClockRelative(at, zone, local).text;
-  assert.equal(t(ny), '本地');
+  assert.equal(t(ny), '当前时区');
   assert.equal(t('Europe/London'), '快 5 小时'); // 伦敦 18:24 同一天
   assert.equal(t('America/Los_Angeles'), '慢 3 小时');
   assert.equal(t('Asia/Shanghai'), '11/22');

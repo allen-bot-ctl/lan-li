@@ -399,6 +399,12 @@ function createInboxController(deps) {
   }
 
   function days() { return [...new Set(store.list().map((m) => Q.entryDayKey(m)))]; }
+  // 0.1.55：每天的收纳条数，日历圆点悬停显示「收纳 N 条」
+  function dayCounts() {
+    const counts = {};
+    for (const m of store.list()) { const k = Q.entryDayKey(m); counts[k] = (counts[k] || 0) + 1; }
+    return counts;
+  }
 
   function register() {
     ipcMain.on('drop:enter', () => { cancelHide(); });
@@ -415,6 +421,7 @@ function createInboxController(deps) {
     ipcMain.handle('inbox:copy', (_e, id) => copyEntry(id));
     ipcMain.handle('inbox:relink', (e, id) => relink(id, e));
     ipcMain.handle('inbox:days', () => days());
+    ipcMain.handle('inbox:dayCounts', () => dayCounts());
     ipcMain.on('inbox:tagMenu', (event, tag) => {
       const menu = Menu.buildFromTemplate([{ id: 'inbox-tag-delete', label: '删除这个标签', click: () => removeTag(tag) }]);
       if (E2E) { lastMenu = menu; return; }

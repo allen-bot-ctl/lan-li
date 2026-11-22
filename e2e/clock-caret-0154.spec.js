@@ -41,7 +41,7 @@ test.afterAll(async () => {
   await app.close();
 });
 
-test('W-C2 本机纽约 13:24：北京、东京显示 11/22，纽约显示「本地」', async () => {
+test('W-C2 本机纽约 13:24：北京、东京显示 11/22，纽约显示「当前时区」', async () => {
   expect(await hook('localZone')).toBe('America/New_York');
   const state = await page.evaluate(() => window.lanli.getState());
   const ids = state.clocks.items.map((c) => c.id);
@@ -63,7 +63,7 @@ test('W-C2 本机纽约 13:24：北京、东京显示 11/22，纽约显示「本
   };
   await expect.poll(() => subOf('Asia/Shanghai')).toBe('11/22');
   expect(await subOf('Asia/Tokyo')).toBe('11/22');
-  expect(await subOf('America/New_York')).toBe('本地');
+  expect(await subOf('America/New_York')).toBe('当前时区');
   for (const scheme of ['dark', 'light']) {
     await page.emulateMedia({ colorScheme: scheme });
     await page.waitForTimeout(200);

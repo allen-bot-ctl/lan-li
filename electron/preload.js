@@ -62,6 +62,7 @@ contextBridge.exposeInMainWorld('lanli', {
   copyInboxEntry: (id) => ipcRenderer.invoke('inbox:copy', id),
   relinkInboxEntry: (id) => ipcRenderer.invoke('inbox:relink', id),
   inboxDays: () => ipcRenderer.invoke('inbox:days'),
+  inboxDayCounts: () => ipcRenderer.invoke('inbox:dayCounts'),
   inboxTagMenu: (tag) => ipcRenderer.send('inbox:tagMenu', tag),
   setInboxView: (open) => ipcRenderer.send('inbox:viewState', open),
   onInboxEscape: (callback) => { ipcRenderer.on('inbox:escape', () => callback()); },

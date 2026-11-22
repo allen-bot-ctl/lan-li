@@ -205,7 +205,7 @@ function renderClockList(snapshot) {
     }
 
     const sub = document.createElement('span');
-    sub.className = 'clock-entry-sub';
+    sub.className = 'clock-entry-sub' + (item.isLocal ? ' is-current-zone' : '');
     sub.textContent = item.relativeText || '';
 
     const time = document.createElement('span');
@@ -439,7 +439,18 @@ function renderCells(next) {
       dot.className = 'cell-inbox-dot';
       button.appendChild(dot);
     }
-    button.addEventListener('click', () => selectCell(cell));
+    button.dataset.selected = isCellSelected(cell) ? '1' : '';
+    decorateInboxCell(button);
+    watchIconTooltip(button);
+    // 0.1.55：有圆点且已选中（未选其它日期时今天算已选中）→ 再点打开收纳并按这天筛选
+    button.addEventListener('click', () => {
+      if (button.classList.contains('has-inbox') && isCellSelected(cell)) {
+        hideIconTooltip();
+        openInboxForDay(button.dataset.day);
+        return;
+      }
+      selectCell(cell);
+    });
 
     grid.append(button);
   }
@@ -475,6 +486,24 @@ function requestView(payload) {
 }
 
 // 0.1.30：点格子选中那天，灰色格同时翻到那个月；点今天的格子等于回到今天。
+function isCellSelected(cell) {
+  return selectedKey ? selectedKey === cellKey(cell) : Boolean(cell.isToday);
+}
+
+// 0.1.55：有圆点的日期悬停气泡「收纳 N 条」，已选中加「 · 点击查看」并显示手型。
+function decorateInboxCell(button) {
+  const has = button.classList.contains('has-inbox');
+  const n = (typeof inboxDayCounts !== 'undefined' && inboxDayCounts[button.dataset.day]) || 0;
+  const selected = button.dataset.selected === '1';
+  if (has && n > 0) {
+    button.dataset.tooltip = selected ? `收纳 ${n} 条 · 点击查看` : `收纳 ${n} 条`;
+    button.dataset.tooltipPlace = 'above';
+  } else {
+    delete button.dataset.tooltip;
+  }
+  button.classList.toggle('inbox-openable', has && selected);
+}
+
 function selectCell(cell) {
   if (cell.isToday) {
     clearSelection();
@@ -592,8 +621,11 @@ function showIconTooltip(button) {
 function watchIconTooltip(button) {
   button.addEventListener('mouseenter', () => {
     hideIconTooltip();
+    // 0.1.55：日历格子没有 data-tooltip 时不出气泡
+    if (button.classList.contains('cell') && !button.dataset.tooltip) return;
     iconTooltipTimer = setTimeout(() => {
       iconTooltipTimer = null;
+      if (button.classList.contains('cell') && !button.dataset.tooltip) return;
       showIconTooltip(button);
     }, 500);
   });
@@ -1314,6 +1346,8 @@ let inboxTagCounts = [];
 let inboxUndoId = null;
 let inboxUndoTimer = null;
 var inboxDaySet = new Set(); // var：月历 renderCells 可能先于这里执行
+var inboxDayCounts = {}; // 0.1.55：每天收纳条数
+var inboxOpenedFromDay = false; // 0.1.55：由日历日期打开收纳，返回时清掉日期筛选
 let miniMonth = null; // { y, m(0-11) }
 
 function appendHighlighted(el, text, query) {
@@ -1675,14 +1709,16 @@ document.getElementById('inbox-minical-prev').addEventListener('click', (ev) => 
 document.getElementById('inbox-minical-next').addEventListener('click', (ev) => { ev.stopPropagation(); const d = new Date(miniMonth.y, miniMonth.m + 1, 1); miniMonth = { y: d.getFullYear(), m: d.getMonth() }; renderMiniCal(); });
 
 function refreshInboxDays() {
-  return api.inboxDays().then((keys) => {
+  return Promise.all([api.inboxDays(), api.inboxDayCounts ? api.inboxDayCounts().catch(() => ({})) : Promise.resolve({})]).then(([keys, counts]) => {
     inboxDaySet = new Set(keys || []);
+    inboxDayCounts = counts || {};
     for (const cell of grid.querySelectorAll('.cell')) {
       const has = inboxDaySet.has(cell.dataset.day);
       cell.classList.toggle('has-inbox', has);
       let dot = cell.querySelector('.cell-inbox-dot');
       if (has && !dot) { dot = document.createElement('span'); dot.className = 'cell-inbox-dot'; cell.appendChild(dot); }
       if (!has && dot) dot.remove();
+      decorateInboxCell(cell);
     }
     if (!inboxMiniCal.hidden) renderMiniCal();
   }).catch(() => {});
@@ -1728,8 +1764,17 @@ function openInboxView() {
   showInboxList();
 }
 
+function openInboxForDay(key) {
+  if (!key) return;
+  clearInboxFilters();
+  setInboxDay(key);
+  inboxOpenedFromDay = true;
+  openInboxView();
+}
+
 function closeInboxView() {
   if (inboxView.hidden) return;
+  if (inboxOpenedFromDay) { inboxOpenedFromDay = false; setInboxDay(null); }
   inboxView.hidden = true;
   inboxDetail.hidden = true;
   inboxDetailFrame.srcdoc = '';

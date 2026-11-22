@@ -852,6 +852,18 @@ select {
   white-space: nowrap;
 }
 
+.clock-entry-sub.is-current-zone {
+  /* 0.1.55: 「当前时区」用系统蓝（契约 77b9a46） */
+  color: #007aff;
+  font-weight: 600;
+}
+
+@media (prefers-color-scheme: dark) {
+  .clock-entry-sub.is-current-zone {
+    color: #0a84ff;
+  }
+}
+
 .clock-entry-time {
   flex: 0 0 auto;
   color: var(--text);
@@ -1407,6 +1419,7 @@ mark.inbox-hit{background:rgba(255,200,0,.45);color:inherit;border-radius:2px;}
 .inbox-dot,.cell-inbox-dot{display:block;width:4px;height:4px;border-radius:2px;background:#8e8e93;}
 .inbox-minical-day .inbox-dot{position:absolute;bottom:1px;left:50%;transform:translateX(-50%);}
 .cell{position:relative;}
+.cell.inbox-openable{cursor:pointer;}
 .cell-inbox-dot{position:absolute;left:50%;bottom:2px;transform:translateX(-50%);pointer-events:none;}
 .inbox-tag-suggest{display:flex;flex-wrap:wrap;gap:3px;max-width:150px;}
 .inbox-tag-suggest:empty{display:none;}
