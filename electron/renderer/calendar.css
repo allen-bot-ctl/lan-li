@@ -1481,6 +1481,9 @@ mark.inbox-hit{background:rgba(255,200,0,.45);color:inherit;border-radius:2px;}
 .tag-row-count{color:var(--muted, rgba(128,128,128,.9));font-size:12px;}
 .tag-row-btn{border:0;background:transparent;color:var(--accent);font-size:12px;padding:2px 4px;cursor:pointer;}
 .tag-row-btn:hover{text-decoration:underline;}
+/* 0.1.57：删除平时灰色，悬停变红 */
+.tag-row-btn.tag-row-delete{color:var(--muted);}
+.tag-row-btn.tag-row-delete:hover{color:#ff3b30;}
 .tag-row-input{box-sizing:border-box;flex:1;height:26px;padding:0 8px;border-radius:6px;border:1px solid var(--accent);font-size:13px;outline:none;background:var(--chip);color:var(--text);margin:4px 0;}
 .tag-row-err{flex-basis:100%;font-size:12px;color:#ff3b30;margin:-2px 0 6px;}
 .tag-row-err:empty{display:none;}

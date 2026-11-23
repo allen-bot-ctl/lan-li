@@ -237,22 +237,22 @@ function createInboxController(deps) {
   async function captureClipboard(opts) {
     const o = opts || {};
     const sourceApp = o.via === 'hotkey' ? (o.sourceApp != null ? o.sourceApp : await frontAppName()) : '';
-    cancelHide();
-    if (!visible) show({ keepCalendar: o.via === 'panel' });
+    // 0.1.57：收纳页里粘贴不弹托盘提示框（它盖住日历顶部会触发 pointer-leave 收起窗口），结果交给窗口内 toast
+    const panel = o.via === 'panel';
+    const tell = (msg, ms) => { if (panel) return; send(msg); scheduleHide(ms); };
+    if (!panel) { cancelHide(); if (!visible) show({}); }
     const c = readClipboard();
     const items = classifyClipboard(c);
     if (!items.length) {
-      send({ state: 'error', text: TEXT_CLIP_EMPTY });
-      scheduleHide(ERROR_HIDE_MS);
-      return { ok: false, text: TEXT_CLIP_EMPTY };
+      tell({ state: 'error', text: TEXT_CLIP_EMPTY }, ERROR_HIDE_MS);
+      return { ok: false, kind: 'empty', text: TEXT_CLIP_EMPTY };
     }
     const hash = clipHash(c);
     const t = Date.now();
     if (hash === lastClip.hash && t - lastClip.at < CLIP_DUP_MS) {
       lastClip.at = t;
-      send({ state: 'success', text: TEXT_CLIP_DUP, sub: '点开查看' });
-      scheduleHide(SUCCESS_HIDE_MS);
-      return { ok: true, dup: true, count: 0 };
+      tell({ state: 'success', text: TEXT_CLIP_DUP, sub: '点开查看' }, SUCCESS_HIDE_MS);
+      return { ok: true, dup: true, count: 0, text: TEXT_CLIP_DUP };
     }
     busy = true;
     try {
@@ -261,16 +261,15 @@ function createInboxController(deps) {
       lastSaved = store.saveAll(resolved, { via: 'clipboard', ...(app ? { sourceApp: app } : {}) });
       lastClip = { hash, at: t };
       const label = captureLabel(items);
-      send({ state: 'success', text: `已收纳 · ${label}`, sub: '点开查看' });
       if (deps.onChanged) deps.onChanged();
-      scheduleHide(SUCCESS_HIDE_MS);
-      return { ok: true, count: lastSaved.length, label, ids: lastSaved.map((m) => m.id) };
+      tell({ state: 'success', text: `已收纳 · ${label}`, sub: '点开查看' }, SUCCESS_HIDE_MS);
+      return { ok: true, count: lastSaved.length, label, text: `已收纳 · ${label}`, ids: lastSaved.map((m) => m.id) };
     } catch (error) {
       if (logger) logger.warn('[栏历] 剪贴板收纳失败：' + (error && error.message));
-      const text = error && (error.code === 'empty' || error.code === 'unsupported') ? TEXT_CLIP_EMPTY : errorText(error);
-      send({ state: 'error', text });
-      scheduleHide(ERROR_HIDE_MS);
-      return { ok: false, text };
+      const unsupported = error && (error.code === 'empty' || error.code === 'unsupported');
+      const text = unsupported ? TEXT_CLIP_EMPTY : errorText(error);
+      tell({ state: 'error', text }, ERROR_HIDE_MS);
+      return { ok: false, kind: unsupported ? 'empty' : 'error', text };
     } finally {
       busy = false;
     }

@@ -1637,7 +1637,17 @@ document.addEventListener('keydown', (e) => {
   const typing = e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable);
   if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && (e.key === 'v' || e.key === 'V') && !typing) { e.preventDefault(); captureFromPanel(); }
 });
-function captureFromPanel() { api.captureClipboard().then(() => refreshInbox()).catch(() => {}); }
+// 0.1.57：收纳页粘贴的结果在窗口内提示，不弹托盘提示框
+function captureFromPanel() {
+  api.captureClipboard().then((r) => {
+    refreshInbox();
+    if (!r || !r.text) return;
+    let type = 'success';
+    if (r.dup) type = 'info';
+    else if (!r.ok) type = r.kind === 'empty' ? 'warning' : 'error';
+    showToast({ type, title: r.text });
+  }).catch(() => {});
+}
 document.getElementById('inbox-paste').addEventListener('click', () => captureFromPanel());
 document.addEventListener('click', (e) => {
   if (!inboxMoreMenu.hidden && !e.target.closest('.inbox-more-wrap')) inboxMoreMenu.hidden = true;
