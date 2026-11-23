@@ -1534,4 +1534,4 @@ mark.inbox-hit{background:rgba(255,200,0,.45);color:inherit;border-radius:2px;}
 .reader-primary{background:var(--accent);color:#fff;}
 .reader-key-label{margin-top:4px;font-size:12px;}
 .reader-key-note{margin-top:6px;font-size:12px;color:var(--muted, #8e8e93);}
-.reader-key-hint{margin-top:6px;font-size:11px;color:var(--muted, #8e8e93);}
+.reader-key-hint{margin-top:6px;font-size:12px;color:var(--muted, #8e8e93);}
