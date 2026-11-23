@@ -66,6 +66,7 @@ function createInboxController(deps) {
   const E2E = Boolean(deps.E2E);
   const store = createInboxStore({
     root: deps.root,
+    migrateFailAt: E2E ? Number(process.env.LANLI_E2E_MIGRATE_FAIL_AT) || 0 : 0,
     makeThumb: (src, dest) => {
       let img = nativeImage.createFromPath(src);
       if (img.isEmpty()) return;
@@ -438,7 +439,8 @@ function createInboxController(deps) {
     ipcMain.handle('inbox:tagRename', (_e, id, name) => renameTag(id, name));
     ipcMain.handle('inbox:tagDelete', (_e, idOrName) => deleteTag(idOrName));
     ipcMain.on('inbox:tagMenu', (event, tag) => {
-      const menu = Menu.buildFromTemplate([{ id: 'inbox-tag-delete', label: '删除这个标签', click: () => removeTag(tag) }]);
+      // 0.1.56：右键删除先回到渲染层就地确认，再走 inbox:tagDelete。
+      const menu = Menu.buildFromTemplate([{ id: 'inbox-tag-delete', label: '删除这个标签', click: () => { if (!event.sender.isDestroyed()) event.sender.send('inbox:requestTagDelete', tag); } }]);
       if (E2E) { lastMenu = menu; return; }
       menu.popup({ window: BrowserWindow.fromWebContents(event.sender) });
     });

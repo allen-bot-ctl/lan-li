@@ -55,6 +55,7 @@ const settingsBack = document.getElementById('settings-back');
 const settingsTabs = document.querySelectorAll('.settings-tab');
 const settingsPageUi = document.getElementById('settings-page-ui');
 const settingsPageUpdate = document.getElementById('settings-page-update');
+const settingsPageTags = document.getElementById('settings-page-tags');
 const settingOpenAtLogin = document.getElementById('setting-open-at-login');
 const settingShowDate = document.getElementById('setting-show-date');
 const settingCaptureHint = document.getElementById('setting-capture-hint');
@@ -490,13 +491,13 @@ function isCellSelected(cell) {
   return selectedKey ? selectedKey === cellKey(cell) : Boolean(cell.isToday);
 }
 
-// 0.1.55：有圆点的日期悬停气泡「收纳 N 条」，已选中加「 · 点击查看」并显示手型。
+// 0.1.55：有圆点的日期悬停气泡「收纳 N 项」（0.1.56 条→项），已选中加「 · 点击查看」并显示手型。
 function decorateInboxCell(button) {
   const has = button.classList.contains('has-inbox');
   const n = (typeof inboxDayCounts !== 'undefined' && inboxDayCounts[button.dataset.day]) || 0;
   const selected = button.dataset.selected === '1';
   if (has && n > 0) {
-    button.dataset.tooltip = selected ? `收纳 ${n} 条 · 点击查看` : `收纳 ${n} 条`;
+    button.dataset.tooltip = selected ? `收纳 ${n} 项 · 点击查看` : `收纳 ${n} 项`;
     button.dataset.tooltipPlace = 'above';
   } else {
     delete button.dataset.tooltip;
@@ -1161,6 +1162,8 @@ function selectSettingsTab(tab) {
   closeAllPickers();
   settingsPageUi.hidden = tab !== 'ui';
   settingsPageUpdate.hidden = tab !== 'update';
+  settingsPageTags.hidden = tab !== 'tags';
+  if (tab === 'tags') renderTagManager();
   const embedded = EMBEDDED[tab];
   if (embedded) {
     embedded[0].classList.add('is-embedded');
@@ -1549,17 +1552,32 @@ document.getElementById('inbox-undo-btn').addEventListener('click', () => {
   if (id) api.undoRemoveInboxEntry(id).then(() => refreshInbox()).catch(() => {});
 });
 
+let inboxTagLib = [];
 function openTagPop(m, anchor) {
   inboxTagTarget = m.id;
   inboxTagErr.textContent = '';
   inboxTagInput.value = '';
   inboxTagPop.hidden = false;
   renderTagSuggest();
-  const vr = inboxView.getBoundingClientRect();
-  const ar = anchor.getBoundingClientRect();
-  inboxTagPop.style.top = `${Math.min(ar.bottom - vr.top + 4, vr.height - 64)}px`;
-  inboxTagPop.style.right = `${Math.max(8, vr.right - ar.right)}px`;
+  // 0.1.56：候选来自标签库
+  inboxTagAnchor = anchor;
+  positionTagPop();
+  api.inboxTags().then((list) => { inboxTagLib = list || []; if (!inboxTagPop.hidden) { renderTagSuggest(); positionTagPop(); } }).catch(() => {});
   inboxTagInput.focus();
+}
+let inboxTagAnchor = null;
+// 弹层右缘对齐「#」按钮；放不下就翻到按钮上方，始终不出窗口。
+function positionTagPop() {
+  if (!inboxTagAnchor || inboxTagPop.hidden) return;
+  const vr = inboxView.getBoundingClientRect();
+  const ar = inboxTagAnchor.getBoundingClientRect();
+  const h = inboxTagPop.offsetHeight;
+  const w = inboxTagPop.offsetWidth;
+  let top = ar.bottom - vr.top + 4;
+  if (top + h > vr.height - 8) top = ar.top - vr.top - 4 - h;
+  top = Math.max(8, Math.min(top, vr.height - h - 8));
+  inboxTagPop.style.top = `${top}px`;
+  inboxTagPop.style.right = `${Math.min(Math.max(8, vr.right - ar.right), Math.max(8, vr.width - w - 8))}px`;
 }
 // 输入时联想已有标签（不用 datalist：自绘候选，点一下即填入并添加）
 function renderTagSuggest() {
@@ -1567,19 +1585,21 @@ function renderTagSuggest() {
   const target = inboxEntries.find((m) => m.id === inboxTagTarget);
   const have = (target && target.tags) || [];
   inboxTagSuggest.textContent = '';
-  for (const c of inboxTagCounts) {
-    if (have.includes(c.tag) || (q && !c.tag.toLowerCase().includes(q))) continue;
+  // 0.1.56：标签库里本条还没有的全部标签，按名称排序；输入时按包含过滤。
+  const names = inboxTagLib.map((t) => t.name).sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'));
+  for (const name of names) {
+    if (have.includes(name) || (q && !name.toLowerCase().includes(q))) continue;
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'inbox-tag-suggest-item';
-    b.dataset.tag = c.tag;
-    b.textContent = '#' + c.tag;
-    b.addEventListener('click', (e) => { e.stopPropagation(); inboxTagInput.value = c.tag; submitTag(); });
+    b.dataset.tag = name;
+    b.title = '#' + name;
+    b.textContent = '#' + name;
+    b.addEventListener('click', (e) => { e.stopPropagation(); inboxTagInput.value = name; submitTag(); });
     inboxTagSuggest.appendChild(b);
-    if (inboxTagSuggest.children.length >= 6) break;
   }
 }
-inboxTagInput.addEventListener('input', renderTagSuggest);
+inboxTagInput.addEventListener('input', () => { renderTagSuggest(); positionTagPop(); });
 
 function submitTag() {
   const id = inboxTagTarget; const tag = inboxTagInput.value;
@@ -1865,3 +1885,119 @@ api.onTick((payload) => {
 loadVersion();
 refreshState();
 if (document.visibilityState === 'visible') refreshWeather();
+
+
+// ===== 0.1.56 标签管理（契约 docs/changes/0.1.56-tag-manager.md C 段）=====
+const tagsNew = document.getElementById('tags-new');
+const tagsNewErr = document.getElementById('tags-new-err');
+const tagsList = document.getElementById('tags-list');
+const tagsEmpty = document.getElementById('tags-empty');
+
+function tagDeleteText(name, count) { return `删除 #${name}？${count} 项会去掉这个标签，条目本身保留`; }
+
+function renderTagManager(list) {
+  if (!list) { api.inboxTags().then((l) => renderTagManager(l || [])).catch(() => {}); return; }
+  tagsList.textContent = '';
+  tagsEmpty.hidden = list.length > 0;
+  for (const t of list) tagsList.appendChild(tagRow(t));
+}
+
+function tagRow(t) {
+  const row = document.createElement('div');
+  row.className = 'tag-row';
+  row.dataset.id = t.id;
+  row.dataset.name = t.name;
+  const showNormal = () => {
+    row.className = 'tag-row';
+    row.textContent = '';
+    const name = document.createElement('span'); name.className = 'tag-row-name'; name.textContent = '#' + t.name; name.title = '#' + t.name;
+    const count = document.createElement('span'); count.className = 'tag-row-count'; count.textContent = `${t.count} 项`;
+    const ren = document.createElement('button'); ren.type = 'button'; ren.className = 'tag-row-btn tag-row-rename'; ren.textContent = '改名';
+    const del = document.createElement('button'); del.type = 'button'; del.className = 'tag-row-btn tag-row-delete'; del.textContent = '删除';
+    ren.addEventListener('click', showRename);
+    del.addEventListener('click', showDelete);
+    row.append(name, count, ren, del);
+  };
+  const showRename = () => {
+    row.className = 'tag-row is-editing';
+    row.textContent = '';
+    const input = document.createElement('input'); input.type = 'text'; input.className = 'tag-row-input'; input.maxLength = 9; input.value = t.name;
+    const err = document.createElement('div'); err.className = 'tag-row-err';
+    let done = false;
+    const save = () => {
+      if (done) return;
+      const v = input.value;
+      if (!v.trim().replace(/^#+/, '').trim() || v.trim().replace(/^#+/, '').trim() === t.name) { done = true; showNormal(); return; }
+      api.inboxTagRename(t.id, v).then((r) => {
+        if (r && r.ok) { done = true; renderTagManager(r.tags); refreshInboxIfOpen(); }
+        else { err.textContent = (r && r.text) || '没改成'; input.focus(); }
+      }).catch(() => {});
+    };
+    input.addEventListener('keydown', (e) => {
+      if (e.isComposing) return;
+      if (e.key === 'Enter') { e.preventDefault(); save(); }
+      else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); done = true; showNormal(); }
+    });
+    input.addEventListener('blur', () => { if (!err.textContent) save(); });
+    input.addEventListener('input', () => { err.textContent = ''; });
+    row.append(input, err);
+    input.focus(); input.select();
+  };
+  const showDelete = () => {
+    row.className = 'tag-row tag-confirm is-confirm';
+    row.textContent = '';
+    const text = document.createElement('span'); text.className = 'tag-confirm-text'; text.textContent = tagDeleteText(t.name, t.count);
+    const cancel = document.createElement('button'); cancel.type = 'button'; cancel.className = 'tag-confirm-cancel'; cancel.textContent = '取消';
+    const ok = document.createElement('button'); ok.type = 'button'; ok.className = 'tag-confirm-ok'; ok.textContent = '删除';
+    cancel.addEventListener('click', showNormal);
+    ok.addEventListener('click', () => {
+      api.inboxTagDelete(t.id).then((r) => { if (r && r.ok) { renderTagManager(r.tags); refreshInboxIfOpen(); } }).catch(() => {});
+    });
+    row.append(text, cancel, ok);
+  };
+  showNormal();
+  return row;
+}
+
+function addTagFromManager() {
+  const v = tagsNew.value;
+  if (!v.trim()) return;
+  api.inboxTagCreate(v).then((r) => {
+    if (r && r.ok) { tagsNew.value = ''; tagsNewErr.textContent = ''; renderTagManager(r.tags); }
+    else tagsNewErr.textContent = (r && r.text) || '没加上';
+  }).catch(() => {});
+}
+document.getElementById('tags-add-btn').addEventListener('click', addTagFromManager);
+tagsNew.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); addTagFromManager(); } });
+tagsNew.addEventListener('input', () => { tagsNewErr.textContent = ''; });
+
+function refreshInboxIfOpen() { if (typeof refreshInbox === 'function' && !inboxView.hidden) refreshInbox(); }
+
+// 收纳页右键「删除这个标签」：先就地确认，再走同一套删除逻辑。
+const inboxTagConfirm = document.getElementById('inbox-tag-confirm');
+const inboxTagConfirmText = document.getElementById('inbox-tag-confirm-text');
+let inboxTagConfirmName = null;
+function askDeleteTag(name) {
+  api.inboxTags().then((list) => {
+    const t = (list || []).find((x) => x.name === name);
+    if (!t) return;
+    inboxTagConfirmName = t.id;
+    inboxTagConfirmText.textContent = tagDeleteText(t.name, t.count);
+    inboxTagConfirm.hidden = false;
+  }).catch(() => {});
+}
+document.getElementById('inbox-tag-confirm-cancel').addEventListener('click', () => { inboxTagConfirm.hidden = true; inboxTagConfirmName = null; });
+document.getElementById('inbox-tag-confirm-ok').addEventListener('click', () => {
+  const id = inboxTagConfirmName;
+  inboxTagConfirm.hidden = true; inboxTagConfirmName = null;
+  if (id) api.inboxTagDelete(id).then(() => refreshInbox()).catch(() => {});
+});
+if (api.onInboxRequestTagDelete) api.onInboxRequestTagDelete((name) => askDeleteTag(name));
+
+// 0.1.56 T6b：弹层底部「管理标签…」→ 设置页「标签」tab
+document.getElementById('inbox-tagpop-manage').addEventListener('click', (e) => {
+  e.stopPropagation();
+  closeTagPop();
+  openSettingsView();
+  selectSettingsTab('tags');
+});

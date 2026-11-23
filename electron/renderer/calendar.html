@@ -171,6 +171,7 @@
         <span class="inbox-tags" id="inbox-tags"></span>
         <span class="inbox-more-wrap"><button type="button" class="inbox-pill inbox-more" id="inbox-more" hidden></button><span class="inbox-more-menu" id="inbox-more-menu" hidden></span></span>
       </div>
+      <div class="tag-confirm inbox-tag-confirm" id="inbox-tag-confirm" hidden><span class="tag-confirm-text" id="inbox-tag-confirm-text"></span><button type="button" class="tag-confirm-cancel" id="inbox-tag-confirm-cancel">取消</button><button type="button" class="tag-confirm-ok" id="inbox-tag-confirm-ok">删除</button></div>
       <div class="inbox-minical" id="inbox-minical" hidden role="dialog" aria-label="时间范围">
         <div class="inbox-presets" id="inbox-presets">
           <button type="button" class="inbox-preset" data-preset="today">今天</button>
@@ -187,7 +188,7 @@
       <div class="inbox-empty" id="inbox-empty" hidden><svg class="inbox-empty-icon" viewBox="0 0 14 14" aria-hidden="true" focusable="false"><path d="M2 8v3a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V8"/><path d="M2 8l1.6-5h6.8L12 8H9.2l-.7 1.4H5.5L4.8 8z"/></svg><span class="inbox-empty-text">把文件、图片、文字或链接拖到菜单栏时钟上，就会收在这里</span></div>
       <div class="inbox-noresult" id="inbox-noresult" hidden><span>没有符合条件的收纳</span><button type="button" class="inbox-clear" id="inbox-clear">清除筛选</button></div>
       <div class="inbox-undo" id="inbox-undo" hidden><span>已删除&nbsp;·&nbsp;</span><button type="button" id="inbox-undo-btn">撤销</button></div>
-      <div class="inbox-tagpop" id="inbox-tagpop" hidden><input id="inbox-tag-input" type="text" maxlength="8" placeholder="加标签，回车" autocomplete="off"><span class="inbox-tag-suggest" id="inbox-tag-suggest"></span><span class="inbox-tagpop-err" id="inbox-tagpop-err"></span></div>
+      <div class="inbox-tagpop" id="inbox-tagpop" hidden><input id="inbox-tag-input" type="text" maxlength="8" placeholder="加标签，回车" autocomplete="off"><span class="inbox-tag-suggest" id="inbox-tag-suggest"></span><span class="inbox-tagpop-err" id="inbox-tagpop-err"></span><button type="button" class="inbox-tagpop-manage" id="inbox-tagpop-manage">管理标签…</button></div>
       <div class="inbox-detail" id="inbox-detail" hidden>
         <iframe class="inbox-detail-frame" id="inbox-detail-frame" sandbox="" title="收纳内容"></iframe>
       </div>
@@ -204,6 +205,7 @@
         <button class="settings-tab" type="button" data-tab="almanac">黄历</button>
         <button class="settings-tab" type="button" data-tab="weather">天气</button>
         <button class="settings-tab" type="button" data-tab="clocks">世界时钟</button>
+        <button class="settings-tab" type="button" data-tab="tags">标签</button>
         <button class="settings-tab" type="button" data-tab="update">升级</button>
       </nav>
       <section class="settings-content" id="settings-content">
@@ -213,6 +215,12 @@
           <label class="settings-row"><span class="settings-label">菜单栏显示日期</span><input class="settings-switch" id="setting-show-date" type="checkbox" role="switch"><span class="switch-track" aria-hidden="true"></span></label>
           <div class="settings-row settings-hotkey-row" data-hotkey="capture"><span class="settings-label">收纳剪贴板快捷键 <span class="settings-hint" id="setting-capture-hint" hidden>快捷键被占用</span></span><span class="hotkey-ctrls"><button class="hotkey-key" id="setting-capture-key" type="button" title="点击后按下新组合">⌃⌥V</button><button class="hotkey-clear" id="setting-capture-clear" type="button">清空</button></span></div>
           <div class="settings-row settings-hotkey-row" data-hotkey="region"><span class="settings-label">框选收纳快捷键 <span class="settings-hint" id="setting-region-hint" hidden>快捷键被占用</span></span><span class="hotkey-ctrls"><button class="hotkey-key" id="setting-region-key" type="button" title="点击后按下新组合">⌃⌥S</button><button class="hotkey-clear" id="setting-region-clear" type="button">清空</button></span></div>
+        </div>
+        <div class="settings-page" id="settings-page-tags" hidden>
+          <div class="tags-add"><input id="tags-new" type="text" maxlength="9" placeholder="新标签，回车添加" autocomplete="off"><button class="nav-pill tags-add-btn" id="tags-add-btn" type="button">添加</button></div>
+          <div class="tags-err" id="tags-new-err"></div>
+          <div class="tags-list" id="tags-list"></div>
+          <div class="tags-empty" id="tags-empty" hidden>还没有标签，在上面添加一个</div>
         </div>
         <div class="settings-page" id="settings-page-update" hidden>
           <div class="settings-row"><span class="settings-label">当前版本 <span id="settings-version"></span></span></div>

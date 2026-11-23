@@ -107,7 +107,7 @@ test('A1/A2 当前时区：文字「当前时区」，带 is-current-zone，浅�
 });
 
 test('B3 今天有圆点且未选其它日期：点一次就打开收纳并筛到今天', async () => {
-  expect(await tipOf(today)).toBe('收纳 1 条 · 点击查看');
+  expect(await tipOf(today)).toBe('收纳 1 项 · 点击查看');
   await cell(today).click();
   await expect(page.locator('#inbox-view')).toBeVisible();
   expect(await range()).toEqual({ from: key(today), to: key(today) });
@@ -117,12 +117,12 @@ test('B3 今天有圆点且未选其它日期：点一次就打开收纳并筛�
 });
 
 test('B5/B1 未选中的 D：气泡「收纳 2 条」；单击只选中，不开收纳', async () => {
-  expect(await tipOf(D)).toBe('收纳 2 条');
+  expect(await tipOf(D)).toBe('收纳 2 项');
   await cell(D).click();
   await page.waitForTimeout(300);
   expect(await inboxOpen()).toBe(false);
   await expect(cell(D)).toHaveClass(/is-selected/);
-  expect(await tipOf(D)).toBe('收纳 2 条 · 点击查看');
+  expect(await tipOf(D)).toBe('收纳 2 项 · 点击查看');
   await expect(cell(D)).toHaveCSS('cursor', 'pointer');
   for (const scheme of ['dark', 'light']) {
     await page.emulateMedia({ colorScheme: scheme });

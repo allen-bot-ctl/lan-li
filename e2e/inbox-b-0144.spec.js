@@ -130,6 +130,11 @@ test('B-C6 标签胶囊右键「删除这个标签」从所有条目移除', asy
     await expect.poll(() => hook('inboxMenuItems')).not.toBe(null);
     expect((await hook('inboxMenuItems')).map((i) => i.label)).toEqual(['删除这个标签']);
     expect(await hook('clickInboxMenuItem', 'inbox-tag-delete')).toBe(true);
+    // 0.1.56：先就地确认
+    await expect(page.locator('#inbox-tag-confirm')).toBeVisible();
+    await expect(page.locator('#inbox-tag-confirm-text')).toContainText(`删除 #${t}？`);
+    await page.locator('#inbox-tag-confirm-ok').click();
+    await expect(page.locator('#inbox-tag-confirm')).toBeHidden();
   }
   await expect.poll(async () => (await entries()).flatMap((m) => m.tags).sort()).toEqual(['工作', '工作', '读书']);
   await expect(page.locator('#inbox-tags .inbox-tag')).toHaveCount(2);

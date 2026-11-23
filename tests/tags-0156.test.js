@@ -9,9 +9,9 @@ const { createInboxStore } = require('../electron/inbox-store');
 const { tagKey } = require('../electron/tag-library');
 
 function tmp() { return fs.mkdtempSync(path.join(os.tmpdir(), 'lanli-tags-')); }
-function store(root) {
+function store(root, extra) {
   let t = new Date(2026, 10, 22, 21, 0, 0).getTime(); let r = 0;
-  return createInboxStore({ root, now: () => new Date((t += 1000)), rand: () => 'r' + String(r++).padStart(3, '0') });
+  return createInboxStore({ root, now: () => new Date((t += 1000)), rand: () => 'r' + String(r++).padStart(3, '0'), ...(extra || {}) });
 }
 const readJson = (f) => JSON.parse(fs.readFileSync(f, 'utf8'));
 const tagNames = (root) => readJson(path.join(root, 'tags.json')).tags.map((t) => t.name);
@@ -51,8 +51,9 @@ test('T2 老数据升级：test 新建、重要复用默认、meta.tags 变 ID�
   assert.deepStrictEqual(readJson(path.join(root, ids[0], 'meta.json')).tags, [idOf('test'), idOf('重要')]);
   assert.deepStrictEqual(readJson(path.join(root, ids[2], 'meta.json')).tags, [idOf('重要')]);
   // 备份是原样的 0.1.55 meta
-  assert.deepStrictEqual(readJson(path.join(root, ids[0], 'meta.json.bak-0156')).tags, ['test', '重要']);
-  assert.ok(!fs.existsSync(path.join(root, ids[3], 'meta.json.bak-0156')), '没有标签的条目不改写也不备份');
+  const bak = path.join(root, '.backup-0.1.56');
+  assert.deepStrictEqual(readJson(path.join(bak, ids[0], 'meta.json')).tags, ['test', '重要']);
+  for (const id of ids) assert.ok(fs.existsSync(path.join(bak, id, 'meta.json')), '每条 meta.json 都备份');
   const list = s.list();
   assert.strictEqual(list.length, 4);
   assert.deepStrictEqual(list.find((m) => m.id === ids[0]).tags, ['test', '重要']);
@@ -127,4 +128,59 @@ test('T6 存储层：addTag 输入已存在的名字复用已有 ID，库里条�
   ['甲', '乙', '丙', '丁'].forEach((n) => s.addTag(ids[3], n));
   assert.throws(() => s.addTag(ids[3], '戊'), (e) => e.code === 'tag-limit');
   assert.deepStrictEqual(s.setTags(ids[3], ['备忘', '#临时']).tags, ['备忘', '临时']);
+});
+
+test('T0 真实形态升级：10 项含 #test，迁移后 #test 在原条目、条目数不变、备份齐全且与升级前一致、按 test 筛选相同、默认标签已补', () => {
+  const Q = require('../electron/renderer/inbox-query');
+  const root = tmp();
+  const s0 = store(root);
+  const ids = [];
+  for (let i = 0; i < 10; i += 1) ids.push(s0.addText({ text: `条目${i}` }).id);
+  const withTest = ids.filter((_, i) => i % 3 === 0);
+  for (const id of ids) {
+    const f = path.join(root, id, 'meta.json'); const m = readJson(f);
+    m.tags = withTest.includes(id) ? ['test'] : (id === ids[1] ? ['工作'] : []);
+    fs.writeFileSync(f, JSON.stringify(m, null, 2));
+  }
+  fs.rmSync(path.join(root, 'tags.json'), { force: true });
+  s0.rebuildIndex();
+  const before = Object.fromEntries(ids.map((id) => [id, fs.readFileSync(path.join(root, id, 'meta.json'), 'utf8')]));
+  const indexBefore = fs.readFileSync(path.join(root, 'index.json'), 'utf8');
+  const s = store(root);
+  const r = s.migrateTags();
+  assert.strictEqual(r.failed, 0);
+  const list = s.list();
+  assert.strictEqual(list.length, 10);
+  assert.deepStrictEqual(Q.filterEntries(list, { tags: ['test'] }).map((m) => m.id).sort(), withTest.slice().sort());
+  const bak = path.join(root, '.backup-0.1.56');
+  for (const id of ids) assert.strictEqual(fs.readFileSync(path.join(bak, id, 'meta.json'), 'utf8'), before[id]);
+  assert.strictEqual(fs.readFileSync(path.join(bak, 'index.json'), 'utf8'), indexBefore);
+  for (const n of ['备忘', '重要', '临时', 'test', '工作']) assert.ok(tagNames(root).includes(n), n);
+});
+
+test('T0b 迁移中途写入失败：原 meta.json 全部不变，条目和标签照常显示；下次启动重试成功', () => {
+  const root = tmp();
+  const ids = seedOld(root);
+  const before = Object.fromEntries(ids.map((id) => [id, fs.readFileSync(path.join(root, id, 'meta.json'), 'utf8')]));
+  const s = store(root, { migrateFailAt: 2 });
+  const r = s.migrateTags();
+  assert.ok(r.failed > 0);
+  assert.strictEqual(r.migrated, 0);
+  for (const id of ids) assert.strictEqual(fs.readFileSync(path.join(root, id, 'meta.json'), 'utf8'), before[id]);
+  assert.ok(!fs.readdirSync(path.join(root, ids[1])).some((n) => n.endsWith('.tmp')));
+  const list = s.list();
+  assert.strictEqual(list.length, 4);
+  assert.deepStrictEqual(list.find((m) => m.id === ids[0]).tags, ['test', '重要']);
+  const r2 = store(root).migrateTags();
+  assert.strictEqual(r2.failed, 0);
+  assert.strictEqual(r2.migrated, 3);
+  assert.deepStrictEqual(store(root).list().find((m) => m.id === ids[0]).tags, ['test', '重要']);
+});
+
+test('T1b 删掉默认标签「临时」后重启：不会被补回', () => {
+  const root = tmp();
+  const s = store(root); s.migrateTags();
+  s.deleteTag('临时');
+  store(root).migrateTags();
+  assert.deepStrictEqual(tagNames(root), ['备忘', '重要']);
 });

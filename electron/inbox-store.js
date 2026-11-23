@@ -357,9 +357,16 @@ function createInboxStore(opts) {
   // 0.1.56：对外 meta.tags 是名字（渲染层显示、检索、筛选照旧），meta.tagIds 是 ID；
   // 磁盘上 meta.tags 只存 ID。库里已删除的 ID 不显示。
   function resolveTags(meta) {
-    const ids = (meta.tags || []).filter((id) => tags.byId(id));
+    // 迁移没完成的老条目里还是字符串标签：照旧按名字显示（库里有同名就用库里的）。
+    const raw = Array.isArray(meta.tags) ? meta.tags : [];
+    const ids = raw.filter((id) => tags.byId(id));
+    const names = [];
+    for (const t of raw) {
+      const n = tags.byId(t) ? tags.nameOf(t) : (typeof t === 'string' && t.trim() && !/^t_[0-9a-f]{8}$/.test(t) ? t : null);
+      if (n && !names.includes(n)) names.push(n);
+    }
     meta.tagIds = ids;
-    meta.tags = ids.map((id) => tags.nameOf(id));
+    meta.tags = names;
     return meta;
   }
 
@@ -442,37 +449,69 @@ function createInboxStore(opts) {
   }
   const removeTagEverywhere = deleteTag;
 
-  // 0.1.56 迁移（启动时调用，幂等）：
-  //  1. 没有 tags.json → 建库并放入 备忘、重要、临时（老用户也补，重名复用）；
-  //  2. 条目里的字符串标签查库（没有就新建）后换成 ID；改写前先把原 meta.json 备份成 meta.json.bak-0156（只备份一次）；
-  //  3. 单条失败不影响其它条，原文件保持不动（先写 tmp 再 rename）。
+  // 0.1.56 迁移（启动时调用，幂等；契约 f7f1d35 B 段「备份」）：
+  //  1. 没有 tags.json → 建库并放入 备忘、重要、临时（只在建库时补一次）；
+  //  2. 先在内存里把所有条目的字符串标签换成 ID（库里没有就新建）；
+  //  3. 有要改的条目时，先把每条 meta.json 和 index.json 复制到 .backup-0.1.56/（保持目录结构，已存在不覆盖）；
+  //  4. 逐条写回（先写 tmp 再 rename）；任一步出错 → 停止、把已改的条目从备份还原，原数据不动，下次启动重试。
+  const BACKUP_DIR = '.backup-0.1.56';
   function migrateTags() {
-    const report = { seeded: false, migrated: 0, failed: 0 };
+    const report = { seeded: false, migrated: 0, failed: 0, backup: null };
     if (!fs.existsSync(root)) ensureRoot();
     report.seeded = tags.seedIfNew();
+    const all = [];
+    const plan = [];
     for (const id of fs.readdirSync(root)) {
       if (id.endsWith('.tmp') || id.startsWith('.') || id === INDEX || id === TAGS_FILE) continue;
       const dir = path.join(root, id);
       const file = path.join(dir, 'meta.json');
-      let meta;
-      try { meta = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { continue; }
+      let text; let meta;
+      try { text = fs.readFileSync(file, 'utf8'); meta = JSON.parse(text); } catch { continue; }
+      all.push(id);
       const raw = Array.isArray(meta.tags) ? meta.tags : [];
       if (raw.every((t) => tags.byId(t))) continue;
-      try {
+      plan.push({ id, dir, file, text, meta, raw });
+    }
+    if (!plan.length) return report;
+    let step = 0;
+    const failAt = Number(o.migrateFailAt) || 0;   // 仅测试用：第 N 次写入时模拟失败
+    const written = [];
+    try {
+      for (const it of plan) {
         const ids = [];
-        for (const t of raw) {
+        for (const t of it.raw) {
           const tid = tags.byId(t) ? t : (String(t).trim() ? tags.ensure(String(t).slice(0, 64)).id : null);
           if (tid && !ids.includes(tid)) ids.push(tid);
         }
-        const bak = path.join(dir, 'meta.json.bak-0156');
-        if (!fs.existsSync(bak)) fs.copyFileSync(file, bak);
-        writeMetaAtomic(dir, { ...meta, tags: ids.slice(0, Q.MAX_TAGS) });
-        report.migrated += 1;
-      } catch {
-        report.failed += 1;
+        it.next = { ...it.meta, tags: ids.slice(0, Q.MAX_TAGS) };
       }
+      const bak = path.join(root, BACKUP_DIR);
+      for (const id of all) {
+        const dest = path.join(bak, id, 'meta.json');
+        if (fs.existsSync(dest)) continue;
+        fs.mkdirSync(path.join(bak, id), { recursive: true });
+        fs.copyFileSync(path.join(root, id, 'meta.json'), dest);
+      }
+      const idx = path.join(root, INDEX);
+      if (fs.existsSync(idx) && !fs.existsSync(path.join(bak, INDEX))) fs.copyFileSync(idx, path.join(bak, INDEX));
+      report.backup = bak;
+      for (const it of plan) {
+        step += 1;
+        if (failAt && step === failAt) throw new Error('simulated migrate write failure');
+        writeMetaAtomic(it.dir, it.next);
+        written.push(it);
+      }
+      report.migrated = written.length;
+    } catch (error) {
+      report.failed = plan.length;
+      report.error = error.message;
+      for (const it of written) {
+        try { fs.writeFileSync(it.file, it.text); } catch { /* 下次启动再试 */ }
+      }
+      for (const it of plan) { try { fs.rmSync(it.file + '.tmp', { force: true }); } catch { /* ignore */ } }
+      report.migrated = 0;
     }
-    if (report.migrated) invalidate();
+    invalidate();
     return report;
   }
 
