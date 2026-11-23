@@ -97,7 +97,8 @@ test('B-C4/B-C6 # 加标签（联想已有标签），每条≤5、单个≤8 �
   await page.locator('#inbox-tag-input').fill('读');
   await expect(page.locator('#inbox-tag-suggest .inbox-tag-suggest-item')).toHaveText(['#读书']);
   await page.locator('#inbox-tag-input').fill('');
-  await expect(page.locator('#inbox-tag-suggest .inbox-tag-suggest-item')).toHaveText(['#工作', '#读书']);
+  // 0.1.56：候选 = 标签库里本条没有的全部标签（含默认 备忘/重要/临时），按名称排序
+  await expect(page.locator('#inbox-tag-suggest .inbox-tag-suggest-item')).toHaveText(['备忘', '重要', '临时', '工作', '读书'].sort((x, y) => x.localeCompare(y, 'zh-Hans-CN')).map((t) => '#' + t));
   await page.locator('#inbox-tag-input').press('Escape');
   await expect(page.locator('#inbox-tagpop')).toBeHidden();
   // 输入框最长 8 字；接口层 9 字报错

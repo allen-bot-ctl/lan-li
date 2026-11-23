@@ -220,7 +220,7 @@ test('C5 设置导航（0.1.46）：「‹ 返回」在顶栏一行、导航项�
 test('C6 五个设置页：内容标题 13px/600 左对齐（0.1.46 小顶栏一级），内容区可见文字 ≥12px', async () => {
   await openSettings();
   const tabs = await page.locator('.settings-tab').allTextContents();
-  expect(tabs.length).toBe(5);
+  expect(tabs.length).toBe(6);   // 0.1.56 加「标签」
   for (const tab of tabs) {
     await page.click(`.settings-tab:text-is("${tab}")`);
     await page.waitForTimeout(250);
