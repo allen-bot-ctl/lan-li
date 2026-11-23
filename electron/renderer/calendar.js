@@ -1164,6 +1164,9 @@ function selectSettingsTab(tab) {
   settingsPageUpdate.hidden = tab !== 'update';
   settingsPageTags.hidden = tab !== 'tags';
   if (tab === 'tags') renderTagManager();
+  const readerPage = document.getElementById('settings-page-reader');
+  if (readerPage) readerPage.hidden = tab !== 'reader';
+  if (tab === 'reader' && typeof renderReaderSettings === 'function') renderReaderSettings();
   const embedded = EMBEDDED[tab];
   if (embedded) {
     embedded[0].classList.add('is-embedded');
@@ -1171,14 +1174,15 @@ function selectSettingsTab(tab) {
   }
 }
 
-function openSettingsView() {
+function openSettingsView(tab = 'ui') {
   if (typeof closeInboxView === 'function') closeInboxView();
+  if (typeof closeReaderView === 'function') closeReaderView();
   closeAllPickers();
   clearSettingsHighlight();
   appBody.hidden = true;
   settingsView.hidden = false;
   api.setSettingsView(true);
-  selectSettingsTab('ui');
+  selectSettingsTab(tab);
   api.getSettings().then((s) => {
     settingOpenAtLogin.checked = s.openAtLogin === true;
     settingShowDate.checked = s.menuBarShowDate !== false;
@@ -1795,6 +1799,7 @@ function openInboxRow(m) {
 function openInboxView() {
   closeAllPickers();
   closeSettingsView();
+  if (typeof closeReaderView === 'function') closeReaderView();
   appBody.hidden = true;
   inboxView.hidden = false;
   api.setSettingsView(true);
@@ -1846,6 +1851,8 @@ api.onOpenPanel((panel) => {
   clearSettingsHighlight();
   if (panel === 'inbox') { openInboxView(); return; }
   closeInboxView();
+  if (panel === 'reader' && typeof openReaderView === 'function') { openReaderView(); return; }
+  if (typeof closeReaderView === 'function') closeReaderView();
   if (panel === 'settings') { openSettingsView(); return; }
   closeSettingsView();
   if (panel === 'calendar') return;

@@ -17,8 +17,10 @@
     "dist": "electron-builder --mac"
   },
   "dependencies": {
-    "linkedom": "^0.18.15",
-    "lunar-javascript": "1.7.8"
+    "@mozilla/readability": "0.6.0",
+    "defuddle": "0.19.13",
+    "lunar-javascript": "1.7.8",
+    "turndown": "7.2.5"
   },
   "devDependencies": {
     "@playwright/test": "^1.65.1",

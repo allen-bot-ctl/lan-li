@@ -1,36 +1,68 @@
 'use strict';
 // 0.1.60 帮阅：主进程控制器（契约 docs/changes/0.1.60-reader.md 第 4、5 节）。
-// 读取：隐藏 BrowserWindow 打开网页取 HTML → 主进程 linkedom + 内置 Readability 去杂讯取正文；整理：reader-llm complete()；一次只跑 1 篇，其余排队。
+// 读取（PM 04:30 定稿）：隐藏 BrowserWindow（persist:reader 会话）渲染网页 → 页内同时跑 Defuddle 和 Readability，按链接密度选一份并转 Markdown；整理：reader-llm complete()；一次只跑 1 篇，其余排队。
 const path = require('node:path');
 const fs = require('node:fs');
 const C = require('./reader-core');
 const { complete } = require('./reader-llm');
 
-const FETCH_TIMEOUT_MS = 20_000;
-const FETCH_MAX_BYTES = 2 * 1024 * 1024;
-const WIN_CAP_MS = 15_000; // 隐藏窗口总上限，遇到 did-navigate 重新计时
-const POLL_MS = 500;
-const STABLE_EXTRA_MS = 1000;
+const READ_TIMEOUT_MS = 20_000; // 整个读取 20 秒
+const LOAD_WAIT_MS = 8_000; // did-finish-load 最多等 8 秒
+const WIN_CAP_MS = 15_000; // 从开始加载起总上限 15 秒，遇到 did-navigate 重新计时
+const POLL_MS = 200;
+const STABLE_MS = 800; // 正文长度连续 800ms 不变就抽取
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
 const NOT_PAGE = C.NOT_PAGE;
 const NO_TEXT = C.NO_TEXT;
-const READABILITY_SRC = fs.readFileSync(path.join(__dirname, 'vendor', 'Readability.js'), 'utf8')
-  .replace(/\nif \(typeof module === "object"\) \{[\s\S]*$/, '\n');
-// 隐藏窗口兜底：用 executeJavaScript 注入 Readability（不用 script 标签，避开页面 CSP），在渲染后的 DOM 上取正文
-const INPAGE_SCRIPT = `(function(){
-  var out = { html: '', contentType: document.contentType || '', title: document.title || '', siteName: '', content: '' };
-  try {
-${READABILITY_SRC}
-    var a = new Readability(document.cloneNode(true)).parse();
-    if (a) { out.title = a.title || out.title; out.siteName = a.siteName || ''; out.content = a.content || ''; }
-  } catch (e) {}
-  if (!out.content) { try { out.html = document.documentElement.outerHTML; } catch (e) {} }
-  return out;
-})()`;
+const BLOCK_TYPES = new Set(['image', 'media', 'font']);
 const isHtmlType = (t) => !t || /text\/html|application\/xhtml/i.test(t);
 
+// 页内抽取脚本：三个库的打包单文件读成字符串，用 executeJavaScriptInIsolatedWorld 注入（不用 script 标签，页面 CSP 拦不到，页面脚本也碰不到）
+function libSource(spec) { return fs.readFileSync(require.resolve(spec), 'utf8'); }
+let inpageScript = null;
+function buildInpageScript() {
+  if (inpageScript) return inpageScript;
+  const defuddle = libSource('defuddle/full');
+  const readability = libSource('@mozilla/readability/Readability.js');
+  const turndown = libSource('turndown/lib/turndown.browser.umd.js');
+  inpageScript = `(function(){
+  var module = undefined, exports = undefined, define = undefined;
+  var out = { contentType: document.contentType || '', title: document.title || '', df: null, rd: null, meta: {} };
+  var chars = function (s) { return String(s || '').replace(/\\s/g, '').length; };
+  var density = function (html) {
+    try {
+      var d = new DOMParser().parseFromString('<body>' + (html || '') + '</body>', 'text/html');
+      var all = chars(d.body.textContent); if (!all) return 0;
+      var a = 0; d.body.querySelectorAll('a').forEach(function (x) { a += chars(x.textContent); });
+      return a / all;
+    } catch (e) { return 0; }
+  };
+  try {
+${defuddle}
+    var D = (typeof Defuddle === 'function') ? Defuddle : (self.Defuddle && (self.Defuddle.default || self.Defuddle));
+    var r = new D(document.cloneNode(true), { url: location.href, separateMarkdown: true }).parse();
+    if (r) {
+      out.df = { markdown: r.contentMarkdown || '', linkDensity: density(r.content), title: r.title || '', site: r.site || '', author: r.author || '', published: r.published || '' };
+    }
+  } catch (e) { out.dfError = String(e && e.message || e); }
+  try {
+${readability}
+${turndown}
+    var a = new Readability(document.cloneNode(true)).parse();
+    if (a && a.content) {
+      var TD = (typeof TurndownService === 'function') ? TurndownService : self.TurndownService;
+      var td = new TD({ headingStyle: 'atx', codeBlockStyle: 'fenced', bulletListMarker: '-' });
+      td.remove(['script', 'style', 'noscript', 'iframe', 'img', 'picture', 'video', 'audio', 'svg']);
+      out.rd = { markdown: td.turndown(a.content), linkDensity: density(a.content), title: a.title || '', site: a.siteName || '', author: a.byline || '', published: a.publishedTime || '' };
+    }
+  } catch (e) { out.rdError = String(e && e.message || e); }
+  return out;
+})()`;
+  return inpageScript;
+}
+
 function createReaderController(deps) {
-  const { BrowserWindow, session, ipcMain, shell, clipboard, logger, E2E, root, keyFile, prefsFile, easylensDir } = deps;
+  const { BrowserWindow, session, ipcMain, shell, clipboard, logger, E2E, root, keyFile, easylensDir } = deps;
   const store = C.createReaderStore({ root });
   const keys = C.createKeyStore({ file: keyFile, easylensDir });
   const queue = [];
@@ -49,119 +81,128 @@ function createReaderController(deps) {
     return m;
   }
 
-  // 第一级：net.fetch 取 HTML（20 秒、最多 2MB），主进程 linkedom + Readability 去杂讯
-  async function fetchPage(url, signal) {
-    const ctl = new AbortController();
-    const timer = setTimeout(() => ctl.abort(), FETCH_TIMEOUT_MS);
-    const onAbort = () => ctl.abort();
-    if (signal) signal.addEventListener('abort', onAbort);
-    try {
-      const doFetch = deps.netFetch || ((u, o) => session.fromPartition('lanli-reader').fetch(u, o));
-      const res = await doFetch(url, { headers: { 'User-Agent': UA, Accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.5', 'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8' }, redirect: 'follow', signal: ctl.signal });
-      const finalUrl = C.validateUrl(res.url) || url;
-      const type = res.headers.get('content-type') || '';
-      if (!isHtmlType(type)) { try { ctl.abort(); } catch { /* ignore */ } throw new C.ReaderError('not-page', NOT_PAGE); }
-      const chunks = []; let size = 0;
-      if (res.body && res.body.getReader) {
-        const rd = res.body.getReader();
-        for (;;) {
-          const { done, value } = await rd.read();
-          if (done) break;
-          size += value.byteLength; chunks.push(Buffer.from(value));
-          if (size >= FETCH_MAX_BYTES) { try { await rd.cancel(); } catch { /* ignore */ } break; }
-        }
-      } else {
-        chunks.push(Buffer.from(await res.arrayBuffer()));
-      }
-      const buf = Buffer.concat(chunks).subarray(0, FETCH_MAX_BYTES);
-      const cs = (/charset=([\w-]+)/i.exec(type) || /<meta[^>]+charset=["']?([\w-]+)/i.exec(buf.subarray(0, 4096).toString('latin1')) || [])[1];
-      let html;
-      try { html = new TextDecoder(cs || 'utf-8').decode(buf); } catch { html = buf.toString('utf8'); }
-      const main = C.extractMain(html, finalUrl);
-      return { ...main, finalUrl, httpStatus: res.status };
-    } catch (e) {
-      if (e && e.code === 'not-page') throw e;
-      if (signal && signal.aborted) throw new C.ReaderError('cancel', 'cancel');
-      return { title: '', siteName: '', text: '', finalUrl: url, httpStatus: 0 };
-    } finally {
-      clearTimeout(timer);
-      if (signal) signal.removeEventListener('abort', onAbort);
-    }
+  // 独立会话 persist:reader：屏蔽图片、视频、字体；下载一律取消
+  let readerSession = null;
+  let currentDownloadHandler = null;
+  function getSession() {
+    if (readerSession) return readerSession;
+    const ses = session.fromPartition('persist:reader');
+    ses.setUserAgent(UA, 'zh-CN,zh;q=0.9,en;q=0.8');
+    ses.webRequest.onBeforeRequest((d, cb) => cb({ cancel: BLOCK_TYPES.has(d.resourceType) }));
+    ses.on('will-download', (e, item) => {
+      try { e.preventDefault(); } catch { /* ignore */ }
+      try { item.cancel(); } catch { /* ignore */ }
+      if (currentDownloadHandler) currentDownloadHandler();
+    });
+    readerSession = ses;
+    return ses;
   }
 
-  // 第二级兜底：隐藏窗口渲染。did-finish-load 后每 500ms 看 body.innerText 长度，连续两次变化 <5% 算稳定，再等 1 秒；
-  // 总上限 15 秒，did-navigate 重新计时。
-  function renderPage(url, signal) {
+  // 一次读取：等 did-finish-load（最多 8 秒）→ 正文长度连续 800ms 不变 → 页内抽取；总上限 15 秒（跳转重新计时）；整个 20 秒超时
+  function renderOnce(url, signal) {
     return new Promise((resolve, reject) => {
-      const ses = session.fromPartition('lanli-reader');
-      let done = false; let win = null; let cap = null; let poll = null; let loaded = false;
-      let lastLen = -1; let stableHits = 0; let finalUrl = url;
+      const ses = getSession();
+      let done = false; let win = null; let cap = null; let poll = null; let loadWait = null; let hard = null;
+      let started = false; let lastLen = -1; let stableSince = 0; let finalUrl = url; let mainType = '';
       const finish = (fn, v) => {
         if (done) return;
         done = true;
-        clearTimeout(cap); clearTimeout(poll);
-        try { ses.removeListener('will-download', onDownload); } catch { /* ignore */ }
+        clearTimeout(cap); clearTimeout(poll); clearTimeout(loadWait); clearTimeout(hard);
+        currentDownloadHandler = null;
         if (signal) signal.removeEventListener('abort', onAbort);
         try { if (win && !win.isDestroyed()) win.destroy(); } catch { /* ignore */ }
         fn(v);
       };
+      const fail = () => finish(resolve, { failed: true, finalUrl });
       const grab = () => {
         if (done) return;
-        win.webContents.executeJavaScript(INPAGE_SCRIPT, true).then((r) => {
+        clearTimeout(poll);
+        win.webContents.executeJavaScriptInIsolatedWorld(999, [{ code: buildInpageScript() }], true).then((r) => {
           if (done) return;
           r = r || {};
-          if (!isHtmlType(r.contentType)) { finish(reject, new C.ReaderError('not-page', NOT_PAGE)); return; }
-          let text = r.content ? C.normalizeText(C.htmlToText(r.content)) : '';
-          let title = r.title; let siteName = r.siteName;
-          if (!text && r.html) { const m = C.extractMain(r.html, finalUrl); text = m.text; title = title || m.title; siteName = siteName || m.siteName; }
-          finish(resolve, { title, siteName: siteName || C.hostOf(finalUrl), text, finalUrl });
-        }).catch(() => finish(resolve, { title: '', siteName: '', text: '', finalUrl }));
+          if (!isHtmlType(mainType) || !isHtmlType(r.contentType)) { finish(reject, new C.ReaderError('not-page', NOT_PAGE)); return; }
+          finish(resolve, { ...r, finalUrl });
+        }).catch((e) => { logger && logger.warn && logger.warn('reader', `extract ${e && e.message}`); fail(); });
       };
       const armCap = () => { clearTimeout(cap); cap = setTimeout(grab, WIN_CAP_MS); };
       const tick = () => {
-        if (done || !loaded) return;
+        if (done) return;
         win.webContents.executeJavaScript('(document.body && document.body.innerText || "").length', true).then((len) => {
           if (done) return;
-          const changed = lastLen < 0 ? 1 : Math.abs(len - lastLen) / Math.max(lastLen, 1);
-          lastLen = len;
-          stableHits = changed < 0.05 ? stableHits + 1 : 0;
-          if (stableHits >= 2) { poll = setTimeout(grab, STABLE_EXTRA_MS); return; }
+          const now = Date.now();
+          if (len !== lastLen) { lastLen = len; stableSince = now; } else if (len > 0 && now - stableSince >= STABLE_MS) { grab(); return; }
           poll = setTimeout(tick, POLL_MS);
         }).catch(() => { if (!done) poll = setTimeout(tick, POLL_MS); });
       };
+      const startPolling = () => {
+        if (done || started) return;
+        started = true; clearTimeout(loadWait); lastLen = -1; stableSince = Date.now();
+        tick();
+      };
       const onAbort = () => finish(reject, new C.ReaderError('cancel', 'cancel'));
-      const onDownload = (e) => { try { e.preventDefault(); } catch { /* ignore */ } finish(reject, new C.ReaderError('not-page', NOT_PAGE)); };
       if (signal) signal.addEventListener('abort', onAbort);
-      ses.on('will-download', onDownload);
-      win = new BrowserWindow({ show: false, width: 1200, height: 900, webPreferences: { sandbox: true, contextIsolation: true, session: ses } });
+      currentDownloadHandler = () => finish(reject, new C.ReaderError('not-page', NOT_PAGE));
+      win = new BrowserWindow({ show: false, width: 1200, height: 900, webPreferences: { session: ses, sandbox: true, contextIsolation: true, nodeIntegration: false, images: false } });
       win.webContents.setAudioMuted(true);
       win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
       win.webContents.on('will-navigate', (e, u) => { if (!/^https?:/i.test(u)) e.preventDefault(); });
+      win.webContents.on('will-redirect', (e, u) => { if (!/^https?:/i.test(u)) e.preventDefault(); });
       win.webContents.on('did-navigate', (_e, u) => {
         finalUrl = C.validateUrl(u) || finalUrl;
-        loaded = false; lastLen = -1; stableHits = 0; clearTimeout(poll); armCap();
+        started = false; clearTimeout(poll); armCap();
+        clearTimeout(loadWait); loadWait = setTimeout(startPolling, LOAD_WAIT_MS);
       });
-      win.webContents.on('did-finish-load', () => {
-        if (done) return;
-        loaded = true; lastLen = -1; stableHits = 0; clearTimeout(poll);
-        poll = setTimeout(tick, POLL_MS);
-      });
+      win.webContents.on('did-finish-load', startPolling);
       win.webContents.on('did-fail-load', (_e, code, _d, _u, isMain) => {
         if (isMain === false || code === -3) return;
-        finish(resolve, { title: '', siteName: '', text: '', finalUrl });
+        fail();
       });
+      // 主文档的 content-type（PDF、图片等不是网页）
+      const wcId = win.webContents.id;
+      const onHeaders = (d) => {
+        if (d.resourceType === 'mainFrame' && d.webContentsId === wcId) {
+          const h = d.responseHeaders || {};
+          const k = Object.keys(h).find((x) => x.toLowerCase() === 'content-type');
+          mainType = k ? String([].concat(h[k])[0] || '') : '';
+          if (!isHtmlType(mainType)) finish(reject, new C.ReaderError('not-page', NOT_PAGE));
+        }
+      };
+      headerWatchers.add(onHeaders);
+      const cleanup = () => headerWatchers.delete(onHeaders);
+      win.on('closed', cleanup);
+      hard = setTimeout(grab, READ_TIMEOUT_MS - 1000);
+      setTimeout(() => { if (!done) fail(); }, READ_TIMEOUT_MS);
       armCap();
-      win.loadURL(url, { userAgent: UA }).catch(() => { /* 由 did-fail-load / 上限处理 */ });
+      win.loadURL(url).catch(() => { /* 由 did-fail-load / 上限处理 */ });
     });
   }
+  const headerWatchers = new Set();
+  let headersHooked = false;
+  function hookHeaders() {
+    if (headersHooked) return;
+    headersHooked = true;
+    getSession().webRequest.onHeadersReceived((d, cb) => { for (const f of headerWatchers) { try { f(d); } catch { /* ignore */ } } cb({}); });
+  }
 
+  // 失败（打不开/超时/没抽到东西）重试一次
   async function readPage(url, signal) {
-    const first = await fetchPage(url, signal);
-    if (C.countChars(first.text) >= C.MIN_TEXT_CHARS && !C.blockedReason(first.finalUrl, first.text)) return { ...first, level: 1 };
-    if (signal && signal.aborted) throw new C.ReaderError('cancel', 'cancel');
-    const second = await renderPage(first.finalUrl || url, signal);
-    // 两级取更长的那份
-    return C.countChars(second.text) >= C.countChars(first.text) ? { ...second, level: 2 } : { ...first, level: 1 };
+    hookHeaders();
+    let last = null;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      if (signal && signal.aborted) throw new C.ReaderError('cancel', 'cancel');
+      const r = await renderOnce(url, signal);
+      const pick = r.failed ? null : C.chooseExtraction(r.df, r.rd);
+      if (pick) {
+        const text = C.cleanMarkdown(pick.markdown);
+        last = {
+          text, finalUrl: r.finalUrl, extractor: pick.extractor,
+          title: pick.title || r.title || '', site: pick.site || '', author: pick.author || '', published: pick.published || '',
+          attempt
+        };
+        if (C.countChars(text) > 0) return last;
+      }
+    }
+    return last || { text: '', finalUrl: url, title: '', site: '', author: '', published: '', extractor: '' };
   }
 
   function llmFetch() {
@@ -209,13 +250,19 @@ function createReaderController(deps) {
         if (controller.signal.aborted || !store.get(id)) return;
         const finalUrl = page.finalUrl || m.url;
         const blocked = C.blockedReason(finalUrl, page.text) || C.blockedReason(m.url, page.text);
-        if (E2E) e2eStatusLog.push({ id, level: page.level, chars: C.countChars(page.text) });
+        const chars = C.countChars(page.text);
+        if (E2E) e2eStatusLog.push({ id, extractor: page.extractor, chars });
+        logger && logger.info && logger.info('reader', `extract ${page.extractor || '-'} ${chars}`);
         if (blocked) { setStatus(id, { status: 'error', error: blocked, finalUrl }); return; }
         store.update(id, {
           text: page.text,
           finalUrl,
+          chars,
+          extractor: page.extractor,
+          author: String(page.author || '').trim(),
+          published: String(page.published || '').trim(),
           title: String(page.title || '').trim() || m.title || C.hostOf(finalUrl),
-          site: String(page.siteName || '').trim() || C.hostOf(finalUrl)
+          site: String(page.site || '').trim() || C.hostOf(finalUrl)
         });
       }
       setStatus(id, { status: 'summarizing', error: null });
@@ -289,9 +336,10 @@ function createReaderController(deps) {
     ipcMain.handle('reader:remove', (_e, id) => remove(id));
     ipcMain.handle('reader:openOriginal', (_e, id) => {
       const m = store.get(id);
-      if (!m || !C.validateUrl(m.url)) return false;
-      if (E2E) { e2eOpen.push(m.url); return true; }
-      shell.openExternal(m.url);
+      const target = m && (C.validateUrl(m.finalUrl) || C.validateUrl(m.url));
+      if (!target) return false;
+      if (E2E) { e2eOpen.push(target); return true; }
+      shell.openExternal(target);
       return true;
     });
     ipcMain.handle('reader:copy', (_e, id) => {
@@ -315,7 +363,8 @@ function createReaderController(deps) {
       setFakeLlm: (f) => { fakeLlm = f || null; return true; },
       openCalls: () => e2eOpen.slice(),
       statusLog: () => e2eStatusLog.slice(),
-      queueLength: () => queue.length + (running ? 1 : 0)
+      queueLength: () => queue.length + (running ? 1 : 0),
+      readPage: (u) => readPage(u)
     }
   };
 }

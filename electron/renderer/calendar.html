@@ -17,6 +17,20 @@
       </div>
       <div class="topbar-right">
         <button
+          class="topbar-icon reader-button"
+          id="reader-button"
+          type="button"
+          aria-label="帮阅"
+        >
+          <svg class="reader-icon" viewBox="0 0 14 14" aria-hidden="true" focusable="false">
+            <path d="M8.5 1.5H3.5a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h3"/>
+            <path d="M8.5 1.5l2.5 2.5v2"/>
+            <path d="M4.5 4.5h3M4.5 7h2"/>
+            <circle cx="9.5" cy="9.5" r="2"/>
+            <path d="M11 11l1.5 1.5"/>
+          </svg>
+        </button>
+        <button
           class="topbar-icon inbox-button"
           id="inbox-button"
           type="button"
@@ -194,6 +208,36 @@
       </div>
     </div>
 
+    <div class="inbox-view reader-view" id="reader-view" hidden>
+      <div class="inbox-head">
+        <button class="settings-back inbox-back" id="reader-back" type="button">‹ 返回</button>
+        <span class="inbox-title" id="reader-title">帮阅</span>
+      </div>
+      <div class="reader-main" id="reader-main">
+        <div class="reader-form">
+          <input class="inbox-search reader-input" id="reader-input" type="text" placeholder="粘贴网址，回车开始读" autocomplete="off" spellcheck="false">
+          <button class="nav-pill reader-go" id="reader-go" type="button">帮我读</button>
+        </div>
+        <div class="reader-msg" id="reader-msg" hidden></div>
+        <div class="inbox-list reader-list" id="reader-list" role="list"></div>
+        <div class="inbox-empty reader-empty" id="reader-empty" hidden><span class="reader-empty-title">还没有读过的网页</span><span class="reader-empty-sub">粘贴一个网址，帮你读完整理成要点</span></div>
+      </div>
+      <div class="reader-detail" id="reader-detail" hidden>
+        <div class="reader-detail-scroll">
+          <div class="reader-d-title" id="reader-d-title"></div>
+          <div class="reader-d-source"><span id="reader-d-meta"></span> · <button type="button" class="reader-link" id="reader-d-open">原文 ›</button></div>
+          <div class="reader-d-h">一句话</div>
+          <div class="reader-d-summary" id="reader-d-summary"></div>
+          <div class="reader-d-h">要点</div>
+          <ol class="reader-d-points" id="reader-d-points"></ol>
+        </div>
+        <div class="reader-d-actions">
+          <button type="button" class="nav-pill" id="reader-d-resum">重新整理</button>
+          <button type="button" class="nav-pill reader-primary" id="reader-d-copy">复制全部</button>
+        </div>
+      </div>
+    </div>
+
     <div class="settings-view" id="settings-view" hidden>
       <div class="settings-head">
         <button class="settings-back" id="settings-back" type="button">‹ 返回</button>
@@ -206,6 +250,7 @@
         <button class="settings-tab" type="button" data-tab="weather">天气</button>
         <button class="settings-tab" type="button" data-tab="clocks">世界时钟</button>
         <button class="settings-tab" type="button" data-tab="tags">标签</button>
+        <button class="settings-tab" type="button" data-tab="reader">帮阅</button>
         <button class="settings-tab" type="button" data-tab="update">升级</button>
       </nav>
       <section class="settings-content" id="settings-content">
@@ -221,6 +266,12 @@
           <div class="tags-err" id="tags-new-err"></div>
           <div class="tags-list" id="tags-list"></div>
           <div class="tags-empty" id="tags-empty" hidden>还没有标签，在上面添加一个</div>
+        </div>
+        <div class="settings-page" id="settings-page-reader" hidden>
+          <div class="settings-label reader-key-label">DeepSeek API Key</div>
+          <div class="tags-add"><input id="reader-key" type="password" placeholder="sk-…" autocomplete="off" spellcheck="false"><button class="nav-pill tags-add-btn" id="reader-key-save" type="button">保存</button><button class="nav-pill tags-add-btn" id="reader-key-del" type="button">删除 Key</button></div>
+          <div class="reader-key-note" id="reader-key-note" hidden>正在使用 EasyLens 的 DeepSeek Key</div>
+          <div class="reader-key-hint">Key 只存在本机，用来把读到的正文交给大模型整理。</div>
         </div>
         <div class="settings-page" id="settings-page-update" hidden>
           <div class="settings-row"><span class="settings-label">当前版本 <span id="settings-version"></span></span></div>
@@ -296,5 +347,6 @@
   <script src="inbox-query.js"></script>
   <script src="region-helpers-browser.js"></script>
   <script src="calendar.js"></script>
+  <script src="reader.js"></script>
 </body>
 </html>

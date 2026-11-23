@@ -1501,3 +1501,37 @@ mark.inbox-hit{background:rgba(255,200,0,.45);color:inherit;border-radius:2px;}
 
 /* 0.1.58：详情 iframe 跟随深浅色，透明底不画白块 */
 .inbox-detail-frame{color-scheme:light dark;background:transparent;}
+
+/* ---- 0.1.60 帮阅 ---- */
+.reader-icon{display:block;width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.3;stroke-linejoin:round;stroke-linecap:round;}
+.reader-button{margin-right:4px;}
+.app:has(#reader-view:not([hidden])) .reader-button{color:var(--accent);}
+.reader-main{flex:1 1 auto;display:flex;flex-direction:column;min-height:0;}
+.reader-main[hidden],.reader-detail[hidden],.reader-msg[hidden],.reader-key-note[hidden]{display:none !important;}
+.reader-form{display:flex;gap:8px;align-items:center;padding:10px 16px 4px;}
+.reader-input{height:28px;font-size:13px;}
+.reader-go{flex:0 0 auto;height:28px;padding:0 12px;font-size:12px;}
+.reader-msg{padding:2px 16px 0;font-size:12px;line-height:18px;color:var(--muted, #8e8e93);}
+.reader-msg.is-error{color:#d9534f;}
+.reader-link{border:0;padding:0;background:none;color:var(--accent);font-size:inherit;cursor:pointer;}
+.reader-msg.is-muted .reader-link{color:var(--muted, #8e8e93);}
+.reader-msg.is-muted .reader-link:hover{color:var(--accent);}
+.reader-empty{flex-direction:column;gap:4px;}
+.reader-empty-title{font-size:13px;color:var(--text);}
+.reader-empty-sub{font-size:12px;}
+.reader-row{position:relative;}
+.reader-status.is-error{color:#d9534f;}
+.reader-detail{flex:1 1 auto;display:flex;flex-direction:column;min-height:0;}
+.reader-detail-scroll{flex:1 1 auto;overflow-y:auto;padding:12px 16px;user-select:text;}
+.reader-d-title{font-size:15px;font-weight:600;line-height:22px;}
+.reader-d-source{margin-top:4px;font-size:11px;color:var(--muted, #8e8e93);}
+.reader-d-h{margin:14px 0 4px;font-size:12px;font-weight:600;color:var(--muted, #8e8e93);}
+.reader-d-summary{font-size:13px;line-height:20px;}
+.reader-d-points{margin:0;padding-left:20px;font-size:13px;line-height:20px;}
+.reader-d-points li{margin:4px 0;}
+.reader-d-actions{flex:0 0 auto;display:flex;justify-content:flex-end;gap:8px;padding:8px 16px 12px;border-top:1px solid var(--line, rgba(128,128,128,.18));}
+.reader-d-actions .nav-pill{height:26px;padding:0 12px;font-size:12px;}
+.reader-primary{background:var(--accent);color:#fff;}
+.reader-key-label{margin-top:4px;font-size:12px;}
+.reader-key-note{margin-top:6px;font-size:12px;color:var(--muted, #8e8e93);}
+.reader-key-hint{margin-top:6px;font-size:11px;color:var(--muted, #8e8e93);}
