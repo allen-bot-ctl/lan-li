@@ -212,6 +212,7 @@
       <div class="inbox-head">
         <button class="settings-back inbox-back" id="reader-back" type="button">‹ 返回</button>
         <span class="inbox-title" id="reader-title">帮阅</span>
+        <span class="inbox-count" id="reader-count"></span>
       </div>
       <div class="reader-main" id="reader-main">
         <div class="reader-form">
@@ -233,7 +234,7 @@
         </div>
         <div class="reader-d-actions">
           <button type="button" class="nav-pill" id="reader-d-resum">重新整理</button>
-          <button type="button" class="nav-pill reader-primary" id="reader-d-copy">复制全部</button>
+          <button type="button" class="nav-pill" id="reader-d-copy">复制全部</button>
         </div>
       </div>
     </div>
@@ -268,10 +269,17 @@
           <div class="tags-empty" id="tags-empty" hidden>还没有标签，在上面添加一个</div>
         </div>
         <div class="settings-page" id="settings-page-reader" hidden>
-          <div class="settings-label reader-key-label">DeepSeek API Key</div>
-          <div class="tags-add"><input id="reader-key" type="password" placeholder="sk-…" autocomplete="off" spellcheck="false"><button class="nav-pill tags-add-btn" id="reader-key-save" type="button">保存</button><button class="nav-pill tags-add-btn" id="reader-key-del" type="button">删除 Key</button></div>
-          <div class="reader-key-note" id="reader-key-note" hidden>正在使用 EasyLens 的 DeepSeek Key</div>
-          <div class="reader-key-hint">Key 只存在本机，用来把读到的正文交给大模型整理。</div>
+          <div class="settings-label reader-llm-h">大模型</div>
+          <div class="reader-llm-grid">
+            <label class="reader-llm-label" for="reader-base">接口地址</label><input class="reader-llm-input" id="reader-base" type="text" placeholder="https://api.deepseek.com" autocomplete="off" spellcheck="false">
+            <span></span><div class="reader-base-err" id="reader-base-err" hidden>接口地址需要以 https:// 开头</div>
+            <label class="reader-llm-label" for="reader-model">模型</label><input class="reader-llm-input" id="reader-model" type="text" placeholder="deepseek-chat" autocomplete="off" spellcheck="false">
+            <span></span><div class="reader-base-err" id="reader-model-err" hidden>模型不能为空</div>
+            <label class="reader-llm-label" for="reader-key">API Key</label><input class="reader-llm-input" id="reader-key" type="password" placeholder="sk-…" autocomplete="off" spellcheck="false">
+            <span></span><div class="reader-llm-btns"><button class="nav-pill tags-add-btn" id="reader-key-save" type="button">保存</button><button class="nav-pill tags-add-btn" id="reader-test" type="button">测试连接</button><button class="nav-pill tags-add-btn" id="reader-key-del" type="button">删除 Key</button></div>
+          </div>
+          <div class="reader-key-status" id="reader-key-status">未配置</div>
+          <div class="reader-key-hint">支持 OpenAI 兼容接口（DeepSeek、OpenAI、通义、Kimi 等）。Key 只存在本机。</div>
         </div>
         <div class="settings-page" id="settings-page-update" hidden>
           <div class="settings-row"><span class="settings-label">当前版本 <span id="settings-version"></span></span></div>

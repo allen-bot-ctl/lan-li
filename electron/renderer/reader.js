@@ -14,6 +14,9 @@
   const list = $('reader-list');
   const empty = $('reader-empty');
   const detail = $('reader-detail');
+  const countEl = $('reader-count');
+  const NO_LLM = '还没配置大模型，去设置 ›';
+  let llmReady = true;
   let items = [];
   let detailId = null;
 
@@ -43,6 +46,15 @@
     msg.hidden = false;
   }
   const toKeySettings = () => openSettingsView('reader');
+  // 没配置大模型：输入框下常驻一行灰字，点了去设置的帮阅 tab；配置好后消失
+  function showNoLlm() { setMsg(NO_LLM, 'muted', toKeySettings); }
+  function syncLlmHint() {
+    return api.getReaderConfig().then((c) => {
+      llmReady = !!(c && c.ready);
+      if (!llmReady) showNoLlm();
+      else if (msg.textContent === NO_LLM) setMsg('');
+    }).catch(() => {});
+  }
 
   function buildRow(m) {
     const row = document.createElement('div');
@@ -92,6 +104,7 @@
 
   function render() {
     list.textContent = '';
+    countEl.textContent = items.length ? `${items.length} 篇` : '';
     empty.hidden = items.length > 0;
     for (const g of IQ.groupByDate(items, new Date())) {
       const head = document.createElement('div');
@@ -121,7 +134,7 @@
   }
   function retry(id) {
     api.retryReader(id).then((r) => {
-      if (r && r.code === 'no-key') setMsg('还没设置大模型 API Key，去设置 ›', 'muted', toKeySettings);
+      if (r && r.code === 'no-key') showNoLlm();
       refresh();
     }).catch(() => {});
   }
@@ -139,8 +152,8 @@
     api.submitReader(url).then((r) => {
       if (!r) return;
       if (!r.ok && r.code === 'invalid-url') { setMsg('请输入以 http:// 或 https:// 开头的网址', 'error'); return; }
-      if (!r.ok && r.code === 'no-key') { setMsg('还没设置大模型 API Key，去设置 ›', 'muted', toKeySettings); return; }
-      setMsg('');
+      if (!r.ok && r.code === 'no-key') { llmReady = false; showNoLlm(); return; }
+      if (llmReady) setMsg('');
       input.value = '';
       if (r.dup) {
         openDetail(r.id);
@@ -172,6 +185,7 @@
       fillDetail(m);
       mainEl.hidden = true;
       detail.hidden = false;
+      countEl.hidden = true;
       back.textContent = '‹ 帮阅';
     }).catch(() => {});
   }
@@ -180,6 +194,7 @@
     detailId = null;
     detail.hidden = true;
     mainEl.hidden = false;
+    countEl.hidden = false;
     titleEl.textContent = '帮阅';
     back.textContent = '‹ 返回';
   }
@@ -194,6 +209,7 @@
     api.setReaderView(true);
     showList();
     setMsg('');
+    syncLlmHint();
     refresh();
     api.readerClipboardUrl().then((u) => { if (u && !input.value) input.value = u; }).catch(() => {});
     setTimeout(() => { input.focus(); input.select(); }, 0);
@@ -219,7 +235,7 @@
     const id = detailId;
     if (!id) return;
     api.resummarizeReader(id).then((r) => {
-      if (r && r.code === 'no-key') { showList(); setMsg('还没设置大模型 API Key，去设置 ›', 'muted', toKeySettings); return; }
+      if (r && r.code === 'no-key') { showList(); showNoLlm(); return; }
       showList(); refresh();
     }).catch(() => {});
   });
@@ -240,23 +256,70 @@
     onEscape();
   });
 
-  // 设置页「帮阅」tab：只放 Key
+  // 设置页「帮阅」tab：接口地址、模型、API Key（OpenAI 兼容）
   const keyInput = $('reader-key');
-  const keyNote = $('reader-key-note');
+  const baseInput = $('reader-base');
+  const modelInput = $('reader-model');
+  const statusEl = $('reader-key-status');
+  const baseErr = $('reader-base-err');
+  const modelErr = $('reader-model-err');
+  const testBtn = $('reader-test');
+  function setStatus(text, kind) {
+    statusEl.textContent = text;
+    statusEl.className = 'reader-key-status' + (kind ? ' is-' + kind : '');
+  }
+  function statusFrom(c) { setStatus(c && c.hasKey ? `已配置 · ${c.model}` : '未配置'); }
+  function formValues() { return { baseURL: baseInput.value, model: modelInput.value, apiKey: keyInput.value }; }
+  // 前端先校验一遍（主进程还会再校验）
+  function checkForm() {
+    const b = baseInput.value.trim();
+    const badBase = !/^https:\/\/[^/\s]+/i.test(b);
+    const badModel = !modelInput.value.trim();
+    baseErr.hidden = !badBase;
+    modelErr.hidden = !badModel;
+    return !badBase && !badModel;
+  }
+  function showSaveError(r) {
+    if (r && r.code === 'bad-url') baseErr.hidden = false;
+    if (r && r.code === 'no-model') modelErr.hidden = false;
+  }
   function renderReaderSettings() {
-    api.getReaderConfig().then((c) => {
+    baseErr.hidden = true; modelErr.hidden = true;
+    return api.getReaderConfig().then((c) => {
       keyInput.value = '';
       keyInput.placeholder = c && c.hasKey ? '已保存，留空不修改' : 'sk-…';
-      keyNote.hidden = !(c && c.usingEasyLens);
+      baseInput.value = (c && c.baseURL) || 'https://api.deepseek.com';
+      modelInput.value = (c && c.model) || 'deepseek-chat';
       $('reader-key-del').disabled = !(c && c.hasKey);
+      statusFrom(c);
+      if (!view.hidden) syncLlmHint();
     }).catch(() => {});
   }
-  $('reader-key-save').addEventListener('click', () => {
-    api.saveReaderConfig({ apiKey: keyInput.value }).then((r) => {
-      if (r && r.ok) { showToast({ type: 'success', title: '已保存' }); renderReaderSettings(); }
+  function saveForm() {
+    if (!checkForm()) return;
+    api.saveReaderConfig(formValues()).then((r) => {
+      if (r && r.ok) { showToast({ type: 'success', title: '已保存' }); renderReaderSettings(); } else showSaveError(r);
     }).catch(() => {});
+  }
+  $('reader-key-save').addEventListener('click', saveForm);
+  for (const el of [keyInput, baseInput, modelInput]) {
+    el.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); saveForm(); } });
+  }
+  baseInput.addEventListener('input', () => { if (!baseErr.hidden) checkForm(); });
+  modelInput.addEventListener('input', () => { if (!modelErr.hidden) checkForm(); });
+  testBtn.addEventListener('click', () => {
+    if (!checkForm()) return;
+    testBtn.disabled = true;
+    testBtn.textContent = '测试中…';
+    api.testReaderConfig(formValues()).then((r) => {
+      if (r && r.ok) setStatus('测试通过', 'ok');
+      else if (r && (r.code === 'bad-url' || r.code === 'no-model')) showSaveError(r);
+      else setStatus((r && r.error) || '测试失败：连不上接口', 'error');
+    }).catch(() => setStatus('测试失败：连不上接口', 'error')).finally(() => {
+      testBtn.disabled = false;
+      testBtn.textContent = '测试连接';
+    });
   });
-  keyInput.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); $('reader-key-save').click(); } });
   $('reader-key-del').addEventListener('click', () => {
     api.removeReaderKey().then(() => { showToast({ type: 'success', title: '已删除 Key' }); renderReaderSettings(); }).catch(() => {});
   });

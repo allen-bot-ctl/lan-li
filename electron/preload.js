@@ -85,6 +85,7 @@ contextBridge.exposeInMainWorld('lanli', {
   getReaderConfig: () => ipcRenderer.invoke('reader:getConfig'),
   saveReaderConfig: (c) => ipcRenderer.invoke('reader:saveConfig', c),
   removeReaderKey: () => ipcRenderer.invoke('reader:removeKey'),
+  testReaderConfig: (c) => ipcRenderer.invoke('reader:testConfig', c),
   setReaderView: (open) => ipcRenderer.send('reader:viewState', open),
   onReaderChanged: (callback) => { ipcRenderer.on('reader:changed', () => callback()); },
   onReaderDone: (callback) => { ipcRenderer.on('reader:done', (_e, p) => callback(p)); },

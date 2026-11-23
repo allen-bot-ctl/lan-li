@@ -4,7 +4,7 @@
 const path = require('node:path');
 const fs = require('node:fs');
 const C = require('./reader-core');
-const { complete } = require('./reader-llm');
+const { complete, ping } = require('./reader-llm');
 
 const READ_TIMEOUT_MS = 20_000; // 整个读取 20 秒
 const LOAD_WAIT_MS = 8_000; // did-finish-load 最多等 8 秒
@@ -62,14 +62,15 @@ ${turndown}
 }
 
 function createReaderController(deps) {
-  const { BrowserWindow, session, ipcMain, shell, clipboard, logger, E2E, root, keyFile, easylensDir } = deps;
+  const { BrowserWindow, session, ipcMain, shell, clipboard, logger, E2E, root, keyFile, prefs } = deps;
   const store = C.createReaderStore({ root });
-  const keys = C.createKeyStore({ file: keyFile, easylensDir });
+  const keys = C.createKeyStore({ file: keyFile, prefs });
   const queue = [];
   let running = null; // { id, abort }
   let fakeLlm = null; // e2e：{ status, points, delayMs, raw }
   const e2eOpen = [];
   const e2eStatusLog = [];
+  const e2eLlmCalls = [];
 
   function notify(m) {
     if (E2E && m) e2eStatusLog.push({ id: m.id, status: m.status });
@@ -207,8 +208,9 @@ function createReaderController(deps) {
 
   function llmFetch() {
     if (!fakeLlm) return globalThis.fetch;
-    return async (_url, opts) => {
+    return async (url, opts) => {
       const f = fakeLlm;
+      try { const b = JSON.parse(opts.body); e2eLlmCalls.push({ url: String(url), model: b.model, ping: b.max_tokens === 1 }); } catch { /* ignore */ }
       if (f.delayMs) await new Promise((r) => setTimeout(r, f.delayMs));
       if (opts && opts.signal && opts.signal.aborted) { const e = new Error('aborted'); e.name = 'AbortError'; throw e; }
       if (f.status && f.status !== 200) return { ok: false, status: f.status, json: async () => ({}) };
@@ -295,7 +297,7 @@ function createReaderController(deps) {
     if (!url) return { ok: false, code: 'invalid-url', error: '请输入以 http:// 或 https:// 开头的网址' };
     const existing = store.findDone(url);
     if (existing) return { ok: true, dup: true, id: existing.id };
-    if (!keys.config().apiKey) return { ok: false, code: 'no-key', error: '还没设置大模型 API Key' };
+    if (!keys.config().apiKey) return { ok: false, code: 'no-key', error: C.NO_KEY };
     const id = C.newId();
     store.save({ id, url, title: C.hostOf(url), site: C.hostOf(url), createdMs: Date.now(), status: 'queued', error: null, summary: '', points: [], model: '' });
     notify(store.get(id));
@@ -308,7 +310,7 @@ function createReaderController(deps) {
     const m = store.get(id);
     if (!m) return { ok: false };
     if (running && running.id === id) return { ok: false };
-    if (!keys.config().apiKey) return { ok: false, code: 'no-key', error: '还没设置大模型 API Key' };
+    if (!keys.config().apiKey) return { ok: false, code: 'no-key', error: C.NO_KEY };
     const hasText = Boolean(store.readText(id));
     store.update(id, { status: 'queued', error: null });
     notify(store.get(id));
@@ -324,6 +326,19 @@ function createReaderController(deps) {
     store.remove(id);
     notify(null);
     return true;
+  }
+
+  // 「测试连接」：用当前填的值（Key 留空用已保存的）；结果只回文案，不回 Key
+  async function testConfig(input) {
+    const r = keys.resolve(input);
+    if (!r.ok) return { ok: false, code: r.code, error: r.error };
+    if (!r.apiKey) return { ok: false, code: 'no-key', error: '测试失败：还没填 API Key' };
+    try {
+      await ping({ configuration: { baseURL: r.baseURL, model: r.model, apiKey: r.apiKey }, fetchImpl: llmFetch() });
+      return { ok: true, text: '测试通过' };
+    } catch (e) {
+      return { ok: false, code: e && e.code, error: C.testErrorText(e) };
+    }
   }
 
   function register() {
@@ -355,6 +370,7 @@ function createReaderController(deps) {
     ipcMain.handle('reader:getConfig', () => keys.getPublic());
     ipcMain.handle('reader:saveConfig', (_e, c) => keys.save(c || {}));
     ipcMain.handle('reader:removeKey', () => keys.removeKey());
+    ipcMain.handle('reader:testConfig', (_e, c) => testConfig(c || {}));
   }
 
   return {
@@ -362,6 +378,7 @@ function createReaderController(deps) {
     e2e: {
       setFakeLlm: (f) => { fakeLlm = f || null; return true; },
       openCalls: () => e2eOpen.slice(),
+      llmCalls: () => e2eLlmCalls.slice(),
       statusLog: () => e2eStatusLog.slice(),
       queueLength: () => queue.length + (running ? 1 : 0),
       readPage: (u) => readPage(u)

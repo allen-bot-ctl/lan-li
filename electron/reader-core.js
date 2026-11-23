@@ -3,7 +3,6 @@
 // 契约 docs/changes/0.1.60-reader.md。
 const path = require('node:path');
 const nodeFs = require('node:fs');
-const os = require('node:os');
 
 // PM 04:30 定稿：超过 3 万字按段落截断，开头约 80%、结尾约 15%
 const MAX_SEND_CHARS = 30000;
@@ -15,6 +14,19 @@ const MIN_TEXT_CHARS = 300;
 const MAX_POINTS = 7;
 const DEFAULT_BASE_URL = 'https://api.deepseek.com';
 const DEFAULT_MODEL = 'deepseek-chat';
+const NO_KEY = '还没配置大模型';
+const BAD_BASE_URL = '接口地址需要以 https:// 开头';
+const NO_MODEL = '模型不能为空';
+
+// 接口地址：只接受 https，去掉末尾的 /；不合法返回 null
+function validateBaseURL(input) {
+  const s = String(input == null ? '' : input).trim();
+  if (!/^https:\/\//i.test(s)) return null;
+  let u;
+  try { u = new URL(s); } catch { return null; }
+  if (u.protocol !== 'https:' || !u.hostname) return null;
+  return s.replace(/\/+$/, '');
+}
 const ACTIVE = ['queued', 'reading', 'summarizing'];
 
 const NO_TEXT = '读不到正文（可能需要登录）';
@@ -142,11 +154,22 @@ function parseSummary(raw) {
 function llmErrorText(err) {
   const code = err && err.code;
   if (code === 'http' && (err.status === 401 || err.status === 403)) return 'API Key 无效，去设置 ›';
+  if (code === 'http' && err.status === 404) return '整理失败：接口地址或模型不对';
   if (code === 'http') return `整理失败：HTTP ${err.status}`;
   if (code === 'network') return '整理失败：连不上接口';
   if (code === 'timeout') return '整理失败：超时';
   if (code === 'bad-json' || code === 'no-points' || code === 'bad-response' || code === 'empty') return '整理失败：返回格式不对';
   return '整理失败：连不上接口';
+}
+
+// 「测试连接」失败 → 设置页状态行
+function testErrorText(err) {
+  const code = err && err.code;
+  if (code === 'http' && (err.status === 401 || err.status === 403)) return '测试失败：API Key 无效';
+  if (code === 'http' && err.status === 404) return '测试失败：接口地址或模型不对';
+  if (code === 'http') return `测试失败：HTTP ${err.status}`;
+  if (code === 'timeout') return '测试失败：超时';
+  return '测试失败：连不上接口';
 }
 
 function toMarkdown(m) {
@@ -215,7 +238,7 @@ function createReaderStore({ root, fs = nodeFs }) {
   return { root, list, get, save, update, saveText, readText, remove, findDone, recover };
 }
 
-function createKeyStore({ file, easylensDir = path.join(os.homedir(), '.easylens'), fs = nodeFs }) {
+function createKeyStore({ file, prefs = null, fs = nodeFs }) {
   function readFileKey(f) {
     try { const v = fs.readFileSync(f, 'utf8').trim(); return v || null; } catch { return null; }
   }
@@ -227,29 +250,52 @@ function createKeyStore({ file, easylensDir = path.join(os.homedir(), '.easylens
     fs.renameSync(tmp, file);
     fs.chmodSync(file, 0o600);
   }
-  const easyKeyFile = () => path.join(easylensDir, 'deepseek-api-key');
-  // 栏历没有自己的 Key 时，回落到 EasyLens 的 Key（接口地址和模型用栏历这边的设置）
+  // 0.1.61：只用栏历自己设置里填的 Key，不读取其他应用的 Key。
+  // 接口地址和模型存 preferences 的 reader.baseURL / reader.model；Key 单独存文件（0600），不进 preferences。
+  function prefsReader() {
+    let p = null;
+    try { p = prefs && prefs.read ? prefs.read() : null; } catch { p = null; }
+    return p && p.reader && typeof p.reader === 'object' ? p.reader : {};
+  }
   function config() {
-    const own = readFileKey(file);
-    const easy = own ? null : readFileKey(easyKeyFile());
-    return { baseURL: DEFAULT_BASE_URL, model: DEFAULT_MODEL, apiKey: own || easy, source: own ? 'own' : (easy ? 'easylens' : 'none') };
+    const r = prefsReader();
+    return {
+      baseURL: validateBaseURL(r.baseURL) || DEFAULT_BASE_URL,
+      model: String(r.model == null ? '' : r.model).trim() || DEFAULT_MODEL,
+      apiKey: readFileKey(file)
+    };
   }
   function getPublic() {
     const c = config();
-    return { baseURL: c.baseURL, model: c.model, hasKey: c.source === 'own', usingEasyLens: c.source === 'easylens', ready: c.source !== 'none' };
+    return { baseURL: c.baseURL, model: c.model, hasKey: !!c.apiKey, ready: !!c.apiKey };
   }
-  // 本版设置里只放 Key（接口地址和模型固定 DeepSeek 默认值）
-  function save({ apiKey } = {}) {
+  // 校验要保存/测试的三项；Key 留空就用已保存的
+  function resolve({ baseURL, apiKey, model } = {}) {
+    const cur = config();
+    const b = baseURL === undefined ? cur.baseURL : validateBaseURL(baseURL);
+    if (!b) return { ok: false, code: 'bad-url', error: BAD_BASE_URL };
+    const m = model === undefined ? cur.model : String(model == null ? '' : model).trim();
+    if (!m) return { ok: false, code: 'no-model', error: NO_MODEL };
     const k = String(apiKey == null ? '' : apiKey).trim();
-    if (k) writeKey(k);
+    return { ok: true, baseURL: b, model: m, apiKey: k || cur.apiKey, newKey: k };
+  }
+  function save(input = {}) {
+    const r = resolve(input);
+    if (!r.ok) return r;
+    if (r.newKey) writeKey(r.newKey);
+    if (prefs && prefs.read && prefs.write) {
+      const p = prefs.read() || {};
+      const reader = { ...(p.reader && typeof p.reader === 'object' ? p.reader : {}), baseURL: r.baseURL, model: r.model };
+      prefs.write({ ...p, reader });
+    }
     return { ok: true, ...getPublic() };
   }
   function removeKey() { try { fs.unlinkSync(file); } catch { /* 没有就算了 */ } return getPublic(); }
-  return { config, getPublic, save, removeKey };
+  return { config, getPublic, resolve, save, removeKey };
 }
 
 module.exports = {
-  NO_TEXT, NOT_PAGE, WECHAT_HINT, X_HINT, ERROR_MARKERS, countChars, cleanMarkdown, chooseExtraction, clipForModel, blockedReason, isNoiseLine, HEAD_CHARS, TAIL_CHARS,
+  NO_TEXT, NOT_PAGE, NO_KEY, BAD_BASE_URL, NO_MODEL, validateBaseURL, testErrorText, WECHAT_HINT, X_HINT, ERROR_MARKERS, countChars, cleanMarkdown, chooseExtraction, clipForModel, blockedReason, isNoiseLine, HEAD_CHARS, TAIL_CHARS,
   MAX_SEND_CHARS, MIN_TEXT_CHARS, MAX_POINTS, DEFAULT_BASE_URL, DEFAULT_MODEL, SYSTEM_PROMPT, ACTIVE,
   ReaderError, validateUrl, dedupeKey, hostOf, newId, normalizeText, buildUserMessage, parseSummary, llmErrorText, toMarkdown,
   createReaderStore, createKeyStore

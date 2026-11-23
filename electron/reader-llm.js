@@ -1,5 +1,5 @@
 'use strict';
-// 0.1.60 帮阅：大模型调用，照搬 EasyLens electron/app/deepseek.js 的 complete()（OpenAI 兼容 /chat/completions，非流式）。
+// 0.1.60 帮阅：大模型调用（OpenAI 兼容 /chat/completions，非流式）。
 // 帮阅额外加 response_format json_object，超时 60 秒。
 class LlmError extends Error {
   constructor(code, message, status = null) { super(message); this.name = 'LlmError'; this.code = code; this.status = status; }
@@ -45,4 +45,26 @@ async function complete({ system, user, configuration, fetchImpl = globalThis.fe
   return trimmed;
 }
 
-module.exports = { LlmError, endpointFor, complete };
+// 0.1.61「测试连接」：最小请求（user「ping」，max_tokens 1，15 秒超时），HTTP 成功就算通过
+async function ping({ configuration, fetchImpl = globalThis.fetch, timeoutMs = 15_000 }) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let response;
+  try {
+    response = await fetchImpl(endpointFor(configuration.baseURL), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${configuration.apiKey}` },
+      body: JSON.stringify({ model: configuration.model, messages: [{ role: 'user', content: 'ping' }], max_tokens: 1, stream: false }),
+      signal: controller.signal
+    });
+  } catch (error) {
+    if (error && error.name === 'AbortError') throw new LlmError('timeout', '请求超时');
+    throw new LlmError('network', `无法连接：${error && error.message}`);
+  } finally {
+    clearTimeout(timer);
+  }
+  if (!response.ok) throw new LlmError('http', `HTTP ${response.status}`, response.status);
+  return true;
+}
+
+module.exports = { LlmError, endpointFor, complete, ping };

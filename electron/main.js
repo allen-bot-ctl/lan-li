@@ -1238,6 +1238,7 @@ function registerE2eHooks() {
     inboxRoot() { return inbox.store.root; },
     readerList() { return reader.store.list(); },
     readerSetFakeLlm(f) { return reader.e2e.setFakeLlm(f); },
+    readerLlmCalls() { return reader.e2e.llmCalls(); },
     readerStatusLog() { return reader.e2e.statusLog(); },
     readerText(id) { return reader.store.readText(id); },
     windowCount() { return BrowserWindow.getAllWindows().length; },
@@ -1401,7 +1402,7 @@ function setupReader() {
     BrowserWindow, session, ipcMain, shell, clipboard, logger, E2E,
     root: path.join(base, 'read'),
     keyFile: path.join(base, 'reader-api-key'),
-    easylensDir: E2E && process.env.LANLI_EASYLENS_DIR ? process.env.LANLI_EASYLENS_DIR : path.join(os.homedir(), '.easylens'),
+    prefs: { read: readPreferences, write: writePreferences },
     onChanged: () => sendWin('reader:changed'),
     onDone: (m) => { if (calendarWindow && !calendarWindow.isDestroyed() && calendarWindow.isVisible()) sendWin('reader:done', { id: m.id, title: m.title }); }
   });

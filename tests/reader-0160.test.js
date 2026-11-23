@@ -144,7 +144,7 @@ test('R1 complete() 请求体：json_object、非流式、Bearer', async () => {
 
 test('R2 Key 文件 0600；对外接口不含明文；留空不修改；删除 Key', () => {
   const d = tmp();
-  const k = C.createKeyStore({ file: path.join(d, 'reader-api-key'), easylensDir: path.join(d, 'none') });
+  const k = C.createKeyStore({ file: path.join(d, 'reader-api-key') });
   assert.equal(k.getPublic().hasKey, false);
   assert.equal(k.getPublic().ready, false);
   assert.equal(k.save({ apiKey: 'sk-secret-123' }).ok, true);
@@ -160,20 +160,3 @@ test('R2 Key 文件 0600；对外接口不含明文；留空不修改；删除 K
   assert.equal(k.getPublic().hasKey, false);
 });
 
-test('R2 没有自己的 Key 时回落到 EasyLens 的 Key；自己的 Key 优先', () => {
-  const d = tmp();
-  const ez = path.join(d, '.easylens');
-  fs.mkdirSync(ez);
-  fs.writeFileSync(path.join(ez, 'deepseek-api-key'), 'sk-ez-1\n');
-  const k = C.createKeyStore({ file: path.join(d, 'u', 'reader-api-key'), easylensDir: ez });
-  const pub = k.getPublic();
-  assert.equal(pub.usingEasyLens, true);
-  assert.equal(pub.ready, true);
-  assert.equal(pub.hasKey, false);
-  assert.ok(!JSON.stringify(pub).includes('sk-ez'));
-  assert.equal(k.config().apiKey, 'sk-ez-1');
-  assert.ok(!fs.existsSync(path.join(d, 'u', 'reader-api-key')), '不复制 EasyLens 的 Key');
-  k.save({ apiKey: 'sk-own' });
-  assert.equal(k.config().apiKey, 'sk-own');
-  assert.equal(k.getPublic().usingEasyLens, false);
-});
