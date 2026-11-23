@@ -228,9 +228,16 @@
     const t = String((p && p.title) || '');
     showToast({ type: 'success', title: `已读完 · ${[...t].slice(0, 12).join('')}` });
   });
-  api.onReaderEscape(() => {
+  function onEscape() {
     if (!detail.hidden) { showList(); refresh(); return; }
     closeReaderView();
+  }
+  // 真机上 Esc 由主进程拦下后发 reader:escape；按键直接到页面时（如自动化测试）在这里兜底
+  api.onReaderEscape(onEscape);
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' || e.isComposing || view.hidden) return;
+    e.preventDefault();
+    onEscape();
   });
 
   // 设置页「帮阅」tab：只放 Key
