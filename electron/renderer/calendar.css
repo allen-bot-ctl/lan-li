@@ -1391,6 +1391,10 @@ label.settings-row{position:relative;cursor:pointer;}
 .inbox-row-actions{position:absolute;right:6px;top:50%;transform:translateY(-50%);display:flex;gap:4px;align-items:center;padding-left:8px;visibility:hidden;}
 .inbox-row:hover .inbox-row-actions,.inbox-row:focus-within .inbox-row-actions{visibility:visible;}
 .inbox-row:hover .inbox-row-time{visibility:hidden;}
+/* 0.1.59：悬停/聚焦时标题让出按钮组宽度 + 8px，时间和缩略图不占位 */
+.inbox-row:hover .inbox-row-time,.inbox-row:focus-within .inbox-row-time,.inbox-row.is-missing .inbox-row-time,
+.inbox-row:hover .inbox-row-thumb,.inbox-row:focus-within .inbox-row-thumb,.inbox-row.is-missing .inbox-row-thumb{display:none;}
+.inbox-row:hover .inbox-row-body,.inbox-row:focus-within .inbox-row-body,.inbox-row.is-missing .inbox-row-body{padding-right:calc(var(--acts-w, 0px) + 8px);}
 .inbox-row.is-missing .inbox-row-actions{visibility:visible;}
 .inbox-row.is-missing .inbox-row-time{visibility:hidden;}
 .inbox-act{height:22px;min-width:22px;padding:0 6px;border-radius:6px;border:0;background:var(--chip);color:var(--text);font-size:11px;cursor:pointer;white-space:nowrap;}

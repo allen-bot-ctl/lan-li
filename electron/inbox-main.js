@@ -328,7 +328,9 @@ function createInboxController(deps) {
 
   function reveal(id) {
     const e = store.get(id);
-    const target = e.meta.type === 'file' && !e.meta.missing ? e.meta.sourcePath : (e.filePath || path.join(e.dir, 'meta.json'));
+    // 0.1.59：只有没丢失的文件类才在 Finder 中显示
+    if (!e || !e.meta || e.meta.type !== 'file' || e.meta.missing) return false;
+    const target = e.meta.sourcePath;
     if (E2E) { e2eOpenCalls.push({ how: 'showItemInFolder', target }); return true; }
     shell.showItemInFolder(target);
     return true;
@@ -444,9 +446,10 @@ function createInboxController(deps) {
       menu.popup({ window: BrowserWindow.fromWebContents(event.sender) });
     });
     ipcMain.on('inbox:contextMenu', (event, id) => {
+      const e = store.get(id);
+      const isFile = !!(e && e.meta && e.meta.type === 'file' && !e.meta.missing);
       const menu = Menu.buildFromTemplate([
-        { id: 'inbox-reveal', label: '在 Finder 中显示', click: () => reveal(id) },
-        { type: 'separator' },
+        ...(isFile ? [{ id: 'inbox-reveal', label: '在 Finder 中显示', click: () => reveal(id) }, { type: 'separator' }] : []),
         { id: 'inbox-delete', label: '删除这条', click: () => { if (!event.sender.isDestroyed()) event.sender.send('inbox:requestDelete', id); } }
       ]);
       if (E2E) { lastMenu = menu; return; }

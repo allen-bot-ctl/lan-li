@@ -1496,7 +1496,8 @@ function buildInboxRow(m) {
       }).catch(() => {});
     }));
   } else {
-    acts.appendChild(rowAction('在 Finder 中显示', 'inbox-act-reveal', () => api.revealInboxEntry(m.id)));
+    // 0.1.59：只有文件类才有「在 Finder 中显示」；文字、图文、链接、图片不是用户的文件
+    if (m.type === 'file' && !m.missing) acts.appendChild(rowAction('在 Finder 中显示', 'inbox-act-reveal', () => api.revealInboxEntry(m.id)));
     acts.appendChild(rowAction('复制', 'inbox-act-copy', () => {
       api.copyInboxEntry(m.id).then(() => showToast({ type: 'success', title: '已复制' })).catch(() => {});
     }));
@@ -1511,6 +1512,11 @@ function buildInboxRow(m) {
   } else {
     row.append(icon, body, time, acts);
   }
+  // 0.1.59：把按钮组实际宽度写进 --acts-w，标题区按它让位
+  const measureActs = () => row.style.setProperty('--acts-w', acts.offsetWidth + 'px');
+  row.addEventListener('mouseenter', measureActs);
+  row.addEventListener('focusin', measureActs);
+  if (m.missing) requestAnimationFrame(measureActs);
   row.addEventListener('click', () => openInboxRow(m));
   row.addEventListener('contextmenu', (e) => { e.preventDefault(); api.inboxContextMenu(m.id); });
   return row;
