@@ -37,7 +37,8 @@ function textToHtml(text) {
 function sanitizeHtml(html) {
   let h = String(html || '');
   h = h.replace(/<!--[\s\S]*?-->/g, '');
-  h = h.replace(/<(script|style|iframe|object|embed|noscript|template|meta|link|base|form)\b[\s\S]*?(<\/\1\s*>|$)/gi, '');
+  // 0.1.58：meta/link/base 是空元素、form 要留里面的字，没有结束标签，不能按「删到结束标签或末尾」处理，否则整段正文被删光
+  h = h.replace(/<(script|style|iframe|object|embed|noscript|template)\b[\s\S]*?(<\/\1\s*>|$)/gi, '');
   h = h.replace(/<\/?(script|style|iframe|object|embed|meta|link|base|form|input|button)\b[^>]*>/gi, '');
   h = h.replace(/\s+on[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '');
   h = h.replace(/\s+(href|src)\s*=\s*("\s*javascript:[^"]*"|'\s*javascript:[^']*'|javascript:[^\s>]+)/gi, '');
@@ -214,7 +215,11 @@ function createInboxStore(opts) {
   function addText(input) {
     const i = typeof input === 'string' ? { text: input } : (input || {});
     let html = i.html ? sanitizeHtml(i.html) : textToHtml(i.text || '');
-    const plain = i.html ? htmlToPlain(stripInline(html)) : String(i.text || '').trim();
+    let plain = i.html ? htmlToPlain(stripInline(html)) : String(i.text || '').trim();
+    // 0.1.58：富文本清洗后没有文字也没有图，退回纯文本，避免存成空白图文
+    if (i.html && !plain && !/<img\b/i.test(html) && String(i.text || '').trim()) {
+      i.html = ''; html = textToHtml(i.text); plain = String(i.text).trim();
+    }
     const lines = plain.split('\n').map((l) => l.trim()).filter(Boolean);
     const rich = Boolean(i.html);
     const fields = { title: (lines[0] || '').slice(0, rich ? 40 : 60) || (rich ? '图文' : '文字'), file: 'content.html', assets: [], rich, preview: plain.replace(/\s+/g, ' ').slice(0, 120), rest: lines.slice(1).join(' ').replace(/\s+/g, ' ').slice(0, 60) };

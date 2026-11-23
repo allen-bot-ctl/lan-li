@@ -1274,6 +1274,8 @@ const inboxEmpty = document.getElementById('inbox-empty');
 const inboxCount = document.getElementById('inbox-count');
 const inboxDetail = document.getElementById('inbox-detail');
 const inboxDetailFrame = document.getElementById('inbox-detail-frame');
+// 0.1.58：详情 iframe 继承页面 CSP（style-src 'self'），这段内联样式靠 calendar.html CSP 里的 sha256 放行；改这里要同步改哈希（单测 R5 会校验）
+const DETAIL_FRAME_CSS = ":root{color-scheme:light dark}body{background:transparent;font:13px -apple-system,\"PingFang SC\",sans-serif;margin:12px 16px;color:#1d1d1f;word-break:break-word}img{max-width:100%;height:auto}@media (prefers-color-scheme:dark){body{color:#f5f5f7}a{color:#6ab0ff}}";
 const inboxBack = document.getElementById('inbox-back');
 const inboxTitle = document.getElementById('inbox-title');
 const inboxButton = document.getElementById('inbox-button');
@@ -1779,7 +1781,7 @@ function openInboxRow(m) {
       inboxDetail.hidden = false;
       inboxTitle.textContent = m.title || '文字';
       inboxBack.textContent = '‹ 收纳';
-      inboxDetailFrame.srcdoc = `<!doctype html><meta charset="utf-8"><style>body{font:13px -apple-system,"PingFang SC",sans-serif;margin:12px 16px;color:#1d1d1f;word-break:break-word}img{max-width:100%;height:auto}@media (prefers-color-scheme:dark){body{color:#f5f5f7}a{color:#6ab0ff}}</style>${r.html}`;
+      inboxDetailFrame.srcdoc = `<!doctype html><meta charset="utf-8"><style>${DETAIL_FRAME_CSS}</style>${r.html}`;
     }
   }).catch(() => {});
 }

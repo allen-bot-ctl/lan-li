@@ -1494,3 +1494,6 @@ mark.inbox-hit{background:rgba(255,200,0,.45);color:inherit;border-radius:2px;}
 .tag-confirm-ok{background:#ff3b30;color:#fff;}
 .inbox-tag-confirm{margin:4px 0 0;padding:6px 10px;border-radius:8px;background:var(--chip);}
 .tags-empty{font-size:12px;color:var(--muted, rgba(128,128,128,.9));padding:16px 0;text-align:center;}
+
+/* 0.1.58：详情 iframe 跟随深浅色，透明底不画白块 */
+.inbox-detail-frame{color-scheme:light dark;background:transparent;}
