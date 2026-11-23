@@ -10,6 +10,7 @@
 const path = require('node:path');
 const nodeFs = require('node:fs');
 const Q = require('./renderer/inbox-query');
+const { createTagLibrary, TAGS_FILE } = require('./tag-library');
 
 const SCHEMA = 1;
 const MAX_ITEMS = 50;
@@ -153,6 +154,8 @@ function createInboxStore(opts) {
   let extraFields = null;   // 0.1.49：本次保存统一附加的 meta（via / sourceApp）
 
   function ensureRoot() { fs.mkdirSync(root, { recursive: true }); }
+  // 0.1.56：标签库，条目 meta.tags 只存 ID。
+  const tags = createTagLibrary({ root, fs, now: () => now().getTime(), randomId: o.randomTagId });
 
   function begin(type, fields) {
     ensureRoot();
@@ -278,7 +281,7 @@ function createInboxStore(opts) {
     if (!fs.existsSync(root)) return [];
     const out = [];
     for (const id of fs.readdirSync(root)) {
-      if (id.endsWith('.tmp') || id.startsWith('.') || id === INDEX) continue;
+      if (id.endsWith('.tmp') || id.startsWith('.') || id === INDEX || id === TAGS_FILE) continue;
       try {
         const meta = JSON.parse(fs.readFileSync(path.join(root, id, 'meta.json'), 'utf8'));
         if (meta.type === 'text') {
@@ -298,7 +301,7 @@ function createInboxStore(opts) {
   function rebuildIndex() { const e = scanMetas(); writeIndex(e); return e; }
 
   function dirIds() {
-    return fs.readdirSync(root).filter((id) => !id.endsWith('.tmp') && !id.startsWith('.') && id !== INDEX).sort().join('|');
+    return fs.readdirSync(root).filter((id) => !id.endsWith('.tmp') && !id.startsWith('.') && id !== INDEX && id !== TAGS_FILE).sort().join('|');
   }
   const idsOf = (entries) => entries.map((m) => m.id).sort().join('|');
 
@@ -318,7 +321,7 @@ function createInboxStore(opts) {
 
   function list() {
     if (!fs.existsSync(root)) return [];
-    const out = readIndex().map((m) => ({ ...m, missing: checkMissing(m) }));
+    const out = readIndex().map((m) => resolveTags({ ...m, missing: checkMissing(m) }));
     return out.sort((a, b) => (b.createdMs || 0) - (a.createdMs || 0) || (a.id < b.id ? 1 : -1));
   }
 
@@ -331,6 +334,7 @@ function createInboxStore(opts) {
     const dir = path.join(root, safeId(id));
     const meta = JSON.parse(fs.readFileSync(path.join(dir, 'meta.json'), 'utf8'));
     meta.missing = checkMissing(meta);
+    resolveTags(meta);
     const res = { meta, dir };
     if (meta.file) res.filePath = path.join(dir, meta.file);
     if (meta.type === 'text') res.html = fs.readFileSync(path.join(dir, 'content.html'), 'utf8');
@@ -350,32 +354,126 @@ function createInboxStore(opts) {
     return m;
   }
 
+  // 0.1.56：对外 meta.tags 是名字（渲染层显示、检索、筛选照旧），meta.tagIds 是 ID；
+  // 磁盘上 meta.tags 只存 ID。库里已删除的 ID 不显示。
+  function resolveTags(meta) {
+    const ids = (meta.tags || []).filter((id) => tags.byId(id));
+    meta.tagIds = ids;
+    meta.tags = ids.map((id) => tags.nameOf(id));
+    return meta;
+  }
+
+  function writeMetaAtomic(dir, meta) {
+    const file = path.join(dir, 'meta.json');
+    const tmp = file + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(meta, null, 2));
+    fs.renameSync(tmp, file);
+  }
+
+  function idsForNames(names) {
+    const clean = Q.cleanTags(names);   // 长度、条数校验（超限抛 tag-limit / tag-too-long）
+    const out = [];
+    for (const n of clean) { const id = tags.ensure(n).id; if (!out.includes(id)) out.push(id); }
+    return out;
+  }
+
   // 每条最多 5 个标签，单个最长 8 字（超限抛 tag-limit / tag-too-long）。
-  function setTags(id, tags) {
+  function setTags(id, names) {
     const { dir, meta } = readMeta(id);
-    meta.tags = Q.cleanTags(tags);
-    return writeMeta(dir, meta);
+    meta.tags = idsForNames(names);
+    return resolveTags(writeMeta(dir, meta));
   }
 
-  function addTag(id, tag) {
+  // 弹层输入：按查重规则复用已有标签，没有才新建。
+  function addTag(id, name) {
     const { dir, meta } = readMeta(id);
-    meta.tags = Q.addTag(meta.tags, tag);
-    return writeMeta(dir, meta);
+    const ids = (meta.tags || []).filter((t) => tags.byId(t));
+    Q.addTag([], name);   // 空、超长校验
+    const existing = tags.byName(name);
+    if (existing && ids.includes(existing.id)) return resolveTags(writeMeta(dir, { ...meta, tags: ids }));
+    if (ids.length >= Q.MAX_TAGS) { const e = new Error(`每条最多 ${Q.MAX_TAGS} 个标签`); e.code = 'tag-limit'; throw e; }
+    const tagId = existing ? existing.id : tags.ensure(name).id;
+    meta.tags = [...ids, tagId];
+    return resolveTags(writeMeta(dir, meta));
   }
 
-  // 标签胶囊右键「删除这个标签」= 从所有条目移除
-  function removeTagEverywhere(tag) {
+  function removeTagFromItem(id, tagIdOrName) {
+    const { dir, meta } = readMeta(id);
+    const t = tags.byId(tagIdOrName) || tags.byName(tagIdOrName);
+    if (!t) return resolveTags(meta);
+    meta.tags = (meta.tags || []).filter((x) => x !== t.id);
+    return resolveTags(writeMeta(dir, meta));
+  }
+
+  function tagUsage(tagId) {
+    let n = 0;
+    for (const m of scanMetas()) if ((m.tags || []).includes(tagId)) n += 1;
+    return n;
+  }
+
+  // 标签管理列表：按创建顺序，带使用条数。
+  function listTags() {
+    const counts = new Map();
+    for (const m of readIndex()) for (const id of m.tags || []) counts.set(id, (counts.get(id) || 0) + 1);
+    return tags.list().map((t) => ({ ...t, count: counts.get(t.id) || 0 }));
+  }
+
+  function createTag(name) { const t = tags.create(name); invalidate(); return t; }
+  // 改名只改 tags.json，不碰任何 meta.json。
+  function renameTag(tagId, name) { const t = tags.rename(tagId, name); cache = null; return t; }
+
+  // 删除标签 = 从库里删掉 + 从所有条目的 meta.tags 去掉这个 ID；条目本身保留。
+  // 参数可以是 ID，也可以是名字（收纳页右键传名字）。返回受影响条数。
+  function deleteTag(tagIdOrName) {
+    const t = tags.byId(tagIdOrName) || tags.byName(tagIdOrName);
+    if (!t) return 0;
     let n = 0;
     for (const m of scanMetas()) {
-      if (!(m.tags || []).includes(tag)) continue;
+      if (!(m.tags || []).includes(t.id)) continue;
       const dir = path.join(root, m.id);
       const meta = JSON.parse(fs.readFileSync(path.join(dir, 'meta.json'), 'utf8'));
-      meta.tags = (meta.tags || []).filter((t) => t !== tag);
-      fs.writeFileSync(path.join(dir, 'meta.json'), JSON.stringify(meta, null, 2));
+      meta.tags = (meta.tags || []).filter((x) => x !== t.id);
+      writeMetaAtomic(dir, meta);
       n += 1;
     }
+    tags.remove(t.id);
     invalidate();
     return n;
+  }
+  const removeTagEverywhere = deleteTag;
+
+  // 0.1.56 迁移（启动时调用，幂等）：
+  //  1. 没有 tags.json → 建库并放入 备忘、重要、临时（老用户也补，重名复用）；
+  //  2. 条目里的字符串标签查库（没有就新建）后换成 ID；改写前先把原 meta.json 备份成 meta.json.bak-0156（只备份一次）；
+  //  3. 单条失败不影响其它条，原文件保持不动（先写 tmp 再 rename）。
+  function migrateTags() {
+    const report = { seeded: false, migrated: 0, failed: 0 };
+    if (!fs.existsSync(root)) ensureRoot();
+    report.seeded = tags.seedIfNew();
+    for (const id of fs.readdirSync(root)) {
+      if (id.endsWith('.tmp') || id.startsWith('.') || id === INDEX || id === TAGS_FILE) continue;
+      const dir = path.join(root, id);
+      const file = path.join(dir, 'meta.json');
+      let meta;
+      try { meta = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { continue; }
+      const raw = Array.isArray(meta.tags) ? meta.tags : [];
+      if (raw.every((t) => tags.byId(t))) continue;
+      try {
+        const ids = [];
+        for (const t of raw) {
+          const tid = tags.byId(t) ? t : (String(t).trim() ? tags.ensure(String(t).slice(0, 64)).id : null);
+          if (tid && !ids.includes(tid)) ids.push(tid);
+        }
+        const bak = path.join(dir, 'meta.json.bak-0156');
+        if (!fs.existsSync(bak)) fs.copyFileSync(file, bak);
+        writeMetaAtomic(dir, { ...meta, tags: ids.slice(0, Q.MAX_TAGS) });
+        report.migrated += 1;
+      } catch {
+        report.failed += 1;
+      }
+    }
+    if (report.migrated) invalidate();
+    return report;
   }
 
   // 删除可撤销：先挪进 .trash/<id>，5 秒后由调用方 purge；撤销则 restore。
@@ -424,7 +522,8 @@ function createInboxStore(opts) {
     purge();
   }
 
-  return { root, save, saveAll, addFile, addImage, addText, addLink, list, get, remove, setTags, addTag, removeTagEverywhere, trash, restore, purge, relink, cleanup, rebuildIndex, readIndex };
+  return { root, tags, save, saveAll, addFile, addImage, addText, addLink, list, get, remove, setTags, addTag, removeTagFromItem, removeTagEverywhere,
+    listTags, createTag, renameTag, deleteTag, tagUsage, migrateTags, trash, restore, purge, relink, cleanup, rebuildIndex, readIndex };
 }
 
 // 渲染进程「松开即保存 · 3 个文件」里的类型描述

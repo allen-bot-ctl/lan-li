@@ -75,6 +75,8 @@ function createInboxController(deps) {
     }
   });
   try { store.cleanup(); } catch { /* ignore */ }
+  // 0.1.56：建标签库（备忘/重要/临时）并把老的字符串标签迁成 ID（幂等，改写前备份 meta.json）。
+  try { const r = store.migrateTags(); if (r.migrated || r.failed || r.seeded) console.log('[inbox] tags migrate', JSON.stringify(r)); } catch (error) { console.error('[inbox] tags migrate failed', error.message); }
 
   let win = null;
   let visible = false;
@@ -371,6 +373,15 @@ function createInboxController(deps) {
     catch (error) { return { ok: false, code: error.code, text: error.message }; }
   }
   function removeTag(tag) { const n = store.removeTagEverywhere(tag); changed(); return n; }
+  // 0.1.56 标签管理
+  function tagResult(fn) {
+    try { const value = fn(); changed(); return { ok: true, value, tags: store.listTags() }; }
+    catch (error) { return { ok: false, code: error.code, text: error.message, existing: error.existing }; }
+  }
+  function listTags() { return store.listTags(); }
+  function createTag(name) { return tagResult(() => store.createTag(name)); }
+  function renameTag(id, name) { return tagResult(() => store.renameTag(id, name)); }
+  function deleteTag(idOrName) { return tagResult(() => store.deleteTag(idOrName)); }
 
   // 复制：文件复制路径、图片复制图片、文字复制富文本、链接复制 URL
   function copyEntry(id) {
@@ -422,6 +433,10 @@ function createInboxController(deps) {
     ipcMain.handle('inbox:relink', (e, id) => relink(id, e));
     ipcMain.handle('inbox:days', () => days());
     ipcMain.handle('inbox:dayCounts', () => dayCounts());
+    ipcMain.handle('inbox:tags', () => listTags());
+    ipcMain.handle('inbox:tagCreate', (_e, name) => createTag(name));
+    ipcMain.handle('inbox:tagRename', (_e, id, name) => renameTag(id, name));
+    ipcMain.handle('inbox:tagDelete', (_e, idOrName) => deleteTag(idOrName));
     ipcMain.on('inbox:tagMenu', (event, tag) => {
       const menu = Menu.buildFromTemplate([{ id: 'inbox-tag-delete', label: '删除这个标签', click: () => removeTag(tag) }]);
       if (E2E) { lastMenu = menu; return; }
