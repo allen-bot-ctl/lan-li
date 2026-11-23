@@ -17,6 +17,7 @@
     "dist": "electron-builder --mac"
   },
   "dependencies": {
+    "linkedom": "^0.18.15",
     "lunar-javascript": "1.7.8"
   },
   "devDependencies": {

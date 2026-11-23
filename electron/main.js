@@ -1392,7 +1392,7 @@ function setupReader() {
   const sendWin = (ch, payload) => { if (calendarWindow && !calendarWindow.isDestroyed()) calendarWindow.webContents.send(ch, payload); };
   reader = createReaderController({
     BrowserWindow, session, ipcMain, shell, clipboard, logger, E2E,
-    root: path.join(base, 'reader'),
+    root: path.join(base, 'read'),
     keyFile: path.join(base, 'reader-api-key'),
     prefsFile: path.join(base, 'reader-config.json'),
     easylensDir: E2E && process.env.LANLI_EASYLENS_DIR ? process.env.LANLI_EASYLENS_DIR : path.join(os.homedir(), '.easylens'),
