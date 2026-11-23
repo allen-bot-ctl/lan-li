@@ -16,9 +16,11 @@ const {
   powerMonitor,
   globalShortcut,
   desktopCapturer,
-  systemPreferences
+  systemPreferences,
+  session
 } = require('electron');
 const path = require('node:path');
+const os = require('node:os');
 const fs = require('node:fs');
 // Electron patches Node's fs so paths inside app.asar look like virtual
 // directories. Recursive rmSync on staging/backup bundles would follow that
@@ -85,6 +87,7 @@ const { createWeatherRefresher } = require('./weather-refresh');
 const { buildAtlas, createClockImageMaker } = require('./tray-clock-image');
 const { createInboxController, frontAppName } = require('./inbox-main');
 const { createRegionController } = require('./region-capture');
+const { createReaderController } = require('./reader-main');
 const { normalizeAccelerator } = require('./region-helpers');
 
 const WINDOW_WIDTH = 580;
@@ -116,6 +119,8 @@ let trayMenuOpen = false;
 let inbox = null; // 0.1.42 收纳
 let region = null; // 0.1.50 框选收纳
 let inboxViewOpen = false;
+let reader = null; // 0.1.60 帮阅
+let readerViewOpen = false;
 let trayMenuHold = false;
 let e2eTrayMenu = null;
 let e2eQuitCalls = 0;
@@ -443,7 +448,9 @@ function createCalendarWindow() {
   calendarWindow.webContents.on('before-input-event', (event, input) => {
     if (input.type === 'keyDown' && (input.key === 'Escape' || input.key === 'Esc')) {
       event.preventDefault();
-      if (settingsViewOpen && inboxViewOpen) {
+      if (settingsViewOpen && readerViewOpen) {
+        calendarWindow.webContents.send('reader:escape');
+      } else if (settingsViewOpen && inboxViewOpen) {
         // 0.1.44：收纳面板里 Esc 先关标签输入框/清空搜索，再退出面板（由渲染层决定）
         calendarWindow.webContents.send('inbox:escape');
       } else if (settingsViewOpen) {
@@ -934,6 +941,7 @@ function registerIpc() {
   ipcMain.handle('settings:setMenuBarShowDate', (_e, value) => setMenuBarShowDate(value));
   ipcMain.on('settings:viewState', (_e, open) => { settingsViewOpen = Boolean(open); });
   ipcMain.on('inbox:viewState', (_e, open) => { inboxViewOpen = Boolean(open); });
+  ipcMain.on('reader:viewState', (_e, open) => { readerViewOpen = Boolean(open); });
 
   ipcMain.handle('weather:get', () => {
     if (!weatherService) return unavailableWeather();
@@ -1228,6 +1236,13 @@ function registerE2eHooks() {
     setHotkey(a) { return setHotkey(a.kind, a.accelerator); },
     hideDropzone() { inbox.hide(); return true; },
     inboxRoot() { return inbox.store.root; },
+    readerList() { return reader.store.list(); },
+    readerSetFakeLlm(f) { return reader.e2e.setFakeLlm(f); },
+    readerStatusLog() { return reader.e2e.statusLog(); },
+    readerOpenCalls() { return reader.e2e.openCalls(); },
+    readerSaveConfig(c) { return reader.keys.save(c); },
+    readerRemoveKey() { return reader.keys.removeKey(); },
+    readerSubmit(u) { return reader.submit(u); },
     inboxList() { return inbox.store.list(); },
     inboxOpenCalls() { return inbox.e2e.openCalls(); },
     inboxMenuItems() { return inbox.e2e.menuItems(); },
@@ -1367,6 +1382,26 @@ function setupInbox() {
   inbox.register();
 }
 
+function readerRoot() {
+  if (E2E && process.env.LANLI_READER_DIR) return process.env.LANLI_READER_DIR;
+  return app.getPath('userData');
+}
+
+function setupReader() {
+  const base = readerRoot();
+  const sendWin = (ch, payload) => { if (calendarWindow && !calendarWindow.isDestroyed()) calendarWindow.webContents.send(ch, payload); };
+  reader = createReaderController({
+    BrowserWindow, session, ipcMain, shell, clipboard, logger, E2E,
+    root: path.join(base, 'reader'),
+    keyFile: path.join(base, 'reader-api-key'),
+    prefsFile: path.join(base, 'reader-config.json'),
+    easylensDir: E2E && process.env.LANLI_EASYLENS_DIR ? process.env.LANLI_EASYLENS_DIR : path.join(os.homedir(), '.easylens'),
+    onChanged: () => sendWin('reader:changed'),
+    onDone: (m) => { if (calendarWindow && !calendarWindow.isDestroyed() && calendarWindow.isVisible()) sendWin('reader:done', { id: m.id, title: m.title }); }
+  });
+  reader.register();
+}
+
 function openInboxPanel() {
   trayMenuHold = true;
   openCalendar();
@@ -1395,6 +1430,7 @@ async function bootstrap() {
   setupWeather();
   registerIpc();
   setupInbox();
+  setupReader();
   setupRegion();
   registerCaptureHotkey();
   createCalendarWindow();

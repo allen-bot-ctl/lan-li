@@ -72,6 +72,24 @@ contextBridge.exposeInMainWorld('lanli', {
   setInboxView: (open) => ipcRenderer.send('inbox:viewState', open),
   onInboxEscape: (callback) => { ipcRenderer.on('inbox:escape', () => callback()); },
   onInboxRequestDelete: (callback) => { ipcRenderer.on('inbox:requestDelete', (_e, id) => callback(id)); },
+  // 0.1.60 帮阅
+  listReader: () => ipcRenderer.invoke('reader:list'),
+  getReader: (id) => ipcRenderer.invoke('reader:get', id),
+  submitReader: (url) => ipcRenderer.invoke('reader:submit', url),
+  retryReader: (id) => ipcRenderer.invoke('reader:retry', id),
+  resummarizeReader: (id) => ipcRenderer.invoke('reader:resummarize', id),
+  removeReader: (id) => ipcRenderer.invoke('reader:remove', id),
+  openReaderOriginal: (id) => ipcRenderer.invoke('reader:openOriginal', id),
+  copyReader: (id) => ipcRenderer.invoke('reader:copy', id),
+  readerClipboardUrl: () => ipcRenderer.invoke('reader:clipboardUrl'),
+  getReaderConfig: () => ipcRenderer.invoke('reader:getConfig'),
+  saveReaderConfig: (c) => ipcRenderer.invoke('reader:saveConfig', c),
+  removeReaderKey: () => ipcRenderer.invoke('reader:removeKey'),
+  importEasyLensKey: () => ipcRenderer.invoke('reader:importEasyLens'),
+  setReaderView: (open) => ipcRenderer.send('reader:viewState', open),
+  onReaderChanged: (callback) => { ipcRenderer.on('reader:changed', () => callback()); },
+  onReaderDone: (callback) => { ipcRenderer.on('reader:done', (_e, p) => callback(p)); },
+  onReaderEscape: (callback) => { ipcRenderer.on('reader:escape', () => callback()); },
   onInboxChanged: (callback) => {
     ipcRenderer.on('inbox:changed', () => callback());
   }
