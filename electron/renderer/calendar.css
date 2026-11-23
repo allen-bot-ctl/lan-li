@@ -1534,10 +1534,10 @@ mark.inbox-hit{background:rgba(255,200,0,.45);color:inherit;border-radius:2px;}
 /* 0.1.61 设置页帮阅：通用大模型配置。三个输入框同宽，标签左对齐 13px；状态行和说明 12px 灰字 */
 .reader-llm-h{margin-top:4px;font-size:13px;font-weight:600;}
 .reader-llm-grid{display:grid;grid-template-columns:auto 1fr;column-gap:10px;row-gap:6px;align-items:center;margin-top:8px;}
-.reader-llm-label{font-size:13px;text-align:left;white-space:nowrap;}
-.reader-llm-input{box-sizing:border-box;width:100%;min-width:0;height:28px;padding:0 8px;border-radius:6px;border:1px solid var(--line, rgba(128,128,128,.3));font-size:13px;outline:none;background:var(--chip);color:var(--text);}
-.reader-base-err{margin-top:-2px;font-size:12px;color:#d9534f;}
-.reader-llm-btns{display:flex;gap:8px;}
+.reader-llm-label{grid-column:1;font-size:13px;text-align:left;white-space:nowrap;}
+.reader-llm-input{grid-column:2;box-sizing:border-box;width:100%;min-width:0;height:28px;padding:0 8px;border-radius:6px;border:1px solid var(--line, rgba(128,128,128,.3));font-size:13px;outline:none;background:var(--chip);color:var(--text);}
+.reader-base-err{grid-column:2;margin-top:-2px;font-size:12px;color:#d9534f;}
+.reader-llm-btns{grid-column:2;display:flex;gap:8px;}
 .reader-key-status{margin-top:10px;font-size:12px;color:var(--muted, #8e8e93);}
 .reader-key-status.is-ok{color:#1e8e3e;}
 .reader-key-status.is-error{color:#d9534f;}

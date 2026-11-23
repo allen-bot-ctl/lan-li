@@ -272,11 +272,11 @@
           <div class="settings-label reader-llm-h">大模型</div>
           <div class="reader-llm-grid">
             <label class="reader-llm-label" for="reader-base">接口地址</label><input class="reader-llm-input" id="reader-base" type="text" placeholder="https://api.deepseek.com" autocomplete="off" spellcheck="false">
-            <span></span><div class="reader-base-err" id="reader-base-err" hidden>接口地址需要以 https:// 开头</div>
+            <div class="reader-base-err" id="reader-base-err" hidden>接口地址需要以 https:// 开头</div>
             <label class="reader-llm-label" for="reader-model">模型</label><input class="reader-llm-input" id="reader-model" type="text" placeholder="deepseek-chat" autocomplete="off" spellcheck="false">
-            <span></span><div class="reader-base-err" id="reader-model-err" hidden>模型不能为空</div>
+            <div class="reader-base-err" id="reader-model-err" hidden>模型不能为空</div>
             <label class="reader-llm-label" for="reader-key">API Key</label><input class="reader-llm-input" id="reader-key" type="password" placeholder="sk-…" autocomplete="off" spellcheck="false">
-            <span></span><div class="reader-llm-btns"><button class="nav-pill tags-add-btn" id="reader-key-save" type="button">保存</button><button class="nav-pill tags-add-btn" id="reader-test" type="button">测试连接</button><button class="nav-pill tags-add-btn" id="reader-key-del" type="button">删除 Key</button></div>
+            <div class="reader-llm-btns"><button class="nav-pill tags-add-btn" id="reader-key-save" type="button">保存</button><button class="nav-pill tags-add-btn" id="reader-test" type="button">测试连接</button><button class="nav-pill tags-add-btn" id="reader-key-del" type="button">删除 Key</button></div>
           </div>
           <div class="reader-key-status" id="reader-key-status">未配置</div>
           <div class="reader-key-hint">支持 OpenAI 兼容接口（DeepSeek、OpenAI、通义、Kimi 等）。Key 只存在本机。</div>

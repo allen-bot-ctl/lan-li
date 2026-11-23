@@ -13,7 +13,6 @@ let base = '';
 let imgHits = 0;
 const SHOTS = path.join(__dirname, 'screenshots');
 const work = fs.mkdtempSync(path.join(os.tmpdir(), 'lanli-e2e-reader-'));
-const ez = path.join(work, 'easylens');
 const hook = (name, arg) => app.evaluate((_e, a) => globalThis.__lanliTest[a.name](a.arg), { name, arg });
 const rowOf = (t) => page.locator('.reader-row', { hasText: t });
 const PARA = '栏历帮阅在本机打开网页，用开源的正文提取算法去掉导航、广告和评论，只把干净的正文交给大模型整理成要点。';
@@ -45,9 +44,8 @@ test.beforeAll(async () => {
   });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   base = `http://127.0.0.1:${server.address().port}`;
-  fs.mkdirSync(ez, { recursive: true });
   const args = process.platform === 'linux' ? ['--no-sandbox', '.'] : ['.'];
-  app = await electron.launch({ args, env: { ...process.env, LANLI_E2E: '1', LANLI_INBOX_DIR: path.join(work, 'inbox'), LANLI_READER_DIR: path.join(work, 'user'), LANLI_EASYLENS_DIR: ez } });
+  app = await electron.launch({ args, env: { ...process.env, LANLI_E2E: '1', LANLI_INBOX_DIR: path.join(work, 'inbox'), LANLI_READER_DIR: path.join(work, 'user') } });
   page = await app.firstWindow();
   await page.waitForSelector('#grid');
 });
@@ -83,20 +81,23 @@ test('R6a 空状态 + 顶栏图标顺序', async () => {
 
 test('R4a 无 Key 提交：不入列，出现「去设置 ›」并能打开设置的帮阅 tab', async () => {
   await submit(`${base}/a?t=${encodeURIComponent('没有Key')}`);
-  await expect(page.locator('#reader-msg')).toHaveText('还没设置大模型 API Key，去设置 ›');
+  await expect(page.locator('#reader-msg')).toHaveText('还没配置大模型，去设置 ›');
   expect((await hook('readerList')).length).toBe(0);
   await page.click('#reader-msg .reader-link');
   await page.waitForSelector('#settings-view:not([hidden])');
   await expect(page.locator('#settings-page-reader')).toBeVisible();
-  await expect(page.locator('#reader-key-note')).toBeHidden();
+  await expect(page.locator('#reader-key-status')).toHaveText('未配置');
   await expect(page.locator('#reader-view')).toBeHidden();
 });
 
-test('R6b 设置页：使用 EasyLens 的 Key 时显示灰字；网址不合法提示红字', async () => {
-  fs.writeFileSync(path.join(ez, 'deepseek-api-key'), 'sk-e2e-easylens\n');
+test('R6b 设置页：填 Key 保存后状态行「已配置」；网址不合法提示红字', async () => {
   await page.click('.settings-tab[data-tab="ui"]');
   await page.click('.settings-tab[data-tab="reader"]');
-  await expect(page.locator('#reader-key-note')).toHaveText('正在使用 EasyLens 的 DeepSeek Key');
+  await page.fill('#reader-base', 'https://api.deepseek.com');
+  await page.fill('#reader-model', 'deepseek-chat');
+  await page.fill('#reader-key', 'sk-e2e-0160');
+  await page.click('#reader-key-save');
+  await expect(page.locator('#reader-key-status')).toHaveText('已配置 · deepseek-chat');
   expect(await page.locator('.settings-tab').allTextContents()).toEqual(['界面设置', '黄历', '天气', '世界时钟', '标签', '帮阅', '升级']);
   for (const scheme of ['dark', 'light']) {
     await page.emulateMedia({ colorScheme: scheme });
