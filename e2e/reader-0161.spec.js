@@ -16,7 +16,6 @@ const work = fs.mkdtempSync(path.join(os.tmpdir(), 'lanli-e2e-reader61-'));
 const hook = (name, arg) => app.evaluate((_e, a) => globalThis.__lanliTest[a.name](a.arg), { name, arg });
 const PARA = '栏历帮阅在本机打开网页，用开源的正文提取算法去掉导航、广告和评论，只把干净的正文交给大模型整理成要点。';
 const articlePage = (title) => `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title></head><body><article><h1>${title}</h1>${Array.from({ length: 6 }, (_, i) => `<p>第${i + 1}段：${PARA}</p>`).join('')}</article></body></html>`;
-const NO_LLM = '还没配置大模型，去设置 ›';
 
 async function shots(name, locator) {
   for (const scheme of ['dark', 'light']) {
@@ -68,20 +67,22 @@ test.beforeAll(async () => {
 });
 test.afterAll(async () => { if (app) await app.close(); if (server) server.close(); });
 
-test('R3a 没有 Key：帮阅页常驻提示；提交不读取、不建记录；点了进设置帮阅 tab', async () => {
+test('R3a 没有 Key：输入框禁用、提示卡；不能提交、不读取、不建记录；「去设置」进设置帮阅 tab（0.1.62 改）', async () => {
   await hook('setClipboardText', 'not a url');
   await openReader();
-  await expect(page.locator('#reader-msg')).toHaveText(NO_LLM);
-  await expect(page.locator('#reader-msg')).toBeVisible();
-  await shots('61-reader-no-llm');
-  await submit(`${base}/a?t=${encodeURIComponent('没配置')}`);
-  await expect(page.locator('#reader-msg')).toHaveText(NO_LLM);
+  await expect(page.locator('#reader-nollm')).toBeVisible();
+  await expect(page.locator('#reader-input')).toBeDisabled();
+  await expect(page.locator('#reader-go')).toBeDisabled();
+  await expect(page.locator('#reader-nollm .reader-nollm-title')).toHaveText('还没配置大模型');
+  // 主进程仍然兜底：直接提交返回 no-key，不读取、不建记录
+  const r = await hook('readerSubmit', `${base}/a?t=${encodeURIComponent('没配置')}`);
+  expect(r.code).toBe('no-key');
   await page.waitForTimeout(600);
   expect((await hook('readerList')).length).toBe(0);
   expect(hits).toBe(0);
   expect((await hook('readerLlmCalls')).length).toBe(0);
   await expect(page.locator('.reader-row')).toHaveCount(0);
-  await page.click('#reader-msg .reader-link');
+  await page.click('#reader-nollm-go');
   await page.waitForSelector('#settings-view:not([hidden])');
   await expect(page.locator('#settings-page-reader')).toBeVisible();
   await expect(page.locator('#reader-view')).toBeHidden();
@@ -142,14 +143,14 @@ test('R3c 保存后回到帮阅页：提示消失，能读完一篇；R4 顶栏�
   await expect(page.locator('#reader-msg')).toBeHidden();
   await expect(page.locator('#reader-count')).toHaveText('');
   await submit(`${base}/a?t=${encodeURIComponent('第一篇文章')}`);
-  await expect(page.locator('.reader-row .reader-status').first()).toHaveText('5 条要点', { timeout: 20000 });
+  await expect(page.locator('.reader-row .reader-status').first()).toHaveText('已整理', { timeout: 20000 });
   await expect(page.locator('#reader-count')).toHaveText('1 篇');
   const calls = (await hook('readerLlmCalls')).filter((c) => !c.ping);
   expect(calls[0].url).toBe('https://api.deepseek.com/chat/completions');
   expect(calls[0].model).toBe('deepseek-chat');
   for (const t of ['第二篇文章', '第三篇文章']) {
     await submit(`${base}/a?t=${encodeURIComponent(t)}`);
-    await expect(page.locator('.reader-row', { hasText: t }).locator('.reader-status')).toHaveText('5 条要点', { timeout: 20000 });
+    await expect(page.locator('.reader-row', { hasText: t }).locator('.reader-status')).toHaveText('已整理', { timeout: 20000 });
   }
   const rows = await page.locator('.reader-row').count();
   expect(rows).toBe(3);
@@ -183,5 +184,6 @@ test('R3d 删除 Key：状态行变「未配置」，帮阅页又出现提示', 
   await page.click('#reader-key-del');
   await expect(page.locator('#reader-key-status')).toHaveText('未配置');
   await openReader();
-  await expect(page.locator('#reader-msg')).toHaveText(NO_LLM);
+  await expect(page.locator('#reader-nollm')).toBeVisible();
+  await expect(page.locator('#reader-input')).toBeDisabled();
 });

@@ -15,7 +15,10 @@
   const empty = $('reader-empty');
   const detail = $('reader-detail');
   const countEl = $('reader-count');
-  const NO_LLM = '还没配置大模型，去设置 ›';
+  const nollm = $('reader-nollm');
+  const PH = '粘贴网址，回车开始读';
+  const PH_OFF = '先配置大模型才能用帮阅';
+  const md = window.MdRender.createMd(window.markdownit);
   let llmReady = true;
   let items = [];
   let detailId = null;
@@ -25,8 +28,9 @@
   const two = (n) => String(n).padStart(2, '0');
   const stamp = (ms) => { const d = new Date(ms); return `${d.getMonth() + 1}月${d.getDate()}日 ${two(d.getHours())}:${two(d.getMinutes())}`; };
 
+  const hasMd = (m) => typeof m.markdown === 'string' && m.markdown.trim() !== '';
   function statusText(m) {
-    if (m.status === 'done') return `${(m.points || []).length} 条要点`;
+    if (m.status === 'done') return hasMd(m) ? '已整理' : `${(m.points || []).length} 条要点`;
     if (m.status === 'error') return m.error || '读取失败';
     return STATUS[m.status] || '';
   }
@@ -46,13 +50,21 @@
     msg.hidden = false;
   }
   const toKeySettings = () => openSettingsView('reader');
-  // 没配置大模型：输入框下常驻一行灰字，点了去设置的帮阅 tab；配置好后消失
-  function showNoLlm() { setMsg(NO_LLM, 'muted', toKeySettings); }
+  // 没配置大模型：输入框和「帮我读」disabled，显示提示卡；配置好后立刻恢复
+  function applyLlm() {
+    input.disabled = !llmReady;
+    go.disabled = !llmReady;
+    input.placeholder = llmReady ? PH : PH_OFF;
+    nollm.hidden = llmReady;
+    nollm.classList.toggle('is-center', !llmReady && items.length === 0);
+    empty.hidden = !llmReady ? true : items.length > 0;
+    if (!llmReady) list.before(nollm);
+  }
+  function showNoLlm() { llmReady = false; applyLlm(); }
   function syncLlmHint() {
     return api.getReaderConfig().then((c) => {
       llmReady = !!(c && c.ready);
-      if (!llmReady) showNoLlm();
-      else if (msg.textContent === NO_LLM) setMsg('');
+      applyLlm();
     }).catch(() => {});
   }
 
@@ -105,7 +117,7 @@
   function render() {
     list.textContent = '';
     countEl.textContent = items.length ? `${items.length} 篇` : '';
-    empty.hidden = items.length > 0;
+    applyLlm();
     for (const g of IQ.groupByDate(items, new Date())) {
       const head = document.createElement('div');
       head.className = 'inbox-group';
@@ -152,8 +164,8 @@
     api.submitReader(url).then((r) => {
       if (!r) return;
       if (!r.ok && r.code === 'invalid-url') { setMsg('请输入以 http:// 或 https:// 开头的网址', 'error'); return; }
-      if (!r.ok && r.code === 'no-key') { llmReady = false; showNoLlm(); return; }
-      if (llmReady) setMsg('');
+      if (!r.ok && r.code === 'no-key') { showNoLlm(); return; }
+      setMsg('');
       input.value = '';
       if (r.dup) {
         openDetail(r.id);
@@ -172,10 +184,20 @@
     bits.push(m.published || stamp(m.createdMs));
     if (m.chars) bits.push(`${m.chars} 字`);
     $('reader-d-meta').textContent = bits.join(' · ');
-    $('reader-d-summary').textContent = m.summary || '';
-    const ol = $('reader-d-points');
-    ol.textContent = '';
-    for (const p of m.points || []) { const li = document.createElement('li'); li.textContent = p; ol.appendChild(li); }
+    const box = $('reader-d-md');
+    const legacy = $('reader-d-legacy');
+    box.textContent = '';
+    if (hasMd(m)) {
+      legacy.hidden = true; box.hidden = false;
+      window.MdRender.renderInto(box, md, m.markdown, document, (href) => api.openReaderLink(href));
+    } else {
+      // 0.1.60/0.1.61 的旧记录：原样用「一句话 / 要点」版式显示，不转换
+      box.hidden = true; legacy.hidden = false;
+      $('reader-d-summary').textContent = m.summary || '';
+      const ol = $('reader-d-points');
+      ol.textContent = '';
+      for (const p of m.points || []) { const li = document.createElement('li'); li.textContent = p; ol.appendChild(li); }
+    }
   }
 
   function openDetail(id) {
@@ -227,6 +249,7 @@
   btn.addEventListener('click', () => { if (view.hidden) openReaderView(); else closeReaderView(); });
   back.addEventListener('click', () => { if (!detail.hidden) { showList(); refresh(); return; } closeReaderView(); });
   go.addEventListener('click', submit);
+  $('reader-nollm-go').addEventListener('click', toKeySettings);
   input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); submit(); } });
   input.addEventListener('input', () => { if (msg.classList.contains('is-error')) setMsg(''); });
   $('reader-d-open').addEventListener('click', () => { if (detailId) api.openReaderOriginal(detailId); });
@@ -285,6 +308,7 @@
   }
   function renderReaderSettings() {
     baseErr.hidden = true; modelErr.hidden = true;
+    loadPrompt();
     return api.getReaderConfig().then((c) => {
       keyInput.value = '';
       keyInput.placeholder = c && c.hasKey ? '已保存，留空不修改' : 'sk-…';
@@ -323,6 +347,27 @@
   $('reader-key-del').addEventListener('click', () => {
     api.removeReaderKey().then(() => { showToast({ type: 'success', title: '已删除 Key' }); renderReaderSettings(); }).catch(() => {});
   });
+
+  // 设置页「整理提示词」
+  const promptEl = $('reader-prompt');
+  const promptErr = $('reader-prompt-err');
+  function promptMsg(text) { promptErr.textContent = text || ''; promptErr.hidden = !text; }
+  function loadPrompt() {
+    promptMsg('');
+    return api.getReaderPrompt().then((r) => { if (r) promptEl.value = r.prompt; }).catch(() => {});
+  }
+  $('reader-prompt-save').addEventListener('click', () => {
+    api.saveReaderPrompt(promptEl.value).then((r) => {
+      if (r && r.ok) { promptMsg(''); promptEl.value = r.prompt; showToast({ type: 'success', title: '提示词已保存' }); }
+      else promptMsg((r && r.error) || '保存失败');
+    }).catch(() => {});
+  });
+  $('reader-prompt-reset').addEventListener('click', () => {
+    api.resetReaderPrompt().then((r) => {
+      if (r && r.ok) { promptMsg(''); promptEl.value = r.prompt; showToast({ type: 'success', title: '已恢复默认' }); }
+    }).catch(() => {});
+  });
+  promptEl.addEventListener('input', () => promptMsg(''));
 
   window.openReaderView = openReaderView;
   window.closeReaderView = closeReaderView;

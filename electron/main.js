@@ -1422,6 +1422,7 @@ function setupReader() {
     BrowserWindow, session, ipcMain, shell, clipboard, logger, E2E,
     root: path.join(base, 'read'),
     keyFile: path.join(base, 'reader-api-key'),
+    promptFile: path.join(base, 'reader-prompt.txt'),
     prefs: { read: readPreferences, write: writePreferences },
     onChanged: () => sendWin('reader:changed'),
     onDone: (m) => { if (calendarWindow && !calendarWindow.isDestroyed() && calendarWindow.isVisible()) sendWin('reader:done', { id: m.id, title: m.title }); }

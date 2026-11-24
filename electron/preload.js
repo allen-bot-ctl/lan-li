@@ -52,6 +52,7 @@ contextBridge.exposeInMainWorld('lanli', {
   openLatestRelease: () => ipcRenderer.send('update:openLatest'),
   // 0.1.42 收纳
   listInbox: () => ipcRenderer.invoke('inbox:list'),
+  addInboxManual: (text) => ipcRenderer.invoke('inbox:addManual', text),
   captureClipboard: () => ipcRenderer.invoke('inbox:captureClipboard'),
   openInboxEntry: (id) => ipcRenderer.invoke('inbox:open', id),
   revealInboxEntry: (id) => ipcRenderer.invoke('inbox:reveal', id),
@@ -85,6 +86,10 @@ contextBridge.exposeInMainWorld('lanli', {
   getReaderConfig: () => ipcRenderer.invoke('reader:getConfig'),
   saveReaderConfig: (c) => ipcRenderer.invoke('reader:saveConfig', c),
   removeReaderKey: () => ipcRenderer.invoke('reader:removeKey'),
+  openReaderLink: (href) => ipcRenderer.invoke('reader:openLink', href),
+  getReaderPrompt: () => ipcRenderer.invoke('reader:getPrompt'),
+  saveReaderPrompt: (t) => ipcRenderer.invoke('reader:savePrompt', t),
+  resetReaderPrompt: () => ipcRenderer.invoke('reader:resetPrompt'),
   testReaderConfig: (c) => ipcRenderer.invoke('reader:testConfig', c),
   setReaderView: (open) => ipcRenderer.send('reader:viewState', open),
   onReaderChanged: (callback) => { ipcRenderer.on('reader:changed', () => callback()); },

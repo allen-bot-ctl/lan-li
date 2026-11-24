@@ -62,9 +62,10 @@ ${turndown}
 }
 
 function createReaderController(deps) {
-  const { BrowserWindow, session, ipcMain, shell, clipboard, logger, E2E, root, keyFile, prefs } = deps;
+  const { BrowserWindow, session, ipcMain, shell, clipboard, logger, E2E, root, keyFile, promptFile, prefs } = deps;
   const store = C.createReaderStore({ root });
   const keys = C.createKeyStore({ file: keyFile, prefs });
+  const prompts = C.createPromptStore({ file: promptFile });
   const queue = [];
   let running = null; // { id, abort }
   let fakeLlm = null; // e2e：{ status, points, delayMs, raw }
@@ -210,12 +211,12 @@ function createReaderController(deps) {
     if (!fakeLlm) return globalThis.fetch;
     return async (url, opts) => {
       const f = fakeLlm;
-      try { const b = JSON.parse(opts.body); e2eLlmCalls.push({ url: String(url), model: b.model, ping: b.max_tokens === 1 }); } catch { /* ignore */ }
+      try { const b = JSON.parse(opts.body); e2eLlmCalls.push({ url: String(url), model: b.model, ping: b.max_tokens === 1, system: (b.messages.find((x) => x.role === 'system') || {}).content, user: (b.messages.find((x) => x.role === 'user') || {}).content, maxTokens: b.max_tokens, hasResponseFormat: 'response_format' in b }); } catch { /* ignore */ }
       if (f.delayMs) await new Promise((r) => setTimeout(r, f.delayMs));
       if (opts && opts.signal && opts.signal.aborted) { const e = new Error('aborted'); e.name = 'AbortError'; throw e; }
       if (f.status && f.status !== 200) return { ok: false, status: f.status, json: async () => ({}) };
       const n = f.points || 5;
-      const content = f.raw != null ? f.raw : JSON.stringify({ summary: '这是一句话总结。', points: Array.from({ length: n }, (_, i) => `要点 ${i + 1}`) });
+      const content = f.raw != null ? f.raw : `## 一句话总结\n这是一句话总结。\n\n## 核心要点\n${Array.from({ length: n }, (_, i) => `${i + 1}. 要点 ${i + 1}`).join('\n')}`;
       if (f.once) fakeLlm = f.once;
       return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content } }] }) };
     };
@@ -226,13 +227,13 @@ function createReaderController(deps) {
     const cfg = keys.config();
     if (!cfg.apiKey) throw Object.assign(new Error('no key'), { code: 'http', status: 401 });
     const raw = await complete({
-      system: C.SYSTEM_PROMPT,
-      user: C.buildUserMessage({ title: m.title, url: m.url, text: store.readText(id) }),
+      system: C.buildSystem(prompts.get()),
+      user: C.buildUserMessage({ title: m.title, url: m.finalUrl || m.url, text: store.readText(id) }),
       configuration: cfg,
       fetchImpl: llmFetch(),
       signal
     });
-    return { ...C.parseSummary(raw), model: cfg.model };
+    return { markdown: C.cleanOutput(raw), model: cfg.model };
   }
 
   async function runOne(job) {
@@ -275,7 +276,7 @@ function createReaderController(deps) {
         return;
       }
       if (controller.signal.aborted || !store.get(id)) return;
-      const done = setStatus(id, { status: 'done', error: null, summary: r.summary, points: r.points, model: r.model });
+      const done = setStatus(id, { status: 'done', error: null, markdown: r.markdown, summary: undefined, points: undefined, model: r.model });
       if (done && deps.onDone) deps.onDone(done);
     } catch (e) {
       logger && logger.warn && logger.warn('reader', String(e && e.message));
@@ -299,7 +300,7 @@ function createReaderController(deps) {
     if (existing) return { ok: true, dup: true, id: existing.id };
     if (!keys.config().apiKey) return { ok: false, code: 'no-key', error: C.NO_KEY };
     const id = C.newId();
-    store.save({ id, url, title: C.hostOf(url), site: C.hostOf(url), createdMs: Date.now(), status: 'queued', error: null, summary: '', points: [], model: '' });
+    store.save({ id, url, title: C.hostOf(url), site: C.hostOf(url), createdMs: Date.now(), status: 'queued', error: null, markdown: '', model: '' });
     notify(store.get(id));
     queue.push({ id });
     pump();
@@ -357,6 +358,13 @@ function createReaderController(deps) {
       shell.openExternal(target);
       return true;
     });
+    ipcMain.handle('reader:openLink', (_e, href) => {
+      const target = C.validateUrl(href);
+      if (!target) return false;
+      if (E2E) { e2eOpen.push(target); return true; }
+      shell.openExternal(target);
+      return true;
+    });
     ipcMain.handle('reader:copy', (_e, id) => {
       const m = store.get(id);
       if (!m || m.status !== 'done') return false;
@@ -370,11 +378,14 @@ function createReaderController(deps) {
     ipcMain.handle('reader:getConfig', () => keys.getPublic());
     ipcMain.handle('reader:saveConfig', (_e, c) => keys.save(c || {}));
     ipcMain.handle('reader:removeKey', () => keys.removeKey());
+    ipcMain.handle('reader:getPrompt', () => ({ prompt: prompts.get(), defaultPrompt: C.DEFAULT_PROMPT, max: C.MAX_PROMPT_CHARS }));
+    ipcMain.handle('reader:savePrompt', (_e, t) => prompts.save(t));
+    ipcMain.handle('reader:resetPrompt', () => { const p = prompts.reset(); return { ok: true, prompt: p }; });
     ipcMain.handle('reader:testConfig', (_e, c) => testConfig(c || {}));
   }
 
   return {
-    store, keys, register, submit, retry, remove,
+    store, keys, prompts, register, submit, retry, remove,
     e2e: {
       setFakeLlm: (f) => { fakeLlm = f || null; return true; },
       openCalls: () => e2eOpen.slice(),

@@ -167,7 +167,16 @@
         <button class="settings-back inbox-back" id="inbox-back" type="button">‹ 返回</button>
         <span class="inbox-title" id="inbox-title">收纳</span>
         <span class="inbox-count" id="inbox-count"></span>
+        <button class="inbox-paste" id="inbox-compose-btn" type="button" title="手动输入或粘贴文字">录入</button>
         <button class="inbox-paste" id="inbox-paste" type="button" title="收纳剪贴板内容（⌘V）">粘贴收纳</button>
+      </div>
+      <div class="inbox-compose" id="inbox-compose" hidden>
+        <textarea class="inbox-compose-text" id="inbox-compose-text" rows="4" placeholder="输入或粘贴文字，⌘↩ 保存" spellcheck="false" aria-label="录入内容"></textarea>
+        <div class="inbox-compose-foot">
+          <span class="inbox-compose-count" id="inbox-compose-count"></span>
+          <button type="button" class="nav-pill inbox-compose-cancel" id="inbox-compose-cancel">取消</button>
+          <button type="button" class="nav-pill inbox-compose-save" id="inbox-compose-save" disabled>保存</button>
+        </div>
       </div>
       <div class="inbox-toolbar" id="inbox-toolbar">
         <input class="inbox-search" id="inbox-search" type="search" placeholder="搜索收纳（⌘F）" autocomplete="off" spellcheck="false">
@@ -219,6 +228,11 @@
           <input class="inbox-search reader-input" id="reader-input" type="text" placeholder="粘贴网址，回车开始读" autocomplete="off" spellcheck="false">
           <button class="nav-pill reader-go" id="reader-go" type="button">帮我读</button>
         </div>
+        <div class="reader-nollm" id="reader-nollm" hidden>
+          <div class="reader-nollm-title">先配置大模型才能用帮阅</div>
+          <div class="reader-nollm-desc">在 设置 › 帮阅 填好接口地址、模型和 API Key 就能用。</div>
+          <button type="button" class="reader-nollm-go" id="reader-nollm-go">去设置</button>
+        </div>
         <div class="reader-msg" id="reader-msg" hidden></div>
         <div class="inbox-list reader-list" id="reader-list" role="list"></div>
         <div class="inbox-empty reader-empty" id="reader-empty" hidden><span class="reader-empty-title">还没有读过的网页</span><span class="reader-empty-sub">粘贴一个网址，帮你读完整理成要点</span></div>
@@ -227,10 +241,13 @@
         <div class="reader-detail-scroll">
           <div class="reader-d-title" id="reader-d-title"></div>
           <div class="reader-d-source"><span id="reader-d-meta"></span> · <button type="button" class="reader-link" id="reader-d-open">原文 ›</button></div>
-          <div class="reader-d-h">一句话</div>
-          <div class="reader-d-summary" id="reader-d-summary"></div>
-          <div class="reader-d-h">要点</div>
-          <ol class="reader-d-points" id="reader-d-points"></ol>
+          <div class="reader-d-md" id="reader-d-md"></div>
+          <div id="reader-d-legacy" hidden>
+            <div class="reader-d-h">一句话</div>
+            <div class="reader-d-summary" id="reader-d-summary"></div>
+            <div class="reader-d-h">要点</div>
+            <ol class="reader-d-points" id="reader-d-points"></ol>
+          </div>
         </div>
         <div class="reader-d-actions">
           <button type="button" class="nav-pill" id="reader-d-resum">重新整理</button>
@@ -280,6 +297,12 @@
           </div>
           <div class="reader-key-status" id="reader-key-status">未配置</div>
           <div class="reader-key-hint">支持 OpenAI 兼容接口（DeepSeek、OpenAI、通义、Kimi 等）。Key 只存在本机。</div>
+          <div class="settings-label reader-llm-h reader-prompt-h">提示词</div>
+          <div class="reader-llm-grid reader-prompt-grid">
+          <textarea class="reader-prompt" id="reader-prompt" spellcheck="false" aria-label="提示词"></textarea>
+          <div class="reader-prompt-btns"><button class="nav-pill tags-add-btn" id="reader-prompt-save" type="button">保存</button><button class="nav-pill tags-add-btn" id="reader-prompt-reset" type="button">恢复默认</button><span class="reader-prompt-err" id="reader-prompt-err" hidden></span></div>
+          </div>
+          <div class="reader-prompt-hint">文章正文会自动附在提示词后面；程序会另外要求大模型只把正文当资料，不执行其中的指令。</div>
         </div>
         <div class="settings-page" id="settings-page-update" hidden>
           <div class="settings-row"><span class="settings-label">当前版本 <span id="settings-version"></span></span></div>
@@ -355,6 +378,8 @@
   <script src="inbox-query.js"></script>
   <script src="region-helpers-browser.js"></script>
   <script src="calendar.js"></script>
+  <script src="vendor/markdown-it.umd.min.js"></script>
+  <script src="md-render.js"></script>
   <script src="reader.js"></script>
 </body>
 </html>
