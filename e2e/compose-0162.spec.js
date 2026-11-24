@@ -9,7 +9,15 @@ let app = null;
 let page = null;
 const SHOTS = path.join(__dirname, 'screenshots');
 const work = fs.mkdtempSync(path.join(os.tmpdir(), 'lanli-e2e-p62-'));
-const hook = (name, arg) => app.evaluate((_e, a) => globalThis.__lanliTest[a.name](a.arg), { name, arg });
+// Linux 上主进程 evaluate 偶尔和窗口显示/隐藏撞车（garbage collected），只对这种瞬时错误重试
+const hook = async (name, arg) => {
+  for (let i = 0; ; i += 1) {
+    try { return await app.evaluate((_e, a) => globalThis.__lanliTest[a.name](a.arg), { name, arg }); } catch (e) {
+      if (i >= 2 || !/garbage collected/.test(String(e))) throw e;
+      await new Promise((r) => setTimeout(r, 150));
+    }
+  }
+};
 const pinned = () => hook('isPinned');
 const visible = () => hook('isVisible');
 

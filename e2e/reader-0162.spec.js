@@ -13,7 +13,15 @@ let base = '';
 let hits = 0;
 const SHOTS = path.join(__dirname, 'screenshots');
 const work = fs.mkdtempSync(path.join(os.tmpdir(), 'lanli-e2e-reader62-'));
-const hook = (name, arg) => app.evaluate((_e, a) => globalThis.__lanliTest[a.name](a.arg), { name, arg });
+// Linux 上主进程 evaluate 偶尔和窗口显示/隐藏撞车（garbage collected），只对这种瞬时错误重试
+const hook = async (name, arg) => {
+  for (let i = 0; ; i += 1) {
+    try { return await app.evaluate((_e, a) => globalThis.__lanliTest[a.name](a.arg), { name, arg }); } catch (e) {
+      if (i >= 2 || !/garbage collected/.test(String(e))) throw e;
+      await new Promise((r) => setTimeout(r, 150));
+    }
+  }
+};
 const PARA = '栏历帮阅在本机打开网页，用开源的正文提取算法去掉导航、广告和评论，只把干净的正文交给大模型整理成要点。';
 const articlePage = (title) => `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title></head><body><article><h1>${title}</h1>${Array.from({ length: 6 }, (_, i) => `<p>第${i + 1}段：${PARA}</p>`).join('')}</article></body></html>`;
 const DEFAULT_PROMPT_HEAD = '你是阅读助手。请用简体中文整理这篇文章，原文是外语也用中文。按下面的结构输出：';
