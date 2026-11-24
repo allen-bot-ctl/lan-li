@@ -66,7 +66,14 @@ test('收纳文字详情专注阅读，返回保留筛选、日期、滚动位�
       await page.locator('#inbox-view').screenshot({ path: info.outputPath(`detail-${scheme}.png`) });
     }
     await page.frameLocator('#inbox-detail-frame').locator('p').first().click();
-    await page.keyboard.press('Escape');
+    await expect(page.locator('#inbox-detail-frame')).toBeFocused();
+    // CDP page.keyboard targets the outer page. Exercise the real
+    // BrowserWindow before-input-event path, even with the iframe focused.
+    await app.evaluate(({ BrowserWindow }) => {
+      const win = BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().endsWith('/calendar.html'));
+      win.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
+      win.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });
+    });
     await expect(detail).toBeHidden();
     await expect(search).toHaveValue('回归资料');
     await expect(row).toBeFocused();

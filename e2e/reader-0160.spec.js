@@ -47,7 +47,7 @@ test.beforeAll(async () => {
   const args = process.platform === 'linux' ? ['--no-sandbox', '.'] : ['.'];
   app = await electron.launch({ args, env: { ...process.env, LANLI_E2E: '1', LANLI_INBOX_DIR: path.join(work, 'inbox'), LANLI_READER_DIR: path.join(work, 'user') } });
   page = await app.firstWindow();
-  await page.waitForSelector('#grid');
+  await page.waitForFunction(() => document.readyState === 'complete' && typeof window.openReaderView === 'function');
 });
 test.afterAll(async () => { if (app) await app.close(); if (server) server.close(); });
 
