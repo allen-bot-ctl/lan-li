@@ -383,14 +383,24 @@ test('B-C8 截图：40 接纳框空闲、41 橙框+件数', async () => {
 });
 
 test('B-C6 删除 index.json 后重启，由 meta.json 重建', async () => {
+  const title = 'B-C6 独立重启笔记';
+  expect((await hook('inboxDrop', {html:'<p><b>B-C6 独立重启笔记</b></p>', text:title})).ok).toBe(true);
+  const checkpoint = (await entries()).find(m => m.title === title);
+  expect(checkpoint).toBeDefined();
+  await hook('inboxAddTag', {id:checkpoint.id, tag:'工作'});
+  await hook('inboxAddTag', {id:checkpoint.id, tag:'读书'});
   const before = (await entries()).map((m) => m.id).sort();
+  expect(before).toContain(checkpoint.id);
   await app.close(); app = null;
   fs.rmSync(path.join(inboxDir, 'index.json'), { force: true });
   await launch();
-  await hook('openInboxPanel');
+  await page.waitForLoadState('domcontentloaded');
+  await page.locator('#inbox-button').click();
+  await expect(page.locator('#inbox-view')).toBeVisible();
   await expect(page.locator('.inbox-row')).toHaveCount(before.length);
   expect((await entries()).map((m) => m.id).sort()).toEqual(before);
   expect(fs.existsSync(path.join(inboxDir, 'index.json'))).toBe(true);
-  const m = (await entries()).find((x) => x.title.startsWith('Quarterly'));
+  const m = (await entries()).find(x => x.id === checkpoint.id);
   expect(m.tags).toEqual(['工作', '读书']);
+  await expect(rowOf(title)).toBeVisible();
 });
