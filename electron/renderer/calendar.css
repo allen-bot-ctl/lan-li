@@ -1619,3 +1619,4 @@ mark.inbox-hit{background:rgba(255,200,0,.45);color:inherit;border-radius:2px;}
 .prompt-ai-err{margin-top:8px;font-size:12px;color:#d9534f;}
 .quit-actions .quit-primary{background:var(--accent);color:#fff;}
 .quit-actions .nav-pill:disabled{opacity:.45;cursor:default;}
+.prompt-ai-card [hidden]{display:none !important;}
