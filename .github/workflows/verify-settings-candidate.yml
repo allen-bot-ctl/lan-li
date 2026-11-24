@@ -1,0 +1,28 @@
+name: Verify settings candidate
+
+on:
+  push:
+    branches: [integration/settings-layout-v0.1.66]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: macos-15-intel
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npm test
+      - name: Focused settings regression
+        run: npm run e2e -- reader-0162 settings-layout
+
+      - name: Verify R6 independently
+        run: npm run e2e -- reader-0162 -g '^R6 '
