@@ -1,4 +1,4 @@
-name: Dispatch authorized LanLi v0.1.65
+name: Recover queued LanLi v0.1.65 Release
 
 on:
   push:
@@ -11,39 +11,45 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  dispatch:
+  recover:
     if: github.repository == 'allen-bot-ctl/lan-li' && github.actor_id == '352863755' && github.triggering_actor == 'allen-bot-ctl' && github.run_attempt == '1'
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
       actions: write
     env:
       GH_TOKEN: ${{ github.token }}
       EXPECTED: 8ef5859c11ac64412ec5c6d79552cbd8c1cdf685
-      BASELINE: cc7451f774bd351afdadc452e77cdd3b4d04381d
-      CI_SHA: 815f5b99d158ee286c34b8ac9f6244db31874e88
+      ORIGINAL_RUN: 45354331431
+      ORIGINAL_JOB: 138308296655
     steps:
-      - name: Confirm exact version, master, existing release and the successful UI verification
+      - name: Stop only the unassigned macos-latest run, then try native Intel
         shell: bash
         run: |
           set -euo pipefail
           api="repos/$GITHUB_REPOSITORY"
-          test "$(gh api "$api/git/ref/heads/master" --jq .object.sha)" = "$EXPECTED"
-          test "$(gh api "$api/git/ref/tags/v0.1.64" --jq .object.sha)" = "$BASELINE"
-          test "$(gh api "$api/releases/latest" --jq .tag_name)" = v0.1.64
-          test "$(gh api "$api/actions/runs/45350993015" --jq '[.head_sha,.conclusion,.head_branch]|join(" ")')" = "$CI_SHA success integration/settings-layout"
-          test "$(gh api "$api/contents/package.json?ref=$EXPECTED" --jq .content | base64 -d | jq -r .version)" = 0.1.65
-          test "$(gh api "$api/contents/release-notes/v0.1.65.md?ref=$EXPECTED" --jq .size)" -gt 0
-          test "$(gh api "$api/git/matching-refs/tags/v0.1.65" --jq '[.[] | select(.ref == "refs/tags/v0.1.65")] | length')" = 0
-          if gh api "$api/releases/tags/v0.1.65" >/dev/null 2>"$RUNNER_TEMP/lan-li-existing.err"; then
-            echo "Release already exists; refusing to replace"
-            exit 1
-          fi
-          grep -q 'HTTP 404' "$RUNNER_TEMP/lan-li-existing.err"
-          gh api --method POST "$api/git/refs" -f ref=refs/tags/v0.1.65 -f sha="$EXPECTED" --jq '[.ref,.object.sha] | @tsv'
-          test "$(gh api "$api/git/ref/tags/v0.1.65" --jq .object.sha)" = "$EXPECTED"
-          test "$(gh api "$api/git/ref/heads/master" --jq .object.sha)" = "$EXPECTED"
-          if ! gh workflow run release.yml -R "$GITHUB_REPOSITORY" --ref master -f tag=v0.1.65 -f runner=macos-latest; then
-            echo "::error::Tag exists; verify exact SHA and existing Release runs. Do not retag or rerun the one-shot."
-            exit 1
-          fi
+          check_refs() {
+            test "$(gh api "$api/git/ref/heads/master" --jq .object.sha)" = "$EXPECTED"
+            test "$(gh api "$api/git/ref/tags/v0.1.65" --jq .object.sha)" = "$EXPECTED"
+            test "$(gh api "$api/releases/latest" --jq .tag_name)" = v0.1.64
+            if gh api "$api/releases/tags/v0.1.65" >/dev/null 2>"$RUNNER_TEMP/existing.err"; then
+              echo "Release already exists; refusing to replace it"
+              exit 1
+            fi
+            grep -q 'HTTP 404' "$RUNNER_TEMP/existing.err"
+          }
+          check_refs
+          test "$(gh api "$api/actions/runs/$ORIGINAL_RUN" --jq '[.head_sha,.head_branch,.event,.status,.path] | join(" ")')" = "$EXPECTED master workflow_dispatch queued .github/workflows/release.yml"
+          test "$(gh api "$api/actions/jobs/$ORIGINAL_JOB" --jq '[.status,.run_id] | @tsv')" = "$(printf 'queued\t%s' "$ORIGINAL_RUN")"
+          gh api --method POST "$api/actions/runs/$ORIGINAL_RUN/cancel"
+          for attempt in {1..40}; do
+            status="$(gh api "$api/actions/runs/$ORIGINAL_RUN" --jq '[.status,(.conclusion // "-")] | join(" ")')"
+            if [[ "$status" == 'completed cancelled' ]]; then break; fi
+            if [[ "$status" == completed* ]]; then echo "::error::Original run finished with $status"; exit 1; fi
+            sleep 3
+          done
+          test "$status" = 'completed cancelled'
+          check_refs
+          active="$(gh api --method GET "$api/actions/workflows/release.yml/runs" -f head_sha="$EXPECTED" --jq '[.workflow_runs[] | select(.status != "completed")] | length')"
+          test "$active" = 0
+          gh workflow run release.yml -R "$GITHUB_REPOSITORY" --ref master -f tag=v0.1.65 -f runner=macos-15-intel
