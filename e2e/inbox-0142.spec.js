@@ -113,15 +113,23 @@ test('A-C5 图片存副本和缩略图；浏览器拖的 data: 图片也能存',
   expect(fs.existsSync(path.join(inboxDir, m.id, 'original.png'))).toBe(true);
 });
 
-test('A-C6 富文本存 content.html，图片进 assets/ 且相对引用，无脚本和事件属性', async () => {
+test('A-C6 富文本存 document.json，图片进 assets/ 且相对引用，无脚本和事件属性', async () => {
   const src = 'data:image/png;base64,' + PNG.toString('base64');
   const html = `<h3 onclick="x()">读书笔记</h3><p>第一段<b>重点</b></p><img src="${src}"><script>alert(1)</script><a href="https://example.com">原文</a>`;
   expect((await hook('inboxDrop', { html, text: '读书笔记 第一段重点 原文' })).ok).toBe(true);
   const m = (await entries())[0];
   expect(m.type).toBe('text');
-  const saved = fs.readFileSync(path.join(inboxDir, m.id, 'content.html'), 'utf8');
-  expect(saved).toContain('src="assets/img-1.png"');
-  expect(saved).not.toMatch(/script|onclick/i);
+  const saved = fs.readFileSync(path.join(inboxDir, m.id, 'document.json'), 'utf8');
+  const doc = JSON.parse(saved);
+  expect(doc.type).toBe('doc');
+  expect(doc.content.find(n => n.type === 'image')?.attrs).toMatchObject({
+    src: 'assets/img-1.png', attachmentId: 'assets/img-1.png'
+  });
+  expect(doc.content.find(n => n.type === 'heading')?.content).toEqual([{type:'text', text:'读书笔记'}]);
+  expect(doc.content.find(n => n.type === 'paragraph')?.content)
+    .toContainEqual({type:'text', text:'重点', marks:[{type:'bold'}]});
+  expect(saved).toContain('https://example.com');
+  expect(saved).not.toMatch(/<script|alert\(1\)|onclick|base64/i);
   expect(fs.existsSync(path.join(inboxDir, m.id, 'assets', 'img-1.png'))).toBe(true);
 });
 
@@ -149,6 +157,14 @@ test('A-C8 空数据显示状态 4，2s 后收起，不留 .tmp', async () => {
 });
 
 test('A-C9 列表时间倒序，四类各走对应打开方式，原文件移走后置灰', async () => {
+  const localFile = path.join(work, 'A-C9 独立季度报告.pdf');
+  const localImage = path.join(work, 'A-C9 独立图片.png');
+  fs.writeFileSync(localFile, 'synthetic PDF');
+  fs.writeFileSync(localImage, PNG);
+  expect((await hook('trayDropFiles', [localFile, localImage])).ok).toBe(true);
+  expect((await hook('trayDropText', 'https://a-c9.example.org/item')).ok).toBe(true);
+  expect((await hook('inboxDrop', {html:'<p>A-C9 独立笔记：<b>重点</b></p>', text:'A-C9 独立笔记：重点'})).ok).toBe(true);
+  await page.waitForLoadState('domcontentloaded');
   await hook('openInboxPanel');
   await expect(page.locator('#inbox-view')).toBeVisible();
   const rows = page.locator('.inbox-row');
@@ -156,27 +172,27 @@ test('A-C9 列表时间倒序，四类各走对应打开方式，原文件移走
   await expect(rows).toHaveCount(list.length);
   await expect(rows.first()).toHaveAttribute('data-id', list[0].id);
   // 链接
-  await page.locator('.inbox-row[data-type="link"]').first().click();
+  await page.locator('.inbox-row[data-type="link"]', { hasText: 'a-c9.example.org' }).click();
   // 文件
-  await page.locator('.inbox-row', { hasText: '季度报告.pdf' }).click();
+  await page.locator('.inbox-row', { hasText: 'A-C9 独立季度报告.pdf' }).click();
   // 图片
-  await page.locator('.inbox-row[data-type="image"]').first().click();
+  await page.locator('.inbox-row[data-type="image"]', { hasText: 'A-C9 独立图片.png' }).click();
   const calls = await hook('inboxOpenCalls');
   expect(calls.map((c) => c.how)).toEqual(['openExternal', 'openPath', 'openPath']);
   expect(calls[1].target).toMatch(/季度报告\.pdf\.symlink$/);
   // 文字：面板内展开
-  await page.locator('.inbox-row', { hasText: '读书笔记' }).click();
+  await page.locator('.inbox-row', { hasText: 'A-C9 独立笔记' }).click();
   await expect(page.locator('#inbox-detail')).toBeVisible();
   await expect(page.locator('#inbox-back')).toHaveText('‹ 收纳');
   const frame = page.frameLocator('#inbox-detail-frame');
-  await expect(frame.locator('b')).toHaveText('重点');
+  await expect(frame.locator('strong')).toHaveText('重点');
   await page.locator('#inbox-back').click();
   await expect(page.locator('#inbox-list')).toBeVisible();
   // 原文件移走
-  fs.renameSync(path.join(work, '季度报告.pdf'), path.join(work, '挪走了.pdf'));
+  fs.renameSync(localFile, path.join(work, '挪走了.pdf'));
   await page.locator('#inbox-back').click();
   await hook('openInboxPanel');
-  const row = page.locator('.inbox-row', { hasText: '季度报告.pdf' });
+  const row = page.locator('.inbox-row', { hasText: 'A-C9 独立季度报告.pdf' });
   await expect(row).toHaveClass(/is-missing/);
   await expect(row.locator('.inbox-row-sub')).toHaveText('原文件已移动或删除');
   // 右键删除这条，原文件不动
@@ -184,7 +200,7 @@ test('A-C9 列表时间倒序，四类各走对应打开方式，原文件移走
   await expect.poll(() => hook('inboxMenuItems')).not.toBe(null);
   expect((await hook('inboxMenuItems')).filter((i) => i.type !== 'separator').map((i) => i.label)).toEqual(['编辑收纳…', '删除这条']);
   expect(await hook('clickInboxMenuItem', 'inbox-delete')).toBe(true);
-  await expect(page.locator('.inbox-row', { hasText: '季度报告.pdf' })).toHaveCount(0);
+  await expect(page.locator('.inbox-row', { hasText: 'A-C9 独立季度报告.pdf' })).toHaveCount(0);
   // 0.1.45：右键删除与悬停 × 同一路径，也出「已删除 · 撤销」
   await expect(page.locator('#inbox-undo')).toBeVisible();
   expect((await page.locator('#inbox-undo').textContent()).replace(/\u00a0/g, ' ')).toBe('已删除 · 撤销');
