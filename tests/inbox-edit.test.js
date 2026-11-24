@@ -41,13 +41,14 @@ test('纯文字逐行往返、保留原件和收纳信息，搜索跟随当前�
 
 test('安全富文本保存无改动、只改一个节点、拒绝空白并恢复；图文附件受保护', (t) => {
   const { root, store } = fixture(t);
-  const html = '<p>甲<strong>加粗</strong><a href="https://example.org/abc">链接</a></p>\n<p>乙</p>';
+  const html = '<div><p class="copy-block">甲<strong><span style="font-weight: bold; color: rgb(24, 49, 73)">加粗</span></strong><a href="https://example.org/abc">链接</a><span class="Apple-converted-space">&nbsp;</span></p>\n<p>乙</p></div>';
   const rich = store.addText({ html });
   const d = store.readEdit(rich.id);
   assert.equal(d.mode, 'rich');
   assert.deepEqual(update(store, rich.id, { richParts: d.richParts }), { changed: false });
   assert.throws(() => update(store, rich.id, { richParts: d.richParts.map(() => '') }), /不能为空/);
   assert.equal(store.get(rich.id).html, html);
+  assert.throws(() => update(store, rich.id, { richParts: ['', ...d.richParts.slice(1)] }), /不能清空/);
   const parts = [...d.richParts]; parts[0] = '替换<甲>';
   update(store, rich.id, { richParts: parts });
   assert.equal(store.get(rich.id).html, html.replace('甲', '替换&lt;甲&gt;'));

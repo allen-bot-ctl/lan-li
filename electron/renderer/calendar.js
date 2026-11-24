@@ -1936,11 +1936,10 @@ function openInboxForDay(key) {
 }
 
 function closeInboxView() {
-  if (inboxView.hidden) return;
+  if (inboxView.hidden || !requestCloseInboxEditor()) return;
   if (inboxOpenedFromDay) { inboxOpenedFromDay = false; setInboxDay(null); }
   inboxOpenGeneration += 1;
   inboxListOrigin = null;
-  closeInboxEditor();
   inboxDetailEdit.hidden = true;
   inboxView.hidden = true;
   delete inboxView.dataset.mode;
@@ -1975,9 +1974,28 @@ function closeInboxEditor() {
   if (!inboxView.hidden && inboxEditFocus?.isConnected) inboxEditFocus.focus({ preventScroll: true });
   inboxEditFocus = null;
 }
+function inboxEditorDirty() {
+  if (!inboxDraft) return false;
+  return inboxEditEl('name').value !== inboxDraft.displayTitle ||
+    inboxEditEl('note').value !== inboxDraft.note ||
+    (inboxDraft.type === 'link' && inboxEditEl('url').value !== inboxDraft.url) ||
+    (inboxDraft.mode === 'plain' && inboxEditEl('text').value !== inboxDraft.text) ||
+    (inboxDraft.mode === 'rich' && [...inboxEditEl('parts').querySelectorAll('input')]
+      .some((el, i) => el.value !== inboxDraft.richParts[i]));
+}
+function requestCloseInboxEditor() {
+  if (inboxEditBusy) return false;
+  if (inboxEditDialog.open && inboxEditorDirty()) {
+    inboxEditEl('status').textContent = '修改尚未保存。保存后离开，或选择「放弃修改」。';
+    inboxEditEl('discard').hidden = false;
+    return false;
+  }
+  closeInboxEditor();
+  return true;
+}
 
 async function openInboxEditor(id) {
-  if (!id || inboxView.hidden) return;
+  if (!id || inboxView.hidden || inboxEditBusy || inboxEditDialog.open) return;
   const generation = ++inboxEditGeneration;
   const result = await api.readInboxEdit(id).catch(() => null);
   if (generation !== inboxEditGeneration || inboxView.hidden) return;
@@ -2000,7 +2018,7 @@ async function openInboxEditor(id) {
   parts.replaceChildren();
   if (draft.mode === 'rich') {
     const hint = document.createElement('p');
-    hint.textContent = '编辑文字片段，原有格式和链接不变。';
+    hint.textContent = '可修改文字片段，保留原有格式和链接。为保留格式位置，单个片段不能清空。';
     parts.append(hint);
     draft.richParts.forEach((value, i) => {
       const label = document.createElement('label');
@@ -2013,6 +2031,7 @@ async function openInboxEditor(id) {
     });
   }
   inboxEditEl('status').textContent = '';
+  inboxEditEl('discard').hidden = true;
   if (!inboxEditDialog.open) inboxEditDialog.showModal();
   inboxEditEl('name').focus();
 }
@@ -2028,7 +2047,7 @@ async function saveInboxDraft(action) {
   else if (mode === 'plain') payload.text = inboxEditEl('text').value;
   else if (mode === 'rich') payload.richParts = [...inboxEditEl('parts').querySelectorAll('input')].map((el) => el.value);
   inboxEditBusy = true;
-  inboxEditEl('save').disabled = true;
+  for (const control of inboxEditEl('form').elements) control.disabled = true;
   try {
     const result = await api.saveInboxEdit(id, payload);
     if (generation !== inboxEditGeneration) return;
@@ -2044,12 +2063,13 @@ async function saveInboxDraft(action) {
     }
     if (result.changed) showToast({ type: 'success', title: result.indexPending ? '已保存，索引稍后刷新' : '已保存收纳' });
   } catch { if (generation === inboxEditGeneration) inboxEditEl('status').textContent = '保存失败'; }
-  finally { inboxEditBusy = false; inboxEditEl('save').disabled = false; }
+  finally { inboxEditBusy = false; for (const control of inboxEditEl('form').elements) control.disabled = false; }
 }
 
 inboxDetailEdit.addEventListener('click', () => openInboxEditor(inboxListOrigin?.id));
-inboxEditDialog.addEventListener('cancel', (e) => { e.preventDefault(); closeInboxEditor(); });
-inboxEditEl('cancel').addEventListener('click', closeInboxEditor);
+inboxEditDialog.addEventListener('cancel', (e) => { e.preventDefault(); requestCloseInboxEditor(); });
+inboxEditEl('cancel').addEventListener('click', requestCloseInboxEditor);
+inboxEditEl('discard').addEventListener('click', () => { if (!inboxEditBusy) closeInboxEditor(); });
 inboxEditEl('form').addEventListener('submit', (e) => { e.preventDefault(); saveInboxDraft(); });
 inboxEditEl('restore').addEventListener('click', () => saveInboxDraft('restore'));
 inboxEditEl('undo-url').addEventListener('click', () => saveInboxDraft('undo-url'));
@@ -2068,7 +2088,7 @@ api.onInboxChanged(() => { refreshInbox(); });
 // 右键「删除这条」和悬停 × 走同一条可撤销删除
 if (api.onInboxRequestDelete) api.onInboxRequestDelete((id) => deleteInboxEntry(id));
 api.onInboxEscape(() => {
-  if (inboxEditDialog.open) { closeInboxEditor(); return; }
+  if (inboxEditDialog.open) { requestCloseInboxEditor(); return; }
   if (!inboxDetail.hidden) { showInboxList(); return; }
   if (!composeBox.hidden) { closeCompose(true); return; }
   if (!inboxTagPop.hidden) { closeTagPop(); return; }
@@ -2079,6 +2099,7 @@ api.onInboxEscape(() => {
 refreshInboxDays();
 
 api.onOpenPanel((panel) => {
+  if (inboxEditDialog.open && !requestCloseInboxEditor()) { api.setSettingsView(true); api.setInboxView(true); return; }
   clearSettingsHighlight();
   if (panel === 'inbox') { openInboxView(); return; }
   closeInboxView();

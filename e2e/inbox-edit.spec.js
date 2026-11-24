@@ -15,7 +15,8 @@ test('详情编辑、保真片段、保护原件及书签改址贯通界面和�
     const hook = (name, value) => app.evaluate((_e, a) => globalThis.__lanliTest[a.name](a.value), { name, value });
     await hook('showWindow');
     const { ids } = await page.evaluate(() => window.lanli.addInboxManual('原文字\n下一行\n\n最后一行'));
-    await hook('inboxDrop', { html: '<p>图文<strong>加粗段</strong></p><p>原段</p>', text: '图文加粗段 原段' });
+    await hook('setClipboardData', { html: '<div><p class="copy-block">图文<strong><span style="font-weight: bold; color: rgb(24, 49, 73)">加粗段</span></strong><span class="Apple-converted-space">&nbsp;</span></p><p>原段</p></div>', text: '图文加粗段 原段' });
+    await page.evaluate(() => window.lanli.captureClipboard());
     await hook('inboxDrop', { html: '<p style="color:brown">保护文字</p>', text: '保护文字' });
     await hook('inboxDrop', { uriList: ['https://example.org/original'], text: '独立书签' });
     await page.click('#inbox-button');
@@ -41,12 +42,25 @@ test('详情编辑、保真片段、保护原件及书签改址贯通界面和�
     await page.fill('#inbox-search', '');
     const rich = page.locator('#inbox-list .inbox-row').filter({ hasText: '图文加粗段' });
     await openDetailEdit(rich);
-    await expect(page.locator('.inbox-edit-part')).toHaveCount(3);
+    await expect(page.locator('.inbox-edit-part')).toHaveCount(4);
+    await page.locator('.inbox-edit-part').first().fill('');
+    await page.click('#inbox-edit-save');
+    await expect(editor).toBeVisible();
+    await expect(page.locator('#inbox-edit-status')).toContainText('不能清空');
+    await page.click('#inbox-edit-cancel');
+    await expect(editor).toBeVisible();
+    await expect(page.locator('#inbox-edit-discard')).toBeVisible();
+    await page.click('#inbox-edit-discard');
+    await expect(editor).toBeHidden();
+    await page.click('#inbox-detail-edit');
+    await expect(page.locator('.inbox-edit-part')).toHaveCount(4);
+    await expect(page.locator('.inbox-edit-part').first()).toHaveValue('图文');
     await page.locator('.inbox-edit-part').last().fill('改这一段');
     await page.click('#inbox-edit-save');
     await expect(editor).toBeHidden();
     await expect(page.frameLocator('#inbox-detail-frame').locator('strong')).toHaveText('加粗段');
     await expect(page.frameLocator('#inbox-detail-frame').locator('p').last()).toHaveText('改这一段');
+    await expect(page.frameLocator('#inbox-detail-frame').locator('.copy-block strong span')).toHaveAttribute('style', 'font-weight: bold; color: rgb(24, 49, 73)');
     await page.click('#inbox-back');
     // Unsupported old markup is not silently rewritten.
     await openDetailEdit(page.locator('#inbox-list .inbox-row').filter({ hasText: '保护文字' }));
