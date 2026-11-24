@@ -1,0 +1,25 @@
+name: Verify settings candidate
+
+on:
+  push:
+    branches: [integration/settings-layout]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: macos-15-intel
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npm test
+      - name: Focused settings regression
+        run: npm run e2e -- settings-layout settings-0163 prompt-0164 polish-0135 polish-0136
