@@ -329,9 +329,10 @@ function createInboxController(deps) {
       return { ok: true };
     }
     if (m.type === 'link') {
-      if (!/^https?:/i.test(m.sourceUrl || '')) return { ok: false };
-      if (E2E) { e2eOpenCalls.push({ how: 'openExternal', target: m.sourceUrl }); return { ok: true }; }
-      shell.openExternal(m.sourceUrl);
+      const url = m.targetUrl || m.sourceUrl;
+      if (!/^https?:/i.test(url || '')) return { ok: false };
+      if (E2E) { e2eOpenCalls.push({ how: 'openExternal', target: url }); return { ok: true }; }
+      shell.openExternal(url);
       return { ok: true };
     }
     // 内嵌图片换成 data: 内联，详情 iframe 用 sandbox 且无脚本
@@ -339,7 +340,7 @@ function createInboxController(deps) {
     for (const a of m.assets || []) {
       try { html = html.split(a).join(dataUrl(path.join(e.dir, a))); } catch { /* 缺图就留相对路径 */ }
     }
-    return { ok: true, html };
+    return { ok: true, html, title: m.displayTitle || m.title };
   }
 
   function reveal(id) {
@@ -408,8 +409,8 @@ function createInboxController(deps) {
     let call;
     if (m.type === 'file') { call = { kind: 'text', text: m.sourcePath || '' }; clipboard.writeText(call.text); }
     else if (m.type === 'image') { call = { kind: 'image', file: e.filePath }; clipboard.writeImage(nativeImage.createFromPath(e.filePath)); }
-    else if (m.type === 'text') { call = { kind: 'html', text: htmlToPlain(e.html) }; clipboard.write({ html: e.html, text: call.text }); }
-    else { call = { kind: 'text', text: m.sourceUrl || '' }; clipboard.writeText(call.text); }
+    else if (m.type === 'text') { call = { kind: 'html', text: e.meta.edit?.text ?? htmlToPlain(e.html) }; clipboard.write({ html: e.html, text: call.text }); }
+    else { call = { kind: 'text', text: m.targetUrl || m.sourceUrl || '' }; clipboard.writeText(call.text); }
     e2eCopyCalls.push({ id, type: m.type, ...call });
     return { ok: true, kind: call.kind };
   }
@@ -444,6 +445,16 @@ function createInboxController(deps) {
     ipcMain.on('drop:openInbox', () => { hide(); if (deps.openInbox) deps.openInbox(); });
     ipcMain.handle('inbox:list', () => listForRenderer());
     ipcMain.handle('inbox:open', (_e, id) => openEntry(id));
+    const editResult = (fn) => {
+      try { return { ok: true, ...fn() }; }
+      catch (error) { return { ok: false, text: error.code && !(error instanceof InboxError) ? '无法读取或保存这条收纳' : error.message }; }
+    };
+    ipcMain.handle('inbox:readEdit', (_e, id) => editResult(() => ({ value: store.readEdit(id) })));
+    ipcMain.handle('inbox:saveEdit', (_e, id, draft) => editResult(() => {
+      const result = store.saveEdit(id, draft);
+      if (result.changed) changed();
+      return result;
+    }));
     ipcMain.handle('inbox:reveal', (_e, id) => reveal(id));
     ipcMain.handle('inbox:remove', (_e, id) => removeWithUndo(id));
     ipcMain.handle('inbox:undo', (_e, id) => undoRemove(id));
@@ -467,6 +478,7 @@ function createInboxController(deps) {
       const isFile = !!(e && e.meta && e.meta.type === 'file' && !e.meta.missing);
       const menu = Menu.buildFromTemplate([
         ...(isFile ? [{ id: 'inbox-reveal', label: '在 Finder 中显示', click: () => reveal(id) }, { type: 'separator' }] : []),
+        { id: 'inbox-edit', label: '编辑收纳…', click: () => { if (!event.sender.isDestroyed()) event.sender.send('inbox:requestEdit', id); } },
         { id: 'inbox-delete', label: '删除这条', click: () => { if (!event.sender.isDestroyed()) event.sender.send('inbox:requestDelete', id); } }
       ]);
       if (E2E) { lastMenu = menu; return; }

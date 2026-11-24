@@ -194,6 +194,7 @@
       <div class="inbox-head">
         <button class="settings-back inbox-back" id="inbox-back" type="button">‹ 返回</button>
         <span class="inbox-title" id="inbox-title">收纳</span>
+        <button class="nav-pill" id="inbox-detail-edit" type="button" hidden>编辑收纳</button>
         <span class="inbox-count" id="inbox-count"></span>
         <button class="inbox-paste" id="inbox-compose-btn" type="button" title="手动输入或粘贴文字">录入</button>
         <button class="inbox-paste" id="inbox-paste" type="button" title="收纳剪贴板内容（⌘V）">粘贴收纳</button>
@@ -240,6 +241,25 @@
       <div class="inbox-noresult" id="inbox-noresult" hidden><span>没有符合条件的收纳</span><button type="button" class="inbox-clear" id="inbox-clear">清除筛选</button></div>
       <div class="inbox-undo" id="inbox-undo" hidden><span>已删除&nbsp;·&nbsp;</span><button type="button" id="inbox-undo-btn">撤销</button></div>
       <div class="inbox-tagpop" id="inbox-tagpop" hidden><input id="inbox-tag-input" type="text" maxlength="8" placeholder="加标签，回车" autocomplete="off"><span class="inbox-tag-suggest" id="inbox-tag-suggest"></span><span class="inbox-tagpop-err" id="inbox-tagpop-err"></span><button type="button" class="inbox-tagpop-manage" id="inbox-tagpop-manage">管理标签…</button></div>
+      <dialog id="inbox-edit-dialog" aria-labelledby="inbox-edit-title">
+        <form id="inbox-edit-form">
+          <h2 id="inbox-edit-title">编辑收纳</h2>
+          <label>显示标题 <input id="inbox-edit-name" maxlength="120"></label>
+          <label>备注 <textarea id="inbox-edit-note" maxlength="2000" rows="2"></textarea></label>
+          <label id="inbox-edit-url-row" hidden>网址 <input id="inbox-edit-url" maxlength="4096" inputmode="url"></label>
+          <label id="inbox-edit-text-row" hidden>正文 <textarea id="inbox-edit-text" maxlength="20000" rows="7"></textarea></label>
+          <div id="inbox-edit-parts" hidden></div>
+          <p id="inbox-edit-protected" hidden>原正文受保护。可修改标题和备注，或把提取的文字另存为新条目；不改原格式或附件。</p>
+          <p id="inbox-edit-status" role="alert"></p>
+          <div class="inbox-edit-actions">
+            <button id="inbox-edit-copy" type="button" hidden>提取另存文字</button>
+            <button id="inbox-edit-restore" type="button" hidden>恢复原文</button>
+            <button id="inbox-edit-undo-url" type="button" hidden>撤回改址</button>
+            <button id="inbox-edit-cancel" type="button">取消</button>
+            <button id="inbox-edit-save" type="submit">保存</button>
+          </div>
+        </form>
+      </dialog>
       <div class="inbox-detail" id="inbox-detail" hidden>
         <iframe class="inbox-detail-frame" id="inbox-detail-frame" sandbox="" title="收纳内容"></iframe>
       </div>

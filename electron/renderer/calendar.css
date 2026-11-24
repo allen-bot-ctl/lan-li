@@ -1679,3 +1679,22 @@ mark.inbox-hit{background:rgba(255,200,0,.45);color:inherit;border-radius:2px;}
 }
 #inbox-view .inbox-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 #inbox-view .inbox-detail { min-height: 0; }
+
+#inbox-detail-edit:not([hidden]) { margin-left: auto; padding: 0 12px; }
+#inbox-edit-dialog { width: min(480px, calc(100% - 32px)); max-height: calc(100% - 32px);
+  padding: 15px; color: var(--text); background: var(--card-bg); border: 1px solid var(--sheet-border);
+  border-radius: 14px; overflow: auto; box-shadow: 0 12px 36px #0005; backdrop-filter: blur(36px); }
+#inbox-edit-dialog::backdrop { background: #0006; }
+#inbox-edit-form { display: grid; gap: 10px; }
+#inbox-edit-form h2, #inbox-edit-form p { margin: 0; }
+#inbox-edit-form h2 { font-size: 16px; }
+#inbox-edit-form label { display: grid; gap: 4px; }
+#inbox-edit-form [hidden], #inbox-detail-edit[hidden] { display: none !important; }
+#inbox-edit-form :is(input, textarea) { width: 100%; box-sizing: border-box; color: inherit; font: inherit;
+  background: var(--chip); border: 1px solid var(--sheet-border); padding: 6px 8px; border-radius: 6px; user-select: text; }
+#inbox-edit-form textarea { resize: vertical; }
+#inbox-edit-parts { display: grid; gap: 6px; }
+#inbox-edit-status:empty { display: none; }
+.inbox-edit-actions { display: flex; gap: 8px; justify-content: end; flex-wrap: wrap; }
+.inbox-edit-actions button { color: var(--text); background: var(--chip); border: 1px solid var(--sheet-border); border-radius: 7px; padding: 6px 10px; }
+#inbox-edit-save { outline-color: var(--accent); font-weight: 600; }
