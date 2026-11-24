@@ -1,0 +1,63 @@
+name: Dispatch authorized LanLi v0.1.73
+
+on:
+  push:
+    branches: [integration/release-v0.1.73]
+
+permissions: {}
+
+concurrency:
+  group: one-shot-lan-li-v0.1.73
+  cancel-in-progress: false
+
+jobs:
+  dispatch:
+    if: github.repository == 'allen-bot-ctl/lan-li' && github.actor_id == '352863755' && github.triggering_actor == 'allen-bot-ctl' && github.run_attempt == '1'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      EXPECTED: ef1bd0b7d2fb2e7f37cf51c4cf6a14b63a558eef
+      BASELINE: a988ee4518cc13133e16c4e650abacb8e3f83029
+      CI_SHA: 3c3839b703db7bf38757f0ce85e55f310e127a82
+    steps:
+      - name: Confirm exact version, master, existing release and the successful UI verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          api="repos/$GITHUB_REPOSITORY"
+          test "$(gh api "$api/git/ref/heads/master" --jq .object.sha)" = "$EXPECTED"
+          test "$(gh api "$api/git/ref/tags/v0.1.70" --jq .object.sha)" = "$BASELINE"
+          test "$(gh api "$api/releases/latest" --jq .tag_name)" = v0.1.70
+          test "$(gh api "$api/git/ref/tags/v0.1.72" --jq .object.sha)" = 292563754c18218ff75693bf1dd75b87702310fe
+          test "$(gh api "$api/actions/runs/45480569436" --jq '[.head_sha,.conclusion]|join(" ")')" = "292563754c18218ff75693bf1dd75b87702310fe failure"
+          if gh api "$api/releases/tags/v0.1.72" >/dev/null 2>"$RUNNER_TEMP/lan-li-old72.err"; then
+            echo "Unexpected previous recovery release exists; refusing to supersede"
+            exit 1
+          fi
+          grep -q 'HTTP 404' "$RUNNER_TEMP/lan-li-old72.err"
+          test "$(gh api "$api/git/ref/tags/v0.1.71" --jq .object.sha)" = d0729cab8912fdd27344218e3fd7ddd891a45da9
+          test "$(gh api "$api/actions/runs/45477532393" --jq '[.head_sha,.conclusion]|join(" ")')" = "d0729cab8912fdd27344218e3fd7ddd891a45da9 failure"
+          if gh api "$api/releases/tags/v0.1.71" >/dev/null 2>"$RUNNER_TEMP/lan-li-old.err"; then
+            echo "Unexpected previous recovery release exists; refusing to supersede"
+            exit 1
+          fi
+          grep -q 'HTTP 404' "$RUNNER_TEMP/lan-li-old.err"
+          test "$(gh api "$api/actions/runs/45484853908" --jq '[.head_sha,.conclusion,.head_branch]|join(" ")')" = "$CI_SHA success integration/inbox-wysiwyg"
+          test "$(gh api "$api/contents/package.json?ref=$EXPECTED" --jq .content | base64 -d | jq -r .version)" = 0.1.73
+          test "$(gh api "$api/contents/release-notes/v0.1.73.md?ref=$EXPECTED" --jq .size)" -gt 0
+          test "$(gh api "$api/git/matching-refs/tags/v0.1.73" --jq '[.[] | select(.ref == "refs/tags/v0.1.73")] | length')" = 0
+          if gh api "$api/releases/tags/v0.1.73" >/dev/null 2>"$RUNNER_TEMP/lan-li-existing.err"; then
+            echo "Release already exists; refusing to replace"
+            exit 1
+          fi
+          grep -q 'HTTP 404' "$RUNNER_TEMP/lan-li-existing.err"
+          gh api --method POST "$api/git/refs" -f ref=refs/tags/v0.1.73 -f sha="$EXPECTED" --jq '[.ref,.object.sha] | @tsv'
+          test "$(gh api "$api/git/ref/tags/v0.1.73" --jq .object.sha)" = "$EXPECTED"
+          test "$(gh api "$api/git/ref/heads/master" --jq .object.sha)" = "$EXPECTED"
+          if ! gh workflow run release.yml -R "$GITHUB_REPOSITORY" --ref master -f tag=v0.1.73 -f runner=macos-15-intel; then
+            echo "::error::Tag exists; verify exact SHA and existing Release runs. Do not retag or rerun the one-shot."
+            exit 1
+          fi
