@@ -39,7 +39,10 @@ test('系统剪贴板图文原位编辑，图前后、格式、取消、保存�
     const frame = () => page.frameLocator('#inbox-detail-frame');
     await expect(frame().locator('a')).toHaveAttribute('href', 'https://example.org/reference');
     await page.screenshot({path:info.outputPath('native-reading.png')});
+    const paneTop = (await page.locator('#inbox-detail-frame').boundingBox()).y;
     await page.click('#inbox-detail-edit');
+    await expect(page.locator('#inbox-detail-frame')).toBeHidden();
+    expect((await page.locator('#inbox-wys-panel').boundingBox()).y).toBe(paneTop);
     let writer = page.locator('#inbox-wys-body .tiptap');
     await expect(writer).toHaveAttribute('contenteditable', 'true');
     await expect(writer.locator('p').filter({ hasText: '图前：' })).toBeVisible();
@@ -53,7 +56,8 @@ test('系统剪贴板图文原位编辑，图前后、格式、取消、保存�
       await page.keyboard.press('Shift+End');
       await page.keyboard.insertText(text);
     };
-    await replace('图后：待修改','不应被保存');
+    await replace('图前：','图前：不应被保存');
+    await expect(writer.locator('p').filter({ hasText: '图前：不应被保存' })).toBeVisible();
     await page.click('#inbox-wys-cancel');
     await expect(page.locator('#inbox-wys-discard')).toBeVisible();
     await page.click('#inbox-wys-discard');

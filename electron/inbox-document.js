@@ -66,9 +66,9 @@ function importHtml(html, assets = [], aliases = Object.create(null)) {
     const src = /\bsrc\s*=\s*(?:"([^"]*)"|'([^']*)')/i.exec(tag);
     const raw = src && (src[1] ?? src[2]);
     const path = allow.has(raw) ? raw : (raw && Object.hasOwn(aliases, raw) ? aliases[raw] : null);
-    if (!allow.has(path)) return '';
     const alt = /\balt\s*=\s*(?:"([^"]*)"|'([^']*)')/i.exec(tag);
     const text = (alt?.[1] ?? alt?.[2] ?? '').slice(0, 500).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+    if (!allow.has(path)) return `<span>〔图片未能收纳${text ? '：' + text : ''}〕</span>`;
     return `<img src="${path}" data-attachment-id="${path}" alt="${text}">`;
   });
   const { document } = parseHTML('<!doctype html><html><body></body></html>');
