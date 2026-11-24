@@ -210,7 +210,7 @@ test('C5 设置导航（0.1.46）：「‹ 返回」在顶栏一行、导航项�
   await backToCalendar();
 });
 
-test('C6 五个设置页：内容标题 13px/600 左对齐（0.1.46 小顶栏一级），内容区可见文字 ≥12px', async () => {
+test('C6 七个设置页：内容标题 18px/600 左对齐，内容区可见文字 ≥12px', async () => {
   await openSettings();
   const tabs = await page.locator('.settings-tab').allTextContents();
   expect(tabs.length).toBe(7);   // 0.1.56 加「标签」，0.1.60 加「帮阅」
@@ -238,7 +238,7 @@ test('C6 五个设置页：内容标题 13px/600 左对齐（0.1.46 小顶栏一
       };
     });
     expect(m.text).toBe(tab);
-    expect(m.size).toBe('13px');
+    expect(m.size).toBe('18px');
     expect(m.weight).toBeGreaterThanOrEqual(600);
     expect(m.small, tab).toEqual([]);
   }

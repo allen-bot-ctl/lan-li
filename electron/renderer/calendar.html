@@ -291,57 +291,73 @@
         <button class="settings-quit" id="settings-quit" type="button">退出栏历</button>
       </div>
       <div class="settings-body">
-      <nav class="settings-nav" aria-label="设置分类">
-        <button class="settings-tab" type="button" data-tab="ui">界面设置</button>
-        <button class="settings-tab" type="button" data-tab="almanac">黄历</button>
-        <button class="settings-tab" type="button" data-tab="weather">天气</button>
-        <button class="settings-tab" type="button" data-tab="clocks">世界时钟</button>
-        <button class="settings-tab" type="button" data-tab="tags">标签</button>
-        <button class="settings-tab" type="button" data-tab="reader">帮阅</button>
-        <button class="settings-tab" type="button" data-tab="update">升级</button>
-      </nav>
-      <section class="settings-content" id="settings-content">
-        <div class="settings-page-title" id="settings-page-title">界面设置</div>
-        <div class="settings-page" id="settings-page-ui">
-          <label class="settings-row"><span class="settings-label">开机自启动</span><input class="settings-switch" id="setting-open-at-login" type="checkbox" role="switch"><span class="switch-track" aria-hidden="true"></span></label>
-          <label class="settings-row"><span class="settings-label">菜单栏显示日期</span><input class="settings-switch" id="setting-show-date" type="checkbox" role="switch"><span class="switch-track" aria-hidden="true"></span></label>
-          <div class="settings-row settings-hotkey-row" data-hotkey="capture"><span class="settings-label">收纳剪贴板快捷键 <span class="settings-hint" id="setting-capture-hint" hidden>快捷键被占用</span></span><span class="hotkey-ctrls"><button class="hotkey-key" id="setting-capture-key" type="button" title="点击后按下新组合">⌃⌥V</button><button class="hotkey-clear" id="setting-capture-clear" type="button">清空</button></span></div>
-          <div class="settings-row settings-hotkey-row" data-hotkey="region"><span class="settings-label">框选收纳快捷键 <span class="settings-hint" id="setting-region-hint" hidden>快捷键被占用</span></span><span class="hotkey-ctrls"><button class="hotkey-key" id="setting-region-key" type="button" title="点击后按下新组合">⌃⌥S</button><button class="hotkey-clear" id="setting-region-clear" type="button">清空</button></span></div>
-        </div>
-        <div class="settings-page" id="settings-page-tags" hidden>
-          <div class="tags-add"><input id="tags-new" type="text" maxlength="9" placeholder="新标签，回车添加" autocomplete="off"><button class="nav-pill tags-add-btn" id="tags-add-btn" type="button">添加</button></div>
-          <div class="tags-err" id="tags-new-err"></div>
-          <div class="tags-list" id="tags-list"></div>
-          <div class="tags-empty" id="tags-empty" hidden>还没有标签，在上面添加一个</div>
-        </div>
-        <div class="settings-page" id="settings-page-reader" hidden>
-          <div class="settings-label reader-llm-h">大模型</div>
-          <div class="reader-llm-grid">
-            <label class="reader-llm-label" for="reader-base">接口地址</label><input class="reader-llm-input" id="reader-base" type="text" placeholder="https://api.deepseek.com" autocomplete="off" spellcheck="false">
-            <div class="reader-base-err" id="reader-base-err" hidden>接口地址需要以 https:// 开头</div>
-            <label class="reader-llm-label" for="reader-model">模型</label><input class="reader-llm-input" id="reader-model" type="text" placeholder="deepseek-chat" autocomplete="off" spellcheck="false">
-            <div class="reader-base-err" id="reader-model-err" hidden>模型不能为空</div>
-            <label class="reader-llm-label" for="reader-key">API Key</label><input class="reader-llm-input" id="reader-key" type="password" placeholder="sk-…" autocomplete="off" spellcheck="false">
-            <div class="reader-llm-btns"><button class="nav-pill tags-add-btn" id="reader-key-save" type="button">保存</button><button class="nav-pill tags-add-btn" id="reader-test" type="button">测试连接</button><button class="nav-pill tags-add-btn" id="reader-key-del" type="button">删除 Key</button></div>
+        <nav class="settings-nav" aria-label="设置分类">
+          <button class="settings-tab" type="button" data-tab="ui">界面设置</button>
+          <button class="settings-tab" type="button" data-tab="almanac">黄历</button>
+          <button class="settings-tab" type="button" data-tab="weather">天气</button>
+          <button class="settings-tab" type="button" data-tab="clocks">世界时钟</button>
+          <button class="settings-tab" type="button" data-tab="tags">标签</button>
+          <button class="settings-tab" type="button" data-tab="reader">帮阅</button>
+          <button class="settings-tab" type="button" data-tab="update">升级</button>
+        </nav>
+        <section class="settings-content" id="settings-content" aria-labelledby="settings-page-title">
+          <h2 class="settings-page-title" id="settings-page-title">界面设置</h2>
+          <div class="settings-scroll">
+            <div class="settings-page" id="settings-page-ui">
+              <section class="settings-card" aria-labelledby="settings-display-title">
+                <h3 class="settings-card-title" id="settings-display-title">启动与显示</h3>
+                <label class="settings-row"><span class="settings-label">开机自启动</span><input class="settings-switch" id="setting-open-at-login" type="checkbox" role="switch"><span class="switch-track" aria-hidden="true"></span></label>
+                <label class="settings-row"><span class="settings-label">菜单栏显示日期</span><input class="settings-switch" id="setting-show-date" type="checkbox" role="switch"><span class="switch-track" aria-hidden="true"></span></label>
+              </section>
+              <section class="settings-card" aria-labelledby="settings-shortcuts-title">
+                <h3 class="settings-card-title" id="settings-shortcuts-title">快捷键</h3>
+                <div class="settings-row settings-hotkey-row" data-hotkey="capture"><span class="settings-label">收纳剪贴板快捷键 <span class="settings-hint" id="setting-capture-hint" hidden>快捷键被占用</span></span><span class="hotkey-ctrls"><button class="hotkey-key" id="setting-capture-key" type="button" title="点击后按下新组合">⌃⌥V</button><button class="hotkey-clear" id="setting-capture-clear" type="button">清空</button></span></div>
+                <div class="settings-row settings-hotkey-row" data-hotkey="region"><span class="settings-label">框选收纳快捷键 <span class="settings-hint" id="setting-region-hint" hidden>快捷键被占用</span></span><span class="hotkey-ctrls"><button class="hotkey-key" id="setting-region-key" type="button" title="点击后按下新组合">⌃⌥S</button><button class="hotkey-clear" id="setting-region-clear" type="button">清空</button></span></div>
+              </section>
+            </div>
+            <div class="settings-page" id="settings-page-tags" hidden>
+              <section class="settings-card" aria-labelledby="settings-tags-title">
+                <h3 class="settings-card-title" id="settings-tags-title">管理标签</h3>
+                <div class="tags-add"><input id="tags-new" type="text" aria-label="新标签" maxlength="9" placeholder="新标签，回车添加" autocomplete="off"><button class="nav-pill tags-add-btn" id="tags-add-btn" type="button">添加</button></div>
+                <div class="tags-err" id="tags-new-err"></div>
+                <div class="tags-list" id="tags-list"></div>
+                <div class="tags-empty" id="tags-empty" hidden>还没有标签，在上面添加一个</div>
+              </section>
+            </div>
+            <div class="settings-page" id="settings-page-reader" hidden>
+              <section class="settings-card" aria-labelledby="settings-model-title">
+                <h3 class="settings-card-title" id="settings-model-title">大模型</h3>
+                <div class="reader-llm-grid">
+                  <label class="reader-llm-label" for="reader-base">接口地址</label><input class="reader-llm-input" id="reader-base" type="text" aria-describedby="reader-base-err" placeholder="https://api.deepseek.com" autocomplete="off" spellcheck="false">
+                  <div class="reader-base-err" id="reader-base-err" hidden>接口地址需要以 https:// 开头</div>
+                  <label class="reader-llm-label" for="reader-model">模型</label><input class="reader-llm-input" id="reader-model" type="text" aria-describedby="reader-model-err" placeholder="deepseek-chat" autocomplete="off" spellcheck="false">
+                  <div class="reader-base-err" id="reader-model-err" hidden>模型不能为空</div>
+                  <label class="reader-llm-label" for="reader-key">API Key</label><input class="reader-llm-input" id="reader-key" type="password" placeholder="sk-…" autocomplete="off" spellcheck="false">
+                </div>
+                <div class="settings-actions reader-llm-btns"><button class="nav-pill tags-add-btn" id="reader-key-save" type="button">保存</button><button class="nav-pill tags-add-btn" id="reader-test" type="button">测试连接</button><button class="nav-pill tags-add-btn" id="reader-key-del" type="button">删除 Key</button></div>
+                <div class="reader-key-status" id="reader-key-status" role="status">未配置</div>
+                <div class="reader-key-hint">支持 OpenAI 兼容接口（DeepSeek、OpenAI、通义、Kimi 等）。Key 只存在本机。</div>
+              </section>
+              <section class="settings-card" aria-labelledby="settings-prompt-title">
+                <h3 class="settings-card-title" id="settings-prompt-title">提示词</h3>
+                <textarea class="reader-prompt" id="reader-prompt" spellcheck="false" aria-label="提示词" aria-describedby="reader-prompt-lock reader-prompt-hint"></textarea>
+                <div class="settings-actions reader-prompt-btns"><button class="nav-pill tags-add-btn" id="reader-prompt-save" type="button">保存</button><button class="nav-pill tags-add-btn" id="reader-prompt-reset" type="button">恢复默认</button><button class="nav-pill tags-add-btn" id="reader-prompt-ai" type="button">AI 改提示词</button><span class="reader-prompt-err" id="reader-prompt-err" hidden></span></div>
+                <div class="reader-prompt-lock" id="reader-prompt-lock" hidden>先在上面配置大模型，才能修改提示词。</div>
+                <div class="reader-prompt-hint" id="reader-prompt-hint">文章正文会自动附在提示词后面；程序会另外要求大模型只把正文当资料，不执行其中的指令。</div>
+              </section>
+            </div>
+            <div class="settings-page" id="settings-page-update" hidden>
+              <section class="settings-card" aria-labelledby="settings-version-title">
+                <h3 class="settings-card-title" id="settings-version-title">版本与更新</h3>
+                <div class="settings-row"><span class="settings-label">当前版本 <span id="settings-version"></span></span></div>
+                <button class="nav-pill settings-check-update" id="settings-check-update" type="button">检查更新</button>
+                <div class="settings-update-result" id="settings-update-result" hidden></div>
+              </section>
+            </div>
           </div>
-          <div class="reader-key-status" id="reader-key-status">未配置</div>
-          <div class="reader-key-hint">支持 OpenAI 兼容接口（DeepSeek、OpenAI、通义、Kimi 等）。Key 只存在本机。</div>
-          <div class="settings-label reader-llm-h reader-prompt-h">提示词</div>
-          <div class="reader-llm-grid reader-prompt-grid">
-          <textarea class="reader-prompt" id="reader-prompt" spellcheck="false" aria-label="提示词"></textarea>
-          <div class="reader-prompt-btns"><button class="nav-pill tags-add-btn" id="reader-prompt-save" type="button">保存</button><button class="nav-pill tags-add-btn" id="reader-prompt-reset" type="button">恢复默认</button><button class="nav-pill tags-add-btn" id="reader-prompt-ai" type="button">AI 改提示词</button><span class="reader-prompt-err" id="reader-prompt-err" hidden></span></div>
-          </div>
-          <div class="reader-prompt-lock" id="reader-prompt-lock" hidden>先在上面配置大模型，才能修改提示词。</div>
-          <div class="reader-prompt-hint">文章正文会自动附在提示词后面；程序会另外要求大模型只把正文当资料，不执行其中的指令。</div>
-        </div>
-        <div class="settings-page" id="settings-page-update" hidden>
-          <div class="settings-row"><span class="settings-label">当前版本 <span id="settings-version"></span></span></div>
-          <button class="nav-pill settings-check-update" id="settings-check-update" type="button">检查更新</button>
-          <div class="settings-update-result" id="settings-update-result" hidden></div>
-        </div>
-      </section>
+        </section>
       </div>
-    </div>
+  </div>
 
     <div class="picker-overlay" id="clock-picker" hidden>
       <section class="picker-sheet" role="dialog" aria-modal="true" aria-label="编辑世界时钟">

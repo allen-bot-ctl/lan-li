@@ -1279,7 +1279,6 @@ select {
 .settings-tab:hover,.settings-back:hover{background:var(--chip);}
 .settings-tab:focus-visible,.settings-back:focus-visible{outline:2px solid var(--accent);outline-offset:-2px;}
 /* 上外边距 -3px：抵掉导航 2px 的 gap，并让 1px 线落在页标题底线那一像素上（标题 36px 含底边）。 */
-.settings-nav-divider{flex:0 0 1px;height:1px;margin:-3px -6px 6px;background:var(--sheet-border);}
 /* 0.1.36：「‹ 返回」与右侧页标题同高同字号，分割线贯通左栏、与标题下线连成一条。 */
 .settings-back{height:36px;line-height:36px;flex:0 0 36px;padding:0 16px;margin:0 -6px;border-radius:0;font-size:15px;font-weight:600;}
 .settings-tab.is-selected{background:var(--chip-hover);color:var(--text);}
@@ -1534,7 +1533,6 @@ mark.inbox-hit{background:rgba(255,200,0,.45);color:inherit;border-radius:2px;}
 .reader-d-actions{flex:0 0 auto;display:flex;justify-content:flex-end;gap:8px;padding:8px 16px 12px;border-top:1px solid var(--line, rgba(128,128,128,.18));}
 .reader-d-actions .nav-pill{height:26px;padding:0 12px;font-size:12px;}
 /* 0.1.61 设置页帮阅：通用大模型配置。三个输入框同宽，标签左对齐 13px；状态行和说明 12px 灰字 */
-.reader-llm-h{margin-top:4px;font-size:13px;font-weight:600;}
 .reader-llm-grid{display:grid;grid-template-columns:auto 1fr;column-gap:10px;row-gap:6px;align-items:center;margin-top:8px;}
 .reader-llm-label{grid-column:1;font-size:13px;text-align:left;white-space:nowrap;}
 .reader-llm-input{grid-column:2;box-sizing:border-box;width:100%;min-width:0;height:28px;padding:0 8px;border-radius:6px;border:1px solid var(--line, rgba(128,128,128,.3));font-size:13px;outline:none;background:var(--chip);color:var(--text);}
@@ -1563,7 +1561,6 @@ mark.inbox-hit{background:rgba(255,200,0,.45);color:inherit;border-radius:2px;}
 .reader-d-md .md-link{color:var(--accent);cursor:pointer;}
 .reader-d-md .md-link:not([data-href]){color:inherit;cursor:default;}
 /* 设置页：整理提示词 */
-.reader-prompt-h{margin-top:16px;}
 .reader-prompt{display:block;box-sizing:border-box;width:100%;margin-top:8px;padding:6px 8px;border-radius:6px;border:1px solid var(--line, rgba(128,128,128,.3));font-size:13px;line-height:1.5;font-family:inherit;resize:none;outline:none;background:var(--chip);color:var(--text);height:calc(8 * 1.5em + 14px);}
 .reader-prompt-btns{display:flex;gap:8px;margin-top:8px;align-items:center;}
 .reader-prompt-err{font-size:12px;color:#d9534f;}
@@ -1585,10 +1582,6 @@ mark.inbox-hit{background:rgba(255,200,0,.45);color:inherit;border-radius:2px;}
 .reader-d-md table{border-collapse:collapse;margin:0 0 8px;font-size:12px;}
 .reader-d-md th,.reader-d-md td{border:1px solid var(--line, rgba(128,128,128,.3));padding:4px 8px;text-align:left;}
 .reader-d-md th{font-weight:600;background:var(--chip);}
-.reader-prompt-grid{grid-template-columns:52px 1fr;}
-.reader-prompt-grid .reader-prompt{grid-column:2;margin-top:0;}
-.reader-prompt-grid .reader-prompt-btns{grid-column:2;margin-top:0;}
-.reader-prompt-hint{margin-left:62px;}
 
 /* ---- 0.1.63 设置页「退出栏历」与确认弹层 ---- */
 .settings-head .settings-quit{all:unset;box-sizing:border-box;position:absolute;right:0;top:0;height:36px;line-height:36px;padding:0 16px;font-size:13px;color:var(--red);cursor:pointer;white-space:nowrap;}
@@ -1620,3 +1613,53 @@ mark.inbox-hit{background:rgba(255,200,0,.45);color:inherit;border-radius:2px;}
 .quit-actions .quit-primary{background:var(--accent);color:#fff;}
 .quit-actions .nav-pill:disabled{opacity:.45;cursor:default;}
 .prompt-ai-card [hidden]{display:none !important;}
+
+/* Settings: stable category heading + one scrolling pane. Embedded pickers
+   share the pane geometry but retain their existing overlay/selection logic. */
+.settings-nav{overflow-y:auto;min-height:0;}
+.settings-content{display:flex;flex-direction:column;padding:0;overflow:hidden;container-type:inline-size;}
+.settings-page-title{flex:0 0 44px;height:44px;line-height:44px;margin:0 16px;padding:0;font-size:18px;border-bottom:1px solid var(--sheet-border);}
+.settings-scroll{flex:1 1 auto;min-height:0;overflow:auto;overscroll-behavior:contain;padding:12px 16px 16px;}
+.settings-page{display:grid;gap:14px;max-width:540px;margin-inline:auto;}
+.settings-card{min-width:0;padding:12px;border:1px solid var(--sheet-border);border-radius:10px;background:var(--card-bg);}
+.settings-card-title{margin:0 0 8px;font-size:14px;line-height:20px;font-weight:600;}
+.settings-card .settings-row{height:auto;min-height:34px;gap:8px;}
+.settings-card .settings-row + .settings-row{border-top:1px solid var(--sheet-border);}
+.settings-card .settings-label{min-width:0;}
+.settings-card .hotkey-ctrls{flex:none;}
+.settings-card .settings-hint{font-size:12px;}
+.settings-actions{display:flex;align-items:center;flex-wrap:wrap;gap:6px 8px;margin-top:10px;}
+.settings-card .reader-llm-grid{grid-template-columns:72px minmax(0,1fr);margin-top:0;}
+.settings-card .reader-llm-label{white-space:normal;}
+.settings-card .reader-llm-input,.settings-card .tags-add input{border-color:var(--input-border);}
+.settings-card .reader-llm-input:focus-visible,.settings-card .reader-prompt:focus-visible,
+.settings-card .tags-add input:focus-visible,.settings-card button:focus-visible,
+.picker-overlay.is-embedded .clock-search:focus-visible,.picker-overlay.is-embedded button:focus-visible{
+  outline:2px solid var(--accent);outline-offset:1px;
+}
+.settings-card #reader-key-save,.settings-card #reader-prompt-save,.settings-card #tags-add-btn{background:var(--chip-hover);font-weight:600;}
+.settings-card #reader-key-del{color:var(--red);}
+.settings-card .nav-pill:hover:not(:disabled){box-shadow:inset 0 0 0 1px var(--input-border);}
+.settings-card .reader-prompt{margin:0;min-height:90px;height:120px;resize:vertical;}
+.settings-card .reader-prompt-lock,.settings-card .reader-prompt-hint{margin:6px 0 0;}
+.settings-card .reader-key-hint,.settings-card .reader-prompt-lock,.settings-card .reader-prompt-hint,
+.settings-card .settings-update-result{line-height:1.5;color:var(--muted-strong);}
+.settings-card .reader-key-status,.settings-card .reader-base-err,.settings-card .reader-prompt-err,
+.settings-card .settings-update-result{overflow-wrap:anywhere;}
+.settings-card .reader-prompt-err{flex:1 0 100%;}
+.settings-card .settings-check-update{margin-top:2px;}
+.picker-overlay.is-embedded{top:112px;padding:12px 16px 16px;align-items:flex-start;}
+.picker-overlay.is-embedded .picker-sheet{height:auto;max-height:100%;padding:12px;overflow:auto;border:1px solid var(--sheet-border);border-radius:10px;background:var(--card-bg);}
+.picker-overlay.is-embedded .picker-list{flex:none;max-height:none;overflow:visible;}
+.picker-overlay.is-embedded #weather-list{margin-top:7px;}
+/* The clock renderer snaps its independently scrollable result area to whole rows. */
+.picker-overlay.is-embedded#clock-picker .picker-sheet{height:100%;}
+.picker-overlay.is-embedded#clock-picker .picker-results{flex:1 1 auto;overflow-y:auto;}
+.picker-overlay.is-embedded .picker-head{display:flex;}
+.picker-overlay.is-embedded .picker-head .picker-close{display:none;}
+.picker-overlay.is-embedded .picker-title{font-size:14px;font-weight:600;}
+@container (max-width:420px){
+  .settings-card .reader-llm-grid{grid-template-columns:minmax(0,1fr);row-gap:5px;}
+  .settings-card .reader-llm-grid > *{grid-column:1;}
+  .settings-card .reader-llm-label:not(:first-child){margin-top:3px;}
+}
