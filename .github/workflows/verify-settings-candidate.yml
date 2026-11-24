@@ -25,4 +25,4 @@ jobs:
         run: npm run e2e -- reader-0162 settings-layout
 
       - name: Verify R6 independently
-        run: npm run e2e -- reader-0162 -g '^R6 '
+        run: npm run e2e -- reader-0162 -g 'R6 详情页 Markdown'
