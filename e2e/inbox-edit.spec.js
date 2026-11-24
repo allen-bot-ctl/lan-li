@@ -1,0 +1,94 @@
+'use strict';
+const { test, expect, _electron: electron } = require('@playwright/test');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+
+test('详情编辑、保真片段、保护原件及书签改址贯通界面和存储', async () => {
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), 'lanli-e2e-edit-'));
+  let app;
+  try {
+    app = await electron.launch({ args: process.platform === 'linux' ? ['--no-sandbox', '.'] : ['.'],
+      env: { ...process.env, LANLI_E2E: '1', LANLI_INBOX_DIR: path.join(work, 'inbox'), LANLI_READER_DIR: path.join(work, 'reader') } });
+    const page = await app.firstWindow();
+    await page.waitForFunction(() => document.readyState === 'complete' && typeof window.openReaderView === 'function');
+    const hook = (name, value) => app.evaluate((_e, a) => globalThis.__lanliTest[a.name](a.value), { name, value });
+    await hook('showWindow');
+    const { ids } = await page.evaluate(() => window.lanli.addInboxManual('原文字\n下一行\n\n最后一行'));
+    await hook('setClipboardData', { html: '<div><p class="copy-block">图文<strong><span style="font-weight: bold; color: rgb(24, 49, 73)">加粗段</span></strong><span class="Apple-converted-space">&nbsp;</span></p><p>原段</p></div>', text: '图文加粗段 原段' });
+    await page.evaluate(() => window.lanli.captureClipboard());
+    await hook('inboxDrop', { html: '<p data-origin="old-fragment">保护文字</p>', text: '保护文字' });
+    await hook('inboxDrop', { uriList: ['https://example.org/original'], text: '独立书签' });
+    await page.click('#inbox-button');
+    const editor = page.locator('#inbox-edit-dialog');
+    const rowById = (id) => page.locator(`#inbox-list [data-id="${id}"]`);
+    const openDetailEdit = async row => {
+      await row.click();
+      await page.click('#inbox-detail-edit');
+      await expect(editor).toBeVisible();
+    };
+    await openDetailEdit(rowById(ids[0]));
+    await expect(page.locator('#inbox-edit-text')).toHaveValue('原文字\n下一行\n\n最后一行');
+    await page.fill('#inbox-edit-name', '新标题');
+    await page.fill('#inbox-edit-note', '独有备注');
+    await page.fill('#inbox-edit-text', '新稿\n换行\n\n另段');
+    await page.click('#inbox-edit-save');
+    await expect(editor).toBeHidden();
+    await expect(page.locator('#inbox-title')).toHaveText('新标题');
+    await expect(page.frameLocator('#inbox-detail-frame').locator('body')).toContainText('新稿');
+    await page.click('#inbox-back');
+    await page.fill('#inbox-search', '独有备注');
+    await expect(rowById(ids[0])).toBeVisible();
+    await page.fill('#inbox-search', '');
+    const rich = page.locator('#inbox-list .inbox-row').filter({ hasText: '图文加粗段' });
+    await openDetailEdit(rich);
+    await expect(page.locator('.inbox-edit-part')).toHaveCount(4);
+    await page.locator('.inbox-edit-part').first().fill('');
+    await page.click('#inbox-edit-save');
+    await expect(editor).toBeVisible();
+    await expect(page.locator('#inbox-edit-status')).toContainText('不能清空');
+    await page.click('#inbox-edit-cancel');
+    await expect(editor).toBeVisible();
+    await expect(page.locator('#inbox-edit-discard')).toBeVisible();
+    await page.click('#inbox-edit-discard');
+    await expect(editor).toBeHidden();
+    await page.click('#inbox-detail-edit');
+    await expect(page.locator('.inbox-edit-part')).toHaveCount(4);
+    await expect(page.locator('.inbox-edit-part').first()).toHaveValue('图文');
+    await page.locator('.inbox-edit-part').last().fill('改这一段');
+    await page.click('#inbox-edit-save');
+    await expect(editor).toBeHidden();
+    await expect(page.frameLocator('#inbox-detail-frame').locator('strong')).toHaveText('加粗段');
+    await expect(page.frameLocator('#inbox-detail-frame').locator('p').last()).toHaveText('改这一段');
+    await expect(page.frameLocator('#inbox-detail-frame').locator('.copy-block strong span')).toHaveAttribute('style', 'font-weight: bold; color: rgb(24, 49, 73)');
+    await page.click('#inbox-back');
+    // Unsupported old markup is not silently rewritten.
+    await openDetailEdit(page.locator('#inbox-list .inbox-row').filter({ hasText: '保护文字' }));
+    await expect(page.locator('#inbox-edit-protected')).toBeVisible();
+    await expect(page.locator('#inbox-edit-text')).toBeHidden();
+    await page.click('#inbox-edit-copy');
+    await expect(editor).toBeHidden();
+    await page.click('#inbox-back');
+    await expect(page.locator('#inbox-list .inbox-row').filter({ hasText: '保护文字' })).toHaveCount(2);
+    const link = page.locator('#inbox-list .inbox-row[data-type="link"]');
+    await link.click({ button: 'right' });
+    await expect.poll(() => hook('clickInboxMenuItem', 'inbox-edit')).toBe(true);
+    await expect(editor).toBeVisible();
+    await page.fill('#inbox-edit-url', 'https://example.org/new');
+    await page.click('#inbox-edit-save');
+    await expect(editor).toBeHidden();
+    await expect(link).toContainText('https://example.org/new');
+    await link.click();
+    await expect.poll(async () => (await hook('inboxOpenCalls')).at(-1)?.target).toBe('https://example.org/new');
+    await link.click({ button: 'right' });
+    await expect.poll(() => hook('clickInboxMenuItem', 'inbox-edit')).toBe(true);
+    await expect(editor).toBeVisible();
+    await page.click('#inbox-edit-undo-url');
+    await expect(editor).toBeHidden();
+    await link.click();
+    await expect.poll(async () => (await hook('inboxOpenCalls')).at(-1)?.target).toBe('https://example.org/original');
+  } finally {
+    if (app) await app.close();
+    fs.rmSync(work, { force: true, recursive: true });
+  }
+});

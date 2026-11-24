@@ -10,6 +10,7 @@
 const path = require('node:path');
 const nodeFs = require('node:fs');
 const Q = require('./renderer/inbox-query');
+const Edit = require('./inbox-edit');
 const { createTagLibrary, TAGS_FILE } = require('./tag-library');
 
 const SCHEMA = 1;
@@ -290,7 +291,12 @@ function createInboxStore(opts) {
       try {
         const meta = JSON.parse(fs.readFileSync(path.join(root, id, 'meta.json'), 'utf8'));
         if (meta.type === 'text') {
-          try { meta.body = htmlToPlain(stripInline(fs.readFileSync(path.join(root, id, 'content.html'), 'utf8'))).slice(0, 5000); } catch { /* 没正文 */ }
+          try {
+            const html = meta.edit?.html ?? fs.readFileSync(path.join(root, id, 'content.html'), 'utf8');
+            meta.body = (meta.edit?.text ?? htmlToPlain(stripInline(html))).slice(0, 5000);
+            if (meta.edit) { const lines = meta.body.split('\n').map((l) => l.trim()).filter(Boolean); meta.editPreview = lines.join(' ').slice(0, 120); meta.editRest = lines.slice(1).join(' ').slice(0, 60); }
+          } catch { /* 没正文 */ }
+          delete meta.edit;
         }
         out.push(meta);
       } catch { /* 跳过坏条目 */ }
@@ -342,7 +348,7 @@ function createInboxStore(opts) {
     resolveTags(meta);
     const res = { meta, dir };
     if (meta.file) res.filePath = path.join(dir, meta.file);
-    if (meta.type === 'text') res.html = fs.readFileSync(path.join(dir, 'content.html'), 'utf8');
+    if (meta.type === 'text') res.html = meta.edit?.html ?? fs.readFileSync(path.join(dir, 'content.html'), 'utf8');
     return res;
   }
 
@@ -378,8 +384,90 @@ function createInboxStore(opts) {
   function writeMetaAtomic(dir, meta) {
     const file = path.join(dir, 'meta.json');
     const tmp = file + '.tmp';
-    fs.writeFileSync(tmp, JSON.stringify(meta, null, 2));
-    fs.renameSync(tmp, file);
+    try {
+      fs.writeFileSync(tmp, JSON.stringify(meta, null, 2));
+      fs.renameSync(tmp, file);
+    } catch (error) {
+      try { fs.rmSync(tmp, { force: true }); } catch { /* preserve original error */ }
+      throw error;
+    }
+  }
+
+  function editSource(id) {
+    const { dir, meta } = readMeta(id);
+    const original = meta.type === 'text' ? fs.readFileSync(path.join(dir, 'content.html'), 'utf8') : '';
+    return { dir, meta, original, state: Edit.editState(meta, original) };
+  }
+
+  function readEdit(id) {
+    const { meta, original, state } = editSource(id);
+    return {
+      id, type: meta.type, title: meta.title, displayTitle: meta.displayTitle || '', note: meta.note || '',
+      url: meta.targetUrl || meta.sourceUrl || '', canUndoUrl: !!meta.previousUrl, canRestoreText: !!meta.edit,
+      text: state.text, richParts: state.parts?.map((p) => p.text) || null,
+      extracted: meta.type === 'text' ? htmlToPlain(state.html) : null, mode: state.mode,
+      revision: Edit.revision(meta, original)
+    };
+  }
+
+  function saveEdit(id, request) {
+    const { dir, meta, original, state } = editSource(id);
+    if (!request || request.revision !== Edit.revision(meta, original)) throw new InboxError('conflict', '这条收纳已更新，请重新打开后再编辑');
+    const next = { ...meta };
+    const string = (s, max) => {
+      if (typeof s !== 'string' || [...s].length > max) throw new InboxError('invalid-edit', '编辑内容过长或格式无效');
+      return s;
+    };
+    if (request.displayTitle !== undefined) {
+      const title = string(request.displayTitle, 120).trim();
+      if (/[\r\n]/.test(title)) throw new InboxError('invalid-edit', '标题须为单行');
+      if (title) next.displayTitle = title; else delete next.displayTitle;
+    }
+    if (request.note !== undefined) {
+      const note = string(request.note, 2000);
+      if (note) next.note = note; else delete next.note;
+    }
+    if (request.url !== undefined || request.undoUrl) {
+      if (meta.type !== 'link' || (request.url !== undefined && request.undoUrl)) throw new InboxError('invalid-edit', '只有独立链接可以修改网址');
+      const old = meta.targetUrl || meta.sourceUrl;
+      const url = request.undoUrl ? meta.previousUrl : string(request.url, 4096).trim();
+      if (old !== url) {
+        if (!url || !URL_RE.test(url)) throw new InboxError('invalid-edit', '请输入有效的 HTTP 或 HTTPS 网址');
+        try {
+          const parsed = new URL(url);
+          if (!parsed.hostname || parsed.username || parsed.password) throw new Error();
+        } catch { throw new InboxError('invalid-edit', '请输入有效且不含登录信息的网址'); }
+        if (request.undoUrl) delete next.previousUrl; else next.previousUrl = old;
+        if (url === meta.sourceUrl) delete next.targetUrl; else next.targetUrl = url;
+      }
+    }
+    const bodyOps = Number(request.restoreText === true) + Number(request.text !== undefined) + Number(request.richParts !== undefined);
+    if (bodyOps > 1 || (bodyOps && meta.type !== 'text')) throw new InboxError('invalid-edit', '仅文字可编辑正文');
+    if (request.restoreText === true) delete next.edit;
+    if (request.text !== undefined) {
+      if (state.mode !== 'plain') throw new InboxError('protected', '这条正文需要保护原格式');
+      if (state.text !== request.text) {
+        const body = string(request.text, Edit.MAX);
+        if (!body.trim()) throw new InboxError('invalid-edit', '正文不能为空');
+        next.edit = { text: body, html: Edit.textHtml(body) };
+      }
+    }
+    if (request.richParts !== undefined) {
+      if (state.mode !== 'rich') throw new InboxError('protected', '这条正文需要保护原格式');
+      const values = request.richParts;
+      const noChange = Array.isArray(values) && values.length === state.parts.length &&
+        state.parts.every((part, i) => part.text === values[i]);
+      if (!noChange) next.edit = { html: Edit.applyParts(state.html, state.parts, values) };
+    }
+    if (JSON.stringify(next) === JSON.stringify(meta)) return { changed: false };
+    // Retire any persisted old index before the commit. A later cache write
+    // failure must not make a restart trust stale content for this same ID.
+    fs.rmSync(path.join(root, INDEX), { force: true });
+    writeMetaAtomic(dir, next);
+    // meta.json replacement is the transaction boundary; the index is derived.
+    stale = true;
+    try { invalidate(); stale = false; } catch { cache = null; }
+    return { changed: true, indexPending: stale };
   }
 
   function idsForNames(names) {
@@ -566,7 +654,7 @@ function createInboxStore(opts) {
     purge();
   }
 
-  return { root, tags, save, saveAll, addFile, addImage, addText, addLink, list, get, remove, setTags, addTag, removeTagFromItem, removeTagEverywhere,
+  return { root, tags, save, saveAll, addFile, addImage, addText, addLink, list, get, readEdit, saveEdit, remove, setTags, addTag, removeTagFromItem, removeTagEverywhere,
     listTags, createTag, renameTag, deleteTag, tagUsage, migrateTags, trash, restore, purge, relink, cleanup, rebuildIndex, readIndex };
 }
 

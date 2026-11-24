@@ -68,10 +68,10 @@ test('S3 右键菜单：非文件类无 inbox-reveal，文件类有；非文件 
     await expect.poll(() => hook('inboxMenuItems')).not.toBe(null);
     const items = (await hook('inboxMenuItems')).filter((i) => i.type !== 'separator');
     expect(items.map((i) => i.id)).not.toContain('inbox-reveal');
-    expect(items.map((i) => i.label)).toEqual(['删除这条']);
+    expect(items.map((i) => i.label)).toEqual(['编辑收纳…', '删除这条']);
   }
   await rowOf('Annual-Report').click({ button: 'right' });
-  expect((await hook('inboxMenuItems')).filter((i) => i.type !== 'separator').map((i) => i.label)).toEqual(['在 Finder 中显示', '删除这条']);
+  expect((await hook('inboxMenuItems')).filter((i) => i.type !== 'separator').map((i) => i.label)).toEqual(['在 Finder 中显示', '编辑收纳…', '删除这条']);
   const list = await hook('inboxList');
   const before = (await hook('inboxOpenCalls')).length;
   for (const m of list.filter((x) => x.type !== 'file')) {

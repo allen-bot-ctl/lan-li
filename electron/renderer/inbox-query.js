@@ -53,7 +53,7 @@
   // 检索用的文本：标题、正文纯文本、文件名、来源域名、标签。
   function haystack(m) {
     if (m.__hay !== undefined) return m.__hay;
-    const parts = [m.title, m.preview, m.body, m.type === 'file' ? baseName(m.sourcePath) : '', m.sourceUrl ? hostOf(m.sourceUrl) : '', (m.tags || []).join(' ')];
+    const parts = [m.title, m.displayTitle, m.note, m.targetUrl, m.preview, m.body, m.type === 'file' ? baseName(m.sourcePath) : '', m.sourceUrl ? hostOf(m.sourceUrl) : '', (m.tags || []).join(' ')];
     const hay = parts.filter(Boolean).join('\n').toLowerCase();
     try { Object.defineProperty(m, '__hay', { value: hay, enumerable: false }); } catch (e) { /* frozen */ }
     return hay;
