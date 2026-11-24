@@ -1293,6 +1293,9 @@ const inboxEmpty = document.getElementById('inbox-empty');
 const inboxCount = document.getElementById('inbox-count');
 const inboxDetail = document.getElementById('inbox-detail');
 const inboxDetailFrame = document.getElementById('inbox-detail-frame');
+let inboxOpenGeneration = 0;
+let inboxListOrigin = null;
+let inboxListNeedsRender = false;
 // 0.1.58：详情 iframe 继承页面 CSP（style-src 'self'），这段内联样式靠 calendar.html CSP 里的 sha256 放行；改这里要同步改哈希（单测 R5 会校验）
 const DETAIL_FRAME_CSS = ":root{color-scheme:light dark}body{background:transparent;font:13px -apple-system,\"PingFang SC\",sans-serif;margin:12px 16px;color:#1d1d1f;word-break:break-word}img{max-width:100%;height:auto}@media (prefers-color-scheme:dark){body{color:#f5f5f7}a{color:#6ab0ff}}";
 const inboxBack = document.getElementById('inbox-back');
@@ -1476,6 +1479,15 @@ function buildInboxRow(m) {
   row.setAttribute('role', 'listitem');
   row.dataset.id = m.id;
   row.dataset.type = m.type;
+  if (m.type === 'text') {
+    row.tabIndex = 0;
+    row.addEventListener('keydown', (e) => {
+      if (e.target === row && !e.isComposing && (e.key === 'Enter' || e.key === ' ')) {
+        e.preventDefault();
+        openInboxRow(m);
+      }
+    });
+  }
   const icon = document.createElement('span');
   icon.className = 'inbox-row-icon';
   const richThumb = m.type === 'text' && m.rich && m.thumb;
@@ -1543,14 +1555,15 @@ function buildInboxRow(m) {
 
 function renderInbox(entries) {
   if (Array.isArray(entries)) inboxEntries = entries;
+  if (!inboxDetail.hidden) { inboxListNeedsRender = true; return; }
+  inboxListNeedsRender = false;
   renderInboxTags();
   const shown = IQ.filterEntries(inboxEntries, inboxFilter);
   inboxList.textContent = '';
   inboxCount.textContent = inboxEntries.length ? (inboxFilterActive() ? `${shown.length}/${inboxEntries.length} 项` : `${inboxEntries.length} 项`) : '';
-  const detailOpen = !inboxDetail.hidden;
-  inboxEmpty.hidden = detailOpen || inboxEntries.length > 0;
+  inboxEmpty.hidden = inboxEntries.length > 0;
   updateInboxRangeChip();
-  inboxNoResult.hidden = detailOpen || !(inboxEntries.length > 0 && shown.length === 0);
+  inboxNoResult.hidden = !(inboxEntries.length > 0 && shown.length === 0);
   for (const g of IQ.groupByDate(shown, new Date())) {
     const head = document.createElement('div');
     head.className = 'inbox-group';
@@ -1659,7 +1672,7 @@ document.getElementById('inbox-day-chip-x').addEventListener('click', () => setI
 document.getElementById('inbox-clear').addEventListener('click', () => clearInboxFilters());
 document.addEventListener('keydown', (e) => {
   if (inboxView.hidden) return;
-  if ((e.metaKey || e.ctrlKey) && (e.key === 'f' || e.key === 'F')) { e.preventDefault(); inboxSearch.focus(); inboxSearch.select(); }
+  if (inboxDetail.hidden && (e.metaKey || e.ctrlKey) && (e.key === 'f' || e.key === 'F')) { e.preventDefault(); inboxSearch.focus(); inboxSearch.select(); }
   // 0.1.49：焦点不在输入框时 ⌘V 收纳剪贴板
   const typing = e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable);
   if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && (e.key === 'v' || e.key === 'V') && !typing) { e.preventDefault(); captureFromPanel(); }
@@ -1839,31 +1852,63 @@ function refreshInboxDays() {
   }).catch(() => {});
 }
 
+function findInboxRow(id) {
+  return Array.from(inboxList.querySelectorAll('.inbox-row')).find((row) => row.dataset.id === id);
+}
+
 function refreshInbox() {
   refreshInboxDays();
   if (inboxView.hidden) return Promise.resolve();
-  return api.listInbox().then(renderInbox).catch(() => renderInbox([]));
+  const redraw = (entries) => {
+    const row = document.activeElement?.closest('.inbox-row');
+    const focused = row === document.activeElement && inboxList.contains(row);
+    const scrollTop = inboxList.scrollTop;
+    renderInbox(entries);
+    if (focused && !inboxView.hidden && inboxDetail.hidden) {
+      (findInboxRow(row.dataset.id) || inboxSearch).focus({ preventScroll: true });
+      inboxList.scrollTop = scrollTop;
+    }
+  };
+  return api.listInbox().then(redraw).catch(() => redraw([]));
 }
 
 function showInboxList() {
+  inboxOpenGeneration += 1;
+  const origin = inboxListOrigin;
+  inboxListOrigin = null;
   inboxDetail.hidden = true;
   inboxDetailFrame.srcdoc = '';
+  delete inboxView.dataset.mode;
   inboxList.hidden = false;
   inboxTitle.textContent = '收纳';
+  inboxTitle.removeAttribute('title');
   inboxBack.textContent = '‹ 返回';
-  refreshInbox();
+  inboxBack.removeAttribute('aria-label');
+  if (!origin) { refreshInbox(); return; }
+  if (inboxListNeedsRender) renderInbox();
+  // A list update can replace the row: restore by short-lived item ID, not by index.
+  (findInboxRow(origin.id) || inboxSearch).focus({ preventScroll: true });
+  inboxList.scrollTop = origin.scrollTop;
 }
 
 function openInboxRow(m) {
   if (m.missing) { showToast({ type: 'warning', title: '原文件已移动或删除', detail: '右键可删除这条' }); return; }
+  const generation = ++inboxOpenGeneration;
   api.openInboxEntry(m.id).then((r) => {
-    if (r && typeof r.html === 'string') {
+    if (generation !== inboxOpenGeneration || inboxView.hidden || !inboxDetail.hidden) return;
+    if (r && typeof r.html === 'string' && findInboxRow(m.id)) {
+      inboxListOrigin = { id: m.id, scrollTop: inboxList.scrollTop };
+      closeTagPop();
+      closeInboxRangePop(false);
+      inboxMoreMenu.hidden = true;
       inboxList.hidden = true;
-      inboxEmpty.hidden = true;
-      inboxNoResult.hidden = true;
       inboxDetail.hidden = false;
+      inboxView.dataset.mode = 'detail';
       inboxTitle.textContent = m.title || '文字';
+      inboxTitle.title = inboxTitle.textContent;
       inboxBack.textContent = '‹ 收纳';
+      inboxBack.setAttribute('aria-label', '返回收纳列表');
+      inboxBack.focus({ preventScroll: true });
       inboxDetailFrame.srcdoc = `<!doctype html><meta charset="utf-8"><style>${DETAIL_FRAME_CSS}</style>${r.html}`;
     }
   }).catch(() => {});
@@ -1891,7 +1936,10 @@ function openInboxForDay(key) {
 function closeInboxView() {
   if (inboxView.hidden) return;
   if (inboxOpenedFromDay) { inboxOpenedFromDay = false; setInboxDay(null); }
+  inboxOpenGeneration += 1;
+  inboxListOrigin = null;
   inboxView.hidden = true;
+  delete inboxView.dataset.mode;
   inboxDetail.hidden = true;
   inboxDetailFrame.srcdoc = '';
   closeTagPop();
@@ -1912,11 +1960,11 @@ api.onInboxChanged(() => { refreshInbox(); });
 // 右键「删除这条」和悬停 × 走同一条可撤销删除
 if (api.onInboxRequestDelete) api.onInboxRequestDelete((id) => deleteInboxEntry(id));
 api.onInboxEscape(() => {
+  if (!inboxDetail.hidden) { showInboxList(); return; }
   if (!composeBox.hidden) { closeCompose(true); return; }
   if (!inboxTagPop.hidden) { closeTagPop(); return; }
   if (!inboxMoreMenu.hidden) { inboxMoreMenu.hidden = true; return; }
   if (inboxSearch.value) { inboxSearch.value = ''; inboxFilter.query = ''; renderInbox(); return; }
-  if (!inboxDetail.hidden) { showInboxList(); return; }
   closeInboxView();
 });
 refreshInboxDays();
