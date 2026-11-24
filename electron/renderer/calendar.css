@@ -1640,7 +1640,7 @@ mark.inbox-hit{background:rgba(255,200,0,.45);color:inherit;border-radius:2px;}
 .settings-card #reader-key-save,.settings-card #reader-prompt-save,.settings-card #tags-add-btn{background:var(--chip-hover);font-weight:600;}
 .settings-card #reader-key-del{color:var(--red);}
 .settings-card .nav-pill:hover:not(:disabled){box-shadow:inset 0 0 0 1px var(--input-border);}
-.settings-card .reader-prompt{margin:0;min-height:90px;height:120px;resize:vertical;}
+.settings-card .reader-prompt{margin:0;min-height:90px;height:calc(8 * 1.5em + 14px);resize:vertical;}
 .settings-card .reader-prompt-lock,.settings-card .reader-prompt-hint{margin:6px 0 0;}
 .settings-card .reader-key-hint,.settings-card .reader-prompt-lock,.settings-card .reader-prompt-hint,
 .settings-card .settings-update-result{line-height:1.5;color:var(--muted-strong);}

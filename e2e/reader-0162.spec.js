@@ -69,7 +69,7 @@ test.beforeAll(async () => {
 });
 test.afterAll(async () => { if (app) await app.close(); if (server) server.close(); });
 
-test('R2 没配置：输入框和「帮我读」disabled、提示卡、去设置；保存后回来立刻可用；删除 Key 后恢复禁用', async () => {
+function seedLegacyReaderRecord() {
   // 先放一条老记录，验证「有历史时卡片在列表上方，列表照常可点」
   const legacyDir = path.join(work, 'user', 'read', 'r_legacy1');
   fs.mkdirSync(legacyDir, { recursive: true });
@@ -77,6 +77,11 @@ test('R2 没配置：输入框和「帮我读」disabled、提示卡、去设置
   const legacyJson = JSON.stringify(legacy, null, 2);
   fs.writeFileSync(path.join(legacyDir, 'meta.json'), legacyJson);
   fs.writeFileSync(path.join(legacyDir, 'text.txt'), PARA.repeat(5));
+  return {legacyDir, legacyJson};
+}
+
+test('R2 没配置：输入框和「帮我读」disabled、提示卡、去设置；保存后回来立刻可用；删除 Key 后恢复禁用', async () => {
+  const {legacyDir, legacyJson} = seedLegacyReaderRecord();
   await openReader();
   await expect(page.locator('#reader-input')).toBeDisabled();
   await expect(page.locator('#reader-input')).toHaveAttribute('placeholder', '先配置大模型才能用帮阅');
@@ -186,6 +191,13 @@ test('R5 提示词：默认预填逐字一致；保存、重开仍在；空不�
 });
 
 test('R6 详情页 Markdown：标题、列表、粗体、引用、代码块；<script>/<img onerror> 当文字；链接只开 http/https；复制格式；meta 只有 markdown', async () => {
+  // R6 validates Markdown independent of earlier tests configuring the fake model.
+  seedLegacyReaderRecord();
+  await openReaderSettings();
+  await expect(page.locator('#reader-key-status')).not.toBeEmpty();
+  await page.fill('#reader-key', 'sk-e2e-0162');
+  await page.click('#reader-key-save');
+  await expect(page.locator('#reader-key-status')).toHaveText('已配置 · deepseek-chat');
   const md = [
     '## 一句话总结', '这是 **加粗** 和 *斜体* 以及 `行内代码`。', '',
     '## 核心要点', '1. 第一条', '2. 第二条', '   - 嵌套甲', '   - 嵌套乙', '', '| 列甲 | 列乙 |', '|---|---|', '| 1 | 2 |', '',
@@ -195,6 +207,7 @@ test('R6 详情页 Markdown：标题、列表、粗体、引用、代码块；<s
   ].join('\n');
   await hook('readerSetFakeLlm', { raw: md });
   await openReader();
+  await expect(page.locator('#reader-input')).toBeEnabled();
   await submit(`${base}/a?t=${encodeURIComponent('Markdown 文章')}`);
   const row = page.locator('.reader-row', { hasText: 'Markdown 文章' });
   await expect(row.locator('.reader-status')).toHaveText('已整理', { timeout: 20000 });
