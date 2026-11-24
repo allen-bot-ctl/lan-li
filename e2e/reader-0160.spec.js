@@ -68,7 +68,7 @@ test('R6a 空状态 + 顶栏图标顺序', async () => {
   await expect(page.locator('#reader-empty')).toContainText('还没有读过的网页');
   await expect(page.locator('#reader-empty')).toContainText('粘贴一个网址，帮你读完整理成要点');
   const order = await page.locator('.topbar-right > button').evaluateAll((els) => els.map((e) => e.getAttribute('aria-label') || e.id));
-  expect(order.slice(0, 4)).toEqual(['帮阅', '收纳', '检查更新', '钉住窗口']);
+  expect(order.slice(0, 4)).toEqual(['帮阅', '收纳', '检查更新', '取消钉住并关闭']);
   expect(order).toContain('设置');
   const box = await page.locator('#reader-button svg').boundingBox();
   expect(Math.round(box.width)).toBe(14);

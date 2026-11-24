@@ -73,7 +73,7 @@ test('R3a 没有 Key：输入框禁用、提示卡；不能提交、不读取、
   await expect(page.locator('#reader-nollm')).toBeVisible();
   await expect(page.locator('#reader-input')).toBeDisabled();
   await expect(page.locator('#reader-go')).toBeDisabled();
-  await expect(page.locator('#reader-nollm .reader-nollm-title')).toHaveText('还没配置大模型');
+  await expect(page.locator('#reader-nollm .reader-nollm-title')).toHaveText('先配置大模型才能用帮阅');
   // 主进程仍然兜底：直接提交返回 no-key，不读取、不建记录
   const r = await hook('readerSubmit', `${base}/a?t=${encodeURIComponent('没配置')}`);
   expect(r.code).toBe('no-key');
