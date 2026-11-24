@@ -109,6 +109,7 @@ let calendarWindow = null;
 let clockTimer = null;
 let closeTimer = null;
 let settingsViewOpen = false;
+let promptAiOpen = false; // 0.1.64 「AI 改提示词」弹框是否开着
 let quitConfirmOpen = false; // 0.1.63 设置页「退出栏历」确认框是否开着
 // 0.1.40 托盘右键菜单：菜单开着时悬停不开日历；从菜单打开设置后保持打开，
 // 直到鼠标进入窗口再离开（或 Esc / 隐藏）。
@@ -448,7 +449,9 @@ function createCalendarWindow() {
   calendarWindow.webContents.on('before-input-event', (event, input) => {
     if (input.type === 'keyDown' && (input.key === 'Escape' || input.key === 'Esc')) {
       event.preventDefault();
-      if (quitConfirmOpen) {
+      if (promptAiOpen) {
+        calendarWindow.webContents.send('promptai:escape');
+      } else if (quitConfirmOpen) {
         // 0.1.63：退出确认框开着时 Esc 只关框（由渲染层关），不退回日历。
         calendarWindow.webContents.send('quit:escape');
       } else if (settingsViewOpen && readerViewOpen) {
@@ -775,6 +778,7 @@ function hideCalendar() {
   trayMenuHold = false;
   settingsViewOpen = false;
   quitConfirmOpen = false;
+  if (promptAiOpen) { promptAiOpen = false; if (calendarWindow && !calendarWindow.isDestroyed()) calendarWindow.webContents.send('promptai:escape'); }
   // Hiding always ends the pinned session; the next tray hover reopens in the
   // default unpinned state, as required (nothing is persisted).
   const wasPinned = pinned;
@@ -886,6 +890,7 @@ function registerIpc() {
   ipcMain.handle('settings:setHotkey', (_e, a) => setHotkey(a && a.kind, a && a.accelerator));
   ipcMain.handle('settings:setOpenAtLogin', (_e, value) => applyLoginItem(Boolean(value)));
   ipcMain.handle('settings:setMenuBarShowDate', (_e, value) => setMenuBarShowDate(value));
+  ipcMain.on('promptai:state', (_e, open) => { promptAiOpen = Boolean(open); });
   ipcMain.on('quit:confirmState', (_e, open) => { quitConfirmOpen = Boolean(open); });
   ipcMain.on('app:quit', () => { quitApp(); });
   ipcMain.on('settings:viewState', (_e, open) => { settingsViewOpen = Boolean(open); setSubPage(open); });
@@ -1173,6 +1178,7 @@ function registerE2eHooks() {
     inboxRoot() { return inbox.store.root; },
     readerList() { return reader.store.list(); },
     readerSetFakeLlm(f) { return reader.e2e.setFakeLlm(f); },
+    readerRewriteStats() { return reader.e2e.rewriteStats(); },
     readerLlmCalls() { return reader.e2e.llmCalls(); },
     readerStatusLog() { return reader.e2e.statusLog(); },
     readerText(id) { return reader.store.readText(id); },
@@ -1197,6 +1203,7 @@ function registerE2eHooks() {
     inboxIndexPath() { return path.join(inbox.store.root, 'index.json'); },
     clipboardText() { return clipboard.readText(); },
     quitConfirmOpen() { return quitConfirmOpen; },
+    promptAiOpen() { return promptAiOpen; },
     trayMenuStats() { return { quitCalls: e2eQuitCalls, updateChecks: e2eUpdateChecks - e2eUpdateChecks0, hold: trayMenuHold }; },
     emitUpdateStatus(status) {
       sendUpdateStatus(status);

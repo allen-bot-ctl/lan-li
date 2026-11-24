@@ -121,7 +121,7 @@ test('PM：没有 Key 时提交不读取、不建记录', async () => {
   const ctl = createReaderController({
     BrowserWindow: function () { windows += 1; throw new Error('不该打开网页'); },
     session: { fromPartition: () => { throw new Error('不该打开网页'); } },
-    ipcMain: { handle: (ch, fn) => { handlers[ch] = fn; } },
+    ipcMain: { handle: (ch, fn) => { handlers[ch] = fn; }, on: () => {} },
     shell: {}, clipboard: {}, logger: null, E2E: false,
     root: path.join(d, 'read'), keyFile: path.join(d, 'reader-api-key'), prefs: memPrefs()
   });

@@ -308,7 +308,7 @@
   }
   function renderReaderSettings() {
     baseErr.hidden = true; modelErr.hidden = true;
-    loadPrompt();
+    if (!promptDirty) loadPrompt();
     return api.getReaderConfig().then((c) => {
       keyInput.value = '';
       keyInput.placeholder = c && c.hasKey ? '已保存，留空不修改' : 'sk-…';
@@ -316,6 +316,10 @@
       modelInput.value = (c && c.model) || 'deepseek-chat';
       $('reader-key-del').disabled = !(c && c.hasKey);
       statusFrom(c);
+      const wasLocked = promptEl.readOnly;
+      const nowLocked = !(c && c.ready);
+      setPromptLocked(nowLocked);
+      if (nowLocked && !wasLocked) { promptDirty = false; loadPrompt(); }
       if (!view.hidden) syncLlmHint();
     }).catch(() => {});
   }
@@ -351,23 +355,125 @@
   // 设置页「整理提示词」
   const promptEl = $('reader-prompt');
   const promptErr = $('reader-prompt-err');
+  let promptDirty = false;
+  // 0.1.64：没配置大模型时，提示词输入框和三个按钮整体禁用，旁边一句话说明
+  function setPromptLocked(locked) {
+    promptEl.readOnly = locked;
+    if (locked) { promptEl.blur(); }
+    for (const id of ['reader-prompt-save', 'reader-prompt-reset', 'reader-prompt-ai']) $(id).disabled = locked;
+    $('reader-prompt-lock').hidden = !locked;
+  }
   function promptMsg(text) { promptErr.textContent = text || ''; promptErr.hidden = !text; }
   function loadPrompt() {
     promptMsg('');
-    return api.getReaderPrompt().then((r) => { if (r) promptEl.value = r.prompt; }).catch(() => {});
+    return api.getReaderPrompt().then((r) => { if (r) { promptEl.value = r.prompt; promptDirty = false; } }).catch(() => {});
   }
   $('reader-prompt-save').addEventListener('click', () => {
     api.saveReaderPrompt(promptEl.value).then((r) => {
-      if (r && r.ok) { promptMsg(''); promptEl.value = r.prompt; showToast({ type: 'success', title: '提示词已保存' }); }
+      if (r && r.ok) { promptMsg(''); promptEl.value = r.prompt; promptDirty = false; showToast({ type: 'success', title: '提示词已保存' }); }
       else promptMsg((r && r.error) || '保存失败');
     }).catch(() => {});
   });
   $('reader-prompt-reset').addEventListener('click', () => {
     api.resetReaderPrompt().then((r) => {
-      if (r && r.ok) { promptMsg(''); promptEl.value = r.prompt; showToast({ type: 'success', title: '已恢复默认' }); }
+      if (r && r.ok) { promptMsg(''); promptEl.value = r.prompt; promptDirty = false; showToast({ type: 'success', title: '已恢复默认' }); }
     }).catch(() => {});
   });
-  promptEl.addEventListener('input', () => promptMsg(''));
+  promptEl.addEventListener('input', () => { promptDirty = true; promptMsg(''); });
+
+  // 0.1.64「AI 改提示词」弹框（契约 docs/changes/0.1.64.md §2）
+  const aiOv = $('prompt-ai-overlay');
+  const aiInput = $('prompt-ai-input');
+  const aiResult = $('prompt-ai-result');
+  const aiResultText = $('prompt-ai-result-text');
+  const aiErr = $('prompt-ai-err');
+  const aiKeep = $('prompt-ai-keep');
+  const aiRetry = $('prompt-ai-retry');
+  const aiGo = $('prompt-ai-go');
+  const aiUse = $('prompt-ai-use');
+  let aiBase = '';
+  let aiNew = null;
+  let aiBusy = false;
+  let aiRid = 0;
+  function aiRender() {
+    const has = aiNew != null;
+    aiResult.hidden = !has;
+    aiResultText.textContent = has ? aiNew : '';
+    aiKeep.textContent = has ? '保持原版' : '取消';
+    aiGo.hidden = has;
+    aiRetry.hidden = !has;
+    aiUse.hidden = !has;
+    aiInput.readOnly = aiBusy;
+    const empty = !aiInput.value.trim();
+    aiGo.textContent = aiBusy ? '生成中…' : '生成新版';
+    aiGo.disabled = aiBusy || empty;
+    aiRetry.textContent = aiBusy ? '生成中…' : '再试一版';
+    aiRetry.disabled = aiBusy || empty;
+    aiUse.disabled = aiBusy;
+  }
+  function aiError(text) { aiErr.textContent = text || ''; aiErr.hidden = !text; }
+  function openPromptAi() {
+    if (promptEl.readOnly) return;
+    aiBase = promptEl.value;
+    aiNew = null; aiBusy = false;
+    aiInput.value = '';
+    aiError('');
+    aiOv.hidden = false;
+    api.setPromptAiOpen(true);
+    aiRender();
+    aiInput.focus();
+  }
+  function closePromptAi() {
+    if (aiOv.hidden) return;
+    if (aiBusy) api.cancelRewriteReaderPrompt(aiRid);
+    aiRid += 1; aiBusy = false; aiNew = null;
+    aiOv.hidden = true;
+    api.setPromptAiOpen(false);
+  }
+  function aiGenerate() {
+    if (aiBusy || !aiInput.value.trim()) return;
+    aiRid += 1;
+    const rid = aiRid;
+    aiBusy = true;
+    aiError('');
+    aiRender();
+    api.rewriteReaderPrompt({ rid, prompt: aiBase, request: aiInput.value }).then((r) => {
+      if (rid !== aiRid || aiOv.hidden) return;
+      aiBusy = false;
+      if (r && r.ok) { aiNew = r.prompt; aiError(''); }
+      else aiError((r && r.error) || '生成失败：连不上接口');
+      aiRender();
+    }).catch(() => {
+      if (rid !== aiRid || aiOv.hidden) return;
+      aiBusy = false; aiError('生成失败：连不上接口'); aiRender();
+    });
+  }
+  function aiUseNew() {
+    if (aiBusy || aiNew == null) return;
+    api.saveReaderPrompt(aiNew).then((r) => {
+      if (r && r.ok) {
+        promptMsg(''); promptEl.value = r.prompt; promptDirty = false;
+        closePromptAi();
+        showToast({ type: 'success', title: '提示词已更新' });
+      } else aiError((r && r.error) || '保存失败');
+    }).catch(() => aiError('保存失败'));
+  }
+  $('reader-prompt-ai').addEventListener('click', openPromptAi);
+  aiKeep.addEventListener('click', closePromptAi);
+  aiGo.addEventListener('click', aiGenerate);
+  aiRetry.addEventListener('click', aiGenerate);
+  aiUse.addEventListener('click', aiUseNew);
+  aiInput.addEventListener('input', aiRender);
+  aiInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !e.isComposing) { e.preventDefault(); aiGenerate(); }
+  });
+  // 点遮罩空白处不关（契约 §2.3，防止误点丢掉结果）；要改成「点遮罩 = 保持原版」只需把下面这行改成 closePromptAi()
+  aiOv.addEventListener('pointerdown', (e) => { if (e.target === aiOv) { /* 不关 */ } });
+  api.onPromptAiEscape(closePromptAi);
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !aiOv.hidden) { e.preventDefault(); e.stopPropagation(); closePromptAi(); }
+  }, true);
+  window.closePromptAi = closePromptAi;
 
   window.openReaderView = openReaderView;
   window.closeReaderView = closeReaderView;

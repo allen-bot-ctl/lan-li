@@ -1183,6 +1183,7 @@ function openSettingsView(tab = 'ui') {
 
 function closeSettingsView() {
   closeQuitConfirm();
+  if (typeof window.closePromptAi === 'function') window.closePromptAi();
   if (settingsView.hidden) return;
   closeAllPickers();
   settingsTab = null;

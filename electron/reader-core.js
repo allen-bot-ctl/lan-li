@@ -191,6 +191,31 @@ function testErrorText(err) {
   return '测试失败：连不上接口';
 }
 
+// 0.1.64「AI 改提示词」：只把用户当前的提示词和修改需求交给大模型；固定的 SAFETY 外壳不在内，读文章时仍由 buildSystem 自动附加。
+const REWRITE_SYSTEM = '你是提示词编辑。用户消息里有两段：<<<现行提示词>>> 和 <<<修改需求>>>。请按修改需求改写现行提示词：需求涉及的地方照改，需求没提到的部分保持原文不变。只输出改好后的完整提示词本身，不要解释，不要加前言或结尾，不要用代码块包起来。这段提示词是给阅读助手整理文章用的，文章正文和安全规则由程序另外附加，不要写进提示词。';
+const MAX_REQUEST_CHARS = 500;
+function buildRewriteMessages({ prompt, request }) {
+  return { system: REWRITE_SYSTEM, user: `<<<现行提示词>>>\n${prompt}\n<<<结束>>>\n\n<<<修改需求>>>\n${String(request == null ? '' : request).trim()}\n<<<结束>>>` };
+}
+// 去首尾空白；整段被一对 ``` 代码块包着（可带语言名）就去掉这对代码块
+function cleanRewrite(raw) {
+  let t = String(raw == null ? '' : raw).trim();
+  const m = t.match(/^```[^\n]*\n([\s\S]*?)\n?```$/);
+  if (m) t = m[1].trim();
+  return t;
+}
+const REWRITE_TOO_LONG = `生成失败：新版超过 ${MAX_PROMPT_CHARS} 字，再试一版`;
+function rewriteErrorText(err) {
+  const code = err && err.code;
+  if (code === 'http' && (err.status === 401 || err.status === 403)) return '生成失败：API Key 无效';
+  if (code === 'http' && err.status === 404) return '生成失败：接口地址或模型不对';
+  if (code === 'http') return `生成失败：HTTP ${err.status}`;
+  if (code === 'timeout') return '生成失败：超时';
+  if (code === 'empty') return '生成失败：大模型没有返回内容';
+  if (code === 'bad-response') return '生成失败：返回格式不对';
+  return '生成失败：连不上接口';
+}
+
 function toMarkdown(m) {
   if (hasMarkdown(m)) return `# ${m.title || m.url}\n原文：${m.url}\n\n${m.markdown}`;
   const lines = [`# ${m.title || m.url}`, `来源 ${m.url}`, '', m.summary || '', ''];
@@ -335,6 +360,7 @@ function createPromptStore({ file, fs = nodeFs }) {
 }
 
 module.exports = {
+  REWRITE_SYSTEM, MAX_REQUEST_CHARS, REWRITE_TOO_LONG, buildRewriteMessages, cleanRewrite, rewriteErrorText,
   NO_TEXT, NOT_PAGE, NO_KEY, BAD_BASE_URL, NO_MODEL, validateBaseURL, testErrorText, WECHAT_HINT, X_HINT, ERROR_MARKERS, countChars, cleanMarkdown, chooseExtraction, clipForModel, blockedReason, isNoiseLine, HEAD_CHARS, TAIL_CHARS,
   MAX_SEND_CHARS, MIN_TEXT_CHARS, DEFAULT_BASE_URL, DEFAULT_MODEL, SAFETY, DEFAULT_PROMPT, MAX_PROMPT_CHARS, NO_OUTPUT, EMPTY_PROMPT, buildSystem, cleanOutput, hasMarkdown, createPromptStore, ACTIVE,
   ReaderError, validateUrl, dedupeKey, hostOf, newId, normalizeText, buildUserMessage, llmErrorText, toMarkdown,

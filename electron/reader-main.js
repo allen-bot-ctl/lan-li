@@ -222,6 +222,34 @@ function createReaderController(deps) {
     };
   }
 
+  // 0.1.64「AI 改提示词」：用已配置的大模型改写（基于设置页文本框当前内容，含未保存修改）；可按 rid 取消
+  const rewrites = new Map();
+  let e2eRewriteAborts = 0;
+  async function rewritePrompt({ rid, prompt, request }) {
+    const cfg = keys.config();
+    if (!cfg.apiKey) return { ok: false, code: 'no-key', error: C.NO_KEY };
+    const req = String(request == null ? '' : request).trim().slice(0, C.MAX_REQUEST_CHARS);
+    const base = String(prompt == null ? '' : prompt).trim() || C.DEFAULT_PROMPT;
+    if (!req) return { ok: false, code: 'no-request', error: '先写一下想怎么改' };
+    const controller = new AbortController();
+    if (rid != null) rewrites.set(rid, controller);
+    const aborted = () => { e2eRewriteAborts += 1; return { ok: false, code: 'cancel' }; };
+    try {
+      const msgs = C.buildRewriteMessages({ prompt: base, request: req });
+      const raw = await complete({ system: msgs.system, user: msgs.user, configuration: cfg, fetchImpl: llmFetch(), signal: controller.signal });
+      if (controller.signal.aborted) return aborted();
+      const out = C.cleanRewrite(raw);
+      if (!out) return { ok: false, code: 'empty', error: C.rewriteErrorText({ code: 'empty' }) };
+      if ([...out].length > C.MAX_PROMPT_CHARS) return { ok: false, code: 'too-long', error: C.REWRITE_TOO_LONG };
+      return { ok: true, prompt: out };
+    } catch (e) {
+      if (controller.signal.aborted) return aborted();
+      return { ok: false, code: (e && e.code) || 'network', error: C.rewriteErrorText(e) };
+    } finally {
+      if (rid != null) rewrites.delete(rid);
+    }
+  }
+
   async function summarize(id, signal) {
     const m = store.get(id);
     const cfg = keys.config();
@@ -381,6 +409,8 @@ function createReaderController(deps) {
     ipcMain.handle('reader:getPrompt', () => ({ prompt: prompts.get(), defaultPrompt: C.DEFAULT_PROMPT, max: C.MAX_PROMPT_CHARS }));
     ipcMain.handle('reader:savePrompt', (_e, t) => prompts.save(t));
     ipcMain.handle('reader:resetPrompt', () => { const p = prompts.reset(); return { ok: true, prompt: p }; });
+    ipcMain.handle('reader:rewritePrompt', (_e, a) => rewritePrompt(a || {}));
+    ipcMain.on('reader:cancelRewrite', (_e, rid) => { const c = rewrites.get(rid); if (c) c.abort(); });
     ipcMain.handle('reader:testConfig', (_e, c) => testConfig(c || {}));
   }
 
@@ -390,6 +420,7 @@ function createReaderController(deps) {
       setFakeLlm: (f) => { fakeLlm = f || null; return true; },
       openCalls: () => e2eOpen.slice(),
       llmCalls: () => e2eLlmCalls.slice(),
+      rewriteStats: () => ({ aborts: e2eRewriteAborts, inFlight: rewrites.size }),
       statusLog: () => e2eStatusLog.slice(),
       queueLength: () => queue.length + (running ? 1 : 0),
       readPage: (u) => readPage(u)
