@@ -51,6 +51,7 @@ test('收纳文字详情专注阅读，返回保留筛选、日期、滚动位�
     const listTop = (await list.boundingBox()).y;
     await row.press('Enter');
     await expect(detail).toBeVisible();
+    await expect(page.locator('#settings-button')).toBeHidden();
     await expect(back).toHaveAccessibleName('返回收纳列表');
     await expect(back).toBeFocused();
     await expect(page.locator('#inbox-title')).toHaveText('回归资料 7');

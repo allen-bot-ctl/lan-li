@@ -213,7 +213,8 @@ test('A-C9 / P-C1–P-C3 顶栏收纳入口在检查更新左侧；图标等距�
   expect(Math.abs(geo.textMid - geo.areaMid)).toBeLessThanOrEqual(2);
   // P-C3 收纳页顶栏标题居中
   expect(Math.abs(geo.titleMid - geo.viewMidX)).toBeLessThanOrEqual(1);
-  // P-C1 与设置胶囊 8px（0.1.62 起收纳页里胶囊也显示，主界面同样）
+  await expect(page.locator('#settings-button')).toBeHidden();
+  // P-C1 只有日历有设置胶囊，与钉住按钮间距仍为 8px
   fs.mkdirSync(path.join(__dirname, 'screenshots'), { recursive: true });
   await page.screenshot({ path: path.join(__dirname, 'screenshots', '45-inbox-empty.png') });
   await page.locator('#inbox-back').click();

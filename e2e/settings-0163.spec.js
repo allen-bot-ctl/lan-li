@@ -64,22 +64,21 @@ test.beforeAll(async () => {
 test.afterAll(async () => { if (app) await app.close(); });
 const quits = async () => (await hook('trayMenuStats')).quitCalls;
 
-test('R1 日历/收纳/帮阅点 ⚙ 直接进设置页，无下拉，自动钉住，返回恢复', async () => {
+test('R1 日历点 ⚙ 直接进设置页，无下拉，自动钉住，返回恢复', async () => {
   await reset();
   await shots('63-topbar-settings');
-  for (const open of [null, openInbox, openReader]) {
-    await reset();
-    if (open) { await open(); }
-    await expect(page.locator('#settings-button')).toBeVisible();
-    await expect(page.locator('#settings-button')).not.toHaveAttribute('aria-haspopup', /.*/);
-    await page.click('#settings-button');
-    await expect(page.locator('#settings-view')).toBeVisible();
-    await expect(page.locator('#settings-page-ui')).toBeVisible();
-    expect(await pinned()).toBe(true);
-    expect(await visible()).toBe(true);
-    await page.click('#settings-back');
-    await toCalendar();
-  }
+  const settings = page.locator('#settings-button');
+  await expect(settings).toBeVisible();
+  await expect(settings).not.toHaveAttribute('aria-haspopup', /.*/);
+  await settings.click();
+  await expect(page.locator('#settings-view')).toBeVisible();
+  await expect(page.locator('#settings-page-ui')).toBeVisible();
+  await expect(settings).toBeHidden();
+  expect(await pinned()).toBe(true);
+  expect(await visible()).toBe(true);
+  await page.click('#settings-back');
+  await toCalendar();
+  await expect(settings).toBeVisible();
   await reset();
 });
 

@@ -1312,10 +1312,9 @@ label.settings-row{position:relative;cursor:pointer;}
 .settings-switch:checked + .switch-track{background:var(--accent);}
 .settings-switch:checked + .switch-track::after{transform:translateX(14px);}
 .settings-switch:focus-visible + .switch-track{outline:2px solid var(--accent);outline-offset:2px;}
-/* N4：设置视图里隐藏顶栏「⚙︎ 设置」，占位保留，钉住与下载不挪位。 */
-.app:has(#settings-view:not([hidden])) #settings-button{display:none;}
-/* 0.1.36：⚙ 拿掉后钉住按钮贴回右边，去掉它与 ⚙ 之间的 8px。 */
-.app:has(#settings-view:not([hidden])) .pin-button{margin-right:0;}
+/* 设置入口仅在日历显示；其他页面保留原有顶栏操作。 */
+.app:has(.app-body[hidden]) #settings-button{display:none;}
+.app:has(.app-body[hidden]) .pin-button{margin-right:0;}
 /* N5：「检查更新」用与「今天」相同的 nav-pill；下面一行是上次检查结果。 */
 .settings-check-update{margin-top:10px;padding:0 12px;font-size:12px;}
 .settings-update-result{margin-top:8px;color:var(--muted);font-size:12px;}

@@ -58,32 +58,33 @@ test.beforeAll(async () => {
   const args = process.platform === 'linux' ? ['--no-sandbox', '.'] : ['.'];
   app = await electron.launch({ args, env: { ...process.env, LANLI_E2E: '1', LANLI_INBOX_DIR: path.join(work, 'inbox'), LANLI_READER_DIR: path.join(work, 'user') } });
   page = await app.firstWindow();
-  await page.waitForSelector('#grid');
+  await page.waitForFunction(() => document.readyState === 'complete' && typeof window.openReaderView === 'function');
   await hook('showWindow');
 });
 test.afterAll(async () => { if (app) await app.close(); });
 
-test('R1 日历、收纳、帮阅三页顶栏都有「⚙ 设置」且位置一致；设置页本身不显示', async () => {
-  const box = async () => { const b = await page.locator('#settings-button').boundingBox(); const p = await page.locator('#pin-button').boundingBox(); return { x: Math.round(b.x), y: Math.round(b.y), w: Math.round(b.width), h: Math.round(b.height), gap: Math.round(b.x - (p.x + p.width)) }; };
+test('R1 仅日历右上角显示设置，其他顶栏操作和返回不变', async () => {
   const top = page.locator('.topbar');
-  const boxes = {};
-  await expect(page.locator('#settings-button')).toBeVisible();
-  boxes.calendar = await box();
+  const settings = page.locator('#settings-button');
+  await expect(settings).toBeVisible();
   await shots('62-topbar-calendar', top);
-  await openInbox();
-  await expect(page.locator('#settings-button')).toBeVisible();
-  boxes.inbox = await box();
-  await shots('62-topbar-inbox', top);
-  await openReader();
-  await expect(page.locator('#settings-button')).toBeVisible();
-  boxes.reader = await box();
-  await shots('62-topbar-reader', top);
-  for (const k of ['inbox', 'reader']) expect(boxes[k], k).toEqual(boxes.calendar);
-  await page.evaluate(() => { openSettingsView('ui'); });
-  await page.waitForSelector('#settings-view:not([hidden])');
-  await expect(page.locator('#settings-button')).toBeHidden();
+  for (const [name, open] of [['inbox', openInbox], ['reader', openReader]]) {
+    await open();
+    await expect(settings).toBeHidden();
+    await expect(page.getByRole('button', { name: '设置', exact: true })).toHaveCount(0);
+    for (const selector of ['#reader-button', '#inbox-button', '#check-update', '#pin-button']) {
+      await expect(page.locator(selector)).toBeVisible();
+    }
+    await shots(`62-topbar-${name}`, top);
+    await toCalendar();
+    await expect(settings).toBeVisible();
+  }
+  await settings.click();
+  await expect(page.locator('#settings-view')).toBeVisible();
+  await expect(settings).toBeHidden();
   await shots('62-topbar-settings', top);
   await reset();
+  await expect(settings).toBeVisible();
 });
 
 test('R3 自动钉住状态表：每一行', async () => {
