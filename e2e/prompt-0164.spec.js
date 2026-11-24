@@ -41,10 +41,26 @@ test.beforeAll(async () => {
   const args = process.platform === 'linux' ? ['--no-sandbox', '.'] : ['.'];
   app = await electron.launch({ args, env: { ...process.env, LANLI_E2E: '1', LANLI_INBOX_DIR: path.join(work, 'inbox'), LANLI_READER_DIR: path.join(work, 'user') } });
   page = await app.firstWindow();
-  await page.waitForSelector('#grid');
+  await page.waitForFunction(() => document.readyState === 'complete' &&
+    typeof window.openReaderView === 'function' && typeof window.renderReaderSettings === 'function');
   await hook('showWindow');
 });
 test.afterAll(async () => { if (app) await app.close(); });
+test.beforeEach(async ({}, info) => {
+  if (!/^R2/.test(info.title)) return;
+  expect((await hook('readerSaveConfig', {
+    baseURL: 'https://api.deepseek.com', model: 'deepseek-chat', apiKey: 'sk-e2e-0164'
+  })).ok).toBe(true);
+  // R2c/d verify that a prior saved prompt survives cancellation, without
+  // requiring R2b's Playwright worker to have completed successfully.
+  if (/^R2[cd]/.test(info.title)) {
+    expect((await page.evaluate(() => window.lanli.saveReaderPrompt('新版二'))).ok).toBe(true);
+  }
+  await openReaderSettings();
+  await expect(page.locator('#reader-prompt')).toBeEditable();
+  await expect(page.locator('#reader-prompt-ai')).toBeEnabled();
+});
+
 
 test('R1 没有 Key：提示词只读、三个按钮置灰、显示锁定提示；保存 Key 立即解锁；删除 Key 立即锁定', async () => {
   await openReaderSettings();
@@ -108,6 +124,7 @@ test('R2a 刚打开：需求框空且有焦点、无结果区、取消 + 生成�
 });
 
 test('R2b 生成中只读；成功后结果区 + 三个按钮；基于未保存内容；再试一版从同一版改；点遮罩不关；使用新版保存', async () => {
+  await page.fill('#reader-prompt', '我的原提示词\n第二行');
   await hook('readerSetFakeLlm', { raw: '新版一\n只留 3 条', delayMs: 600 });
   const before = (await rewriteCalls()).length;
   await openAi('核心要点只留 3 条');
