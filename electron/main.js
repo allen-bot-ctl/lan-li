@@ -126,6 +126,9 @@ let e2eTrayMenu = null;
 let e2eQuitCalls = 0;
 // Pinned is deliberately in-memory only: hiding or restarting clears it.
 let pinned = false;
+// 0.1.62：收纳、帮阅、设置页面自动钉住。subPage 为真时 pinned 已被规则置为 true，pinBeforeSub 记下进入前的值。
+let subPage = false;
+let pinBeforeSub = false;
 let updater = null;
 let selfUpdater = null;
 let updateSetupError = null;
@@ -455,6 +458,7 @@ function createCalendarWindow() {
         calendarWindow.webContents.send('inbox:escape');
       } else if (settingsViewOpen) {
         settingsViewOpen = false;
+        setSubPage(false);
         sendPanel('calendar');
       } else {
         hideCalendar();
@@ -848,11 +852,27 @@ function hideCalendar() {
   // default unpinned state, as required (nothing is persisted).
   const wasPinned = pinned;
   pinned = false;
+  subPage = false;
   if (wasPinned) sendPinState();
   if (calendarWindow && !calendarWindow.isDestroyed() && calendarWindow.isVisible()) {
     sendPanel('calendar');
     calendarWindow.hide();
   }
+}
+
+// 渲染层上报「现在是否在非日历页面」。进入：记下旧值再钉住；‹ 返回日历：恢复旧值。
+function setSubPage(open) {
+  open = Boolean(open);
+  if (open === subPage) return;
+  subPage = open;
+  if (open) {
+    pinBeforeSub = pinned;
+    pinned = true;
+    cancelClose();
+  } else {
+    pinned = pinBeforeSub;
+  }
+  sendPinState();
 }
 
 function sendPinState() {
@@ -939,7 +959,7 @@ function registerIpc() {
   ipcMain.handle('settings:setHotkey', (_e, a) => setHotkey(a && a.kind, a && a.accelerator));
   ipcMain.handle('settings:setOpenAtLogin', (_e, value) => applyLoginItem(Boolean(value)));
   ipcMain.handle('settings:setMenuBarShowDate', (_e, value) => setMenuBarShowDate(value));
-  ipcMain.on('settings:viewState', (_e, open) => { settingsViewOpen = Boolean(open); });
+  ipcMain.on('settings:viewState', (_e, open) => { settingsViewOpen = Boolean(open); setSubPage(open); });
   ipcMain.on('inbox:viewState', (_e, open) => { inboxViewOpen = Boolean(open); });
   ipcMain.on('reader:viewState', (_e, open) => { readerViewOpen = Boolean(open); });
 

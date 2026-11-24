@@ -27,7 +27,7 @@ async function pasteAndCheck(clipData) {
   if (clipData) await hook('setClipboardData', clipData);
   await page.click('#inbox-paste');
   await page.waitForTimeout(1500);
-  expect(await hook('isPinned')).toBe(false);
+  expect(await hook('isPinned')).toBe(true);   // 0.1.62：收纳页自动钉住
   expect(await hook('isVisible')).toBe(true);
   expect((await hook('dropzoneState')).visible).toBe(false);
   await expect(page.locator('#toast')).toBeVisible();

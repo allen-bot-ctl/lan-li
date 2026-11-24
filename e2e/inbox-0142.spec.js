@@ -202,7 +202,7 @@ test('A-C9 / P-C1–P-C3 顶栏收纳入口在检查更新左侧；图标等距�
   const geo = await page.evaluate(() => {
     const r = (sel) => document.querySelector(sel).getBoundingClientRect();
     const ib = r('#inbox-button'); const cu = r('#check-update'); const pb = r('#pin-button');
-    const icons = ['#inbox-button svg', '#check-update svg', '#pin-button svg.pin-icon-pin'].map((q) => { const b = r(q); return b.top + b.height / 2; });
+    const icons = ['#inbox-button svg', '#check-update svg', '#pin-button svg:not([hidden])'].map((q) => { const b = r(q); return b.top + b.height / 2; });
     const view = r('#inbox-view'); const empty = r('#inbox-empty'); const head = r('.inbox-head');
     const back = r('#inbox-back'); const title = r('.inbox-title');
     const listTop = Math.max(...Array.from(document.querySelectorAll('#inbox-view > *')).filter((el) => el !== document.getElementById('inbox-empty') && el.getBoundingClientRect().height > 0 && el.getBoundingClientRect().bottom <= empty.top + 1).map((el) => el.getBoundingClientRect().bottom), head.bottom);
@@ -213,7 +213,7 @@ test('A-C9 / P-C1–P-C3 顶栏收纳入口在检查更新左侧；图标等距�
   expect(Math.abs(geo.textMid - geo.areaMid)).toBeLessThanOrEqual(2);
   // P-C3 收纳页顶栏标题居中
   expect(Math.abs(geo.titleMid - geo.viewMidX)).toBeLessThanOrEqual(1);
-  // P-C1 与设置胶囊 8px：在主界面量（收纳页里胶囊隐藏）
+  // P-C1 与设置胶囊 8px（0.1.62 起收纳页里胶囊也显示，主界面同样）
   fs.mkdirSync(path.join(__dirname, 'screenshots'), { recursive: true });
   await page.screenshot({ path: path.join(__dirname, 'screenshots', '45-inbox-empty.png') });
   await page.locator('#inbox-back').click();

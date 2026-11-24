@@ -1,6 +1,6 @@
 {
   "name": "lan-li",
-  "version": "0.1.61",
+  "version": "0.1.62",
   "private": true,
   "description": "栏历：macOS 菜单栏公历与农历月历。",
   "homepage": "https://allen-bot-ctl.github.io/lan-li/",
@@ -20,6 +20,7 @@
     "@mozilla/readability": "0.6.0",
     "defuddle": "0.19.13",
     "lunar-javascript": "1.7.8",
+    "markdown-it": "15.0.3",
     "turndown": "7.2.5"
   },
   "devDependencies": {
