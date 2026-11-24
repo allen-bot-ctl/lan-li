@@ -446,14 +446,18 @@ function createInboxStore(opts) {
     if (request.restoreText === true) delete next.edit;
     if (request.text !== undefined) {
       if (state.mode !== 'plain') throw new InboxError('protected', '这条正文需要保护原格式');
-      const body = string(request.text, Edit.MAX);
-      if (!body.trim()) throw new InboxError('invalid-edit', '正文不能为空');
-      if (state.text !== body) next.edit = { text: body, html: Edit.textHtml(body) };
+      if (state.text !== request.text) {
+        const body = string(request.text, Edit.MAX);
+        if (!body.trim()) throw new InboxError('invalid-edit', '正文不能为空');
+        next.edit = { text: body, html: Edit.textHtml(body) };
+      }
     }
     if (request.richParts !== undefined) {
       if (state.mode !== 'rich') throw new InboxError('protected', '这条正文需要保护原格式');
-      const html = Edit.applyParts(state.html, state.parts, request.richParts);
-      if (html !== state.html) next.edit = { html };
+      const values = request.richParts;
+      const noChange = Array.isArray(values) && values.length === state.parts.length &&
+        state.parts.every((part, i) => part.text === values[i]);
+      if (!noChange) next.edit = { html: Edit.applyParts(state.html, state.parts, values) };
     }
     if (JSON.stringify(next) === JSON.stringify(meta)) return { changed: false };
     // Retire any persisted old index before the commit. A later cache write

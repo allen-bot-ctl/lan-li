@@ -17,7 +17,7 @@ test('详情编辑、保真片段、保护原件及书签改址贯通界面和�
     const { ids } = await page.evaluate(() => window.lanli.addInboxManual('原文字\n下一行\n\n最后一行'));
     await hook('setClipboardData', { html: '<div><p class="copy-block">图文<strong><span style="font-weight: bold; color: rgb(24, 49, 73)">加粗段</span></strong><span class="Apple-converted-space">&nbsp;</span></p><p>原段</p></div>', text: '图文加粗段 原段' });
     await page.evaluate(() => window.lanli.captureClipboard());
-    await hook('inboxDrop', { html: '<p style="color:brown">保护文字</p>', text: '保护文字' });
+    await hook('inboxDrop', { html: '<p data-origin="old-fragment">保护文字</p>', text: '保护文字' });
     await hook('inboxDrop', { uriList: ['https://example.org/original'], text: '独立书签' });
     await page.click('#inbox-button');
     const editor = page.locator('#inbox-edit-dialog');

@@ -99,3 +99,13 @@ test('事务失败不动原件；提交后索引写失败，重启仍读取更�
   assert(!fs.existsSync(path.join(root, 'index.json')));
   assert.equal(open().list()[0].body, '提交成功');
 });
+
+test('历史超长正文可不改正文直接更新元信息', (t) => {
+  const { store } = fixture(t);
+  const text = '长'.repeat(20001);
+  const plain = store.addText(text);
+  assert.equal(update(store, plain.id, { text, note: '任然可注记' }).changed, true);
+  const rich = store.addText({ html: '<p>' + text + '</p>' });
+  assert.equal(update(store, rich.id, { richParts: [text], note: '任然可注记' }).changed, true);
+  assert.equal(store.get(rich.id).html, '<p>' + text + '</p>');
+});
