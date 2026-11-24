@@ -51,9 +51,15 @@ test('系统剪贴板图文原位编辑，图前后、格式、取消、保存�
     await expect(writer.locator('p').filter({ hasText: '图后：待修改' })).toBeVisible();
     await page.screenshot({path:info.outputPath('native-editing.png')});
     const replace = async (needle,text) => {
-      await writer.locator('p').filter({hasText:needle}).click();
-      await page.keyboard.press('Home');
-      await page.keyboard.press('Shift+End');
+      const para = writer.locator('p').filter({hasText:needle});
+      await para.click();
+      await para.evaluate(el => {
+        const selection = el.ownerDocument.getSelection();
+        const range = el.ownerDocument.createRange();
+        range.selectNodeContents(el);
+        selection.removeAllRanges();
+        selection.addRange(range);
+      });
       await page.keyboard.insertText(text);
     };
     await replace('图前：','图前：不应被保存');
