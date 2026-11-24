@@ -59,6 +59,7 @@ contextBridge.exposeInMainWorld('lanli', {
   openInboxEntry: (id) => ipcRenderer.invoke('inbox:open', id),
   readInboxEdit: (id) => ipcRenderer.invoke('inbox:readEdit', id),
   saveInboxEdit: (id, draft) => ipcRenderer.invoke('inbox:saveEdit', id, draft),
+  saveInboxDocument: (id, draft) => ipcRenderer.invoke('inbox:saveDocument', id, draft),
   onInboxRequestEdit: (callback) => { ipcRenderer.on('inbox:requestEdit', (_e, id) => callback(id)); },
   revealInboxEntry: (id) => ipcRenderer.invoke('inbox:reveal', id),
   removeInboxEntry: (id) => ipcRenderer.invoke('inbox:remove', id),

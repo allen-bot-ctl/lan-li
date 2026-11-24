@@ -3,3 +3,6 @@ dist/
 test-results/
 playwright-report/
 e2e/screenshots/
+
+# Built from the pinned Tiptap editor source
+/electron/renderer/vendor/inbox-writer.js

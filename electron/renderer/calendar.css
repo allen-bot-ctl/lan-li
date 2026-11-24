@@ -1698,3 +1698,17 @@ mark.inbox-hit{background:rgba(255,200,0,.45);color:inherit;border-radius:2px;}
 .inbox-edit-actions { display: flex; gap: 8px; justify-content: end; flex-wrap: wrap; }
 .inbox-edit-actions button { color: var(--text); background: var(--chip); border: 1px solid var(--sheet-border); border-radius: 7px; padding: 6px 10px; }
 #inbox-edit-save { outline-color: var(--accent); font-weight: 600; }
+
+#inbox-wys-panel[hidden], #inbox-wys-panel [hidden], #inbox-detail-frame[hidden] { display: none !important; }
+#inbox-wys-panel { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+#inbox-wys-toolbar, #inbox-wys-link-form, #inbox-wys-actions { display: flex; gap: 5px; padding: 6px 12px; flex-wrap: wrap; align-items: center; }
+#inbox-wys-toolbar, #inbox-wys-link-form { border-bottom: 1px solid var(--line, #7774); }
+#inbox-wys-actions { justify-content: end; border-top: 1px solid var(--line, #7774); }
+#inbox-wys-actions span { margin-right: auto; }
+#inbox-wys-panel button { color: var(--text); background: var(--chip); border: 1px solid var(--sheet-border); border-radius: 6px; padding: 3px 6px; font-size: 12px; }
+#inbox-wys-panel button[aria-pressed="true"], #inbox-wys-save { background: var(--chip-hover); font-weight: 600; }
+#inbox-wys-body { flex: 1; overflow: auto; min-height: 0; padding: 12px 16px; }
+#inbox-wys-body .tiptap { min-height: 100%; user-select: text; outline: none; white-space: pre-wrap; word-break: break-word; font: inherit; }
+#inbox-wys-body :is(p,h1,h2,h3,h4,h5,h6,ul,ol,blockquote) { margin: 0 0 10px; }
+#inbox-wys-body img { max-width: 100%; height: auto; display: block; }
+#inbox-wys-body .ProseMirror-selectednode { outline: 2px solid var(--accent); }

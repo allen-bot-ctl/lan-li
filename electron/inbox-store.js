@@ -4,13 +4,16 @@
 //   <root>/<id>/meta.json
 //     file : <原名>.symlink 软链接，meta.sourcePath 记原路径
 //     image: original.<ext> + thumb.jpg（≤320px，由 makeThumb 生成，可无）
-//     text : content.html（纯文本转义包 <p>；富文本清洗），内嵌图片 assets/img-N.<ext>
+//     text : document.json（新收纳；Tiptap JSON），内嵌图片 assets/img-N.<ext>；旧条目仍读 content.html
 //     link : 只有 meta.json
 // 写盘先写 <id>.tmp/ 再 rename；单次最多 50 项，单张图片 ≤ 50MB。
 const path = require('node:path');
 const nodeFs = require('node:fs');
 const Q = require('./renderer/inbox-query');
 const Edit = require('./inbox-edit');
+const DOC_FORMAT = 'tiptap-v1';
+const DOCUMENT_FILE = 'document.json';
+const Document = () => require('./inbox-document');
 const { createTagLibrary, TAGS_FILE } = require('./tag-library');
 
 const SCHEMA = 1;
@@ -83,7 +86,8 @@ function classifyDrop(drop) {
   if (!files.length) files = (d.uriList || []).map(fileUrlToPath).filter(Boolean);
   if (files.length) return files.map((p) => ({ kind: isImagePath(p) ? 'image' : 'file', path: p }));
   const html = typeof d.html === 'string' ? d.html.trim() : '';
-  const text = typeof d.text === 'string' ? d.text.trim() : '';
+  const rawText = typeof d.text === 'string' ? d.text : '';
+  const text = rawText.trim();
   const uris = (d.uriList || []).map((u) => String(u).trim()).filter((u) => u && !u.startsWith('#'));
   if (html) {
     const imgs = imgSources(html);
@@ -92,14 +96,14 @@ function classifyDrop(drop) {
     if (imgs.length === 1 && !plain) return [{ kind: 'image', url: imgs[0] }];
     const onlyLink = /^<a\b[^>]*href\s*=\s*"(https?:[^"]+)"[^>]*>([\s\S]*?)<\/a>$/i.exec(html);
     if (onlyLink && !/<img\b/i.test(onlyLink[2])) return [{ kind: 'link', url: onlyLink[1], title: htmlToPlain(onlyLink[2]) || text }];
-    if (plain || imgs.length) return [{ kind: 'text', html, text }];
+    if (plain || imgs.length) return [{ kind: 'text', html, text: rawText }];
   }
   const httpUris = uris.filter((u) => URL_RE.test(u));
   if (httpUris.length && (!text || httpUris.includes(text) || URL_RE.test(text) || (text.length <= 200 && !text.includes('\n')))) {
     return httpUris.map((u) => ({ kind: 'link', url: u, title: (text && text !== u && !URL_RE.test(text)) ? text : '' }));
   }
   if (text && URL_RE.test(text)) return [{ kind: 'link', url: text, title: '' }];
-  if (text) return [{ kind: 'text', text }];
+  if (text) return [{ kind: 'text', text: rawText }];
   return [];
 }
 
@@ -109,18 +113,22 @@ function classifyClipboard(c) {
   const d = c || {};
   const files = (d.files || []).filter(Boolean);
   if (files.length) return files.map((p) => ({ kind: isImagePath(p) ? 'image' : 'file', path: p }));
-  const html = typeof d.html === 'string' ? d.html.trim() : '';
-  const text = typeof d.text === 'string' ? d.text.trim() : '';
+  const rawText = typeof d.text === 'string' ? d.text : '';
+  // On macOS Electron may read the same plain pasteboard string as HTML. Do not
+  // parse it as markup: preserve tabs, newlines and literal angle brackets.
+  const rawHtml = typeof d.html === 'string' ? d.html : '';
+  const html = rawHtml === rawText ? '' : rawHtml.trim();
+  const text = rawText.trim();
   const htmlPlain = html ? htmlToPlain(html) : '';
   // 只复制了一张图：剪贴板里有位图，html 为空或只是一个 <img>，没有文字
   if (d.image && d.image.buffer && d.image.buffer.length && !htmlPlain && !text) {
     return [{ kind: 'image', buffer: d.image.buffer, ext: d.image.ext || 'png', name: '剪贴板图片' }];
   }
   if (html) {
-    const r = classifyDrop({ html, text });
+    const r = classifyDrop({ html, text: rawText });
     if (r.length) return r;
   }
-  if (text) return classifyDrop({ text });
+  if (text) return classifyDrop({ text: rawText });
   return [];
 }
 
@@ -224,20 +232,48 @@ function createInboxStore(opts) {
     const lines = plain.split('\n').map((l) => l.trim()).filter(Boolean);
     const rich = Boolean(i.html);
     const fields = { title: (lines[0] || '').slice(0, rich ? 40 : 60) || (rich ? '图文' : '文字'), file: 'content.html', assets: [], rich, preview: plain.replace(/\s+/g, ' ').slice(0, 120), rest: lines.slice(1).join(' ').replace(/\s+/g, ' ').slice(0, 60) };
+    if (o.documentFormat) {
+      fields.file = DOCUMENT_FILE;
+      fields.documentFormat = DOC_FORMAT;
+    }
     return run('text', fields, (e) => {
       const imgs = i.images || [];
       if (imgs.length) fs.mkdirSync(path.join(e.tmp, 'assets'), { recursive: true });
       imgs.forEach((img, n) => {
-        const file = `assets/img-${n + 1}.${(img.ext || 'png').toLowerCase()}`;
+        const ext = String(img.ext || 'png').toLowerCase();
+        if (o.documentFormat && (!IMAGE_EXTS.includes(ext) || !Buffer.isBuffer(img.buffer) || img.buffer.length > MAX_IMAGE_BYTES)) {
+          throw new InboxError('unsupported', '图文包含不支持的图片附件');
+        }
+        const file = `assets/img-${n + 1}.${ext}`;
         fs.writeFileSync(path.join(e.tmp, file), img.buffer);
         e.meta.assets.push(file);
-        if (img.src) html = html.split(img.src).join(file);
+        if (img.src && !o.documentFormat) html = html.split(img.src).join(file);
       });
       if (e.meta.assets.length && makeThumb) {
         try { makeThumb(path.join(e.tmp, e.meta.assets[0]), path.join(e.tmp, 'thumb.jpg')); if (fs.existsSync(path.join(e.tmp, 'thumb.jpg'))) e.meta.thumb = 'thumb.jpg'; } catch { /* 没缩略图也能用 */ }
       }
-      e.meta.size = Buffer.byteLength(html);
-      fs.writeFileSync(path.join(e.tmp, 'content.html'), html);
+      if (o.documentFormat) {
+        const codec = Document();
+        const approved = documentAssets(e.meta);
+        // Replace only image src. The codec parses HTML structurally, so aliases
+        // are passed separately and never rewrite body text by string matching.
+        const aliases = Object.create(null);
+        imgs.forEach((img, n) => { if (img.src) aliases[img.src] = e.meta.assets[n]; });
+        const doc = i.html ? codec.importHtml(html, approved, aliases) : codec.importPlain(String(i.text || ''));
+        const canonical = codec.normalize(doc, approved);
+        requireNonemptyDocument(canonical, codec);
+        const body = codec.plainText(canonical);
+        const documentLines = body.split('\n').map((l) => l.trim()).filter(Boolean);
+        e.meta.title = (documentLines[0] || '').slice(0, rich ? 40 : 60) || (rich ? '图文' : '文字');
+        e.meta.preview = body.replace(/\s+/g, ' ').slice(0, 120);
+        e.meta.rest = documentLines.slice(1).join(' ').replace(/\s+/g, ' ').slice(0, 60);
+        const json = JSON.stringify(canonical);
+        e.meta.size = Buffer.byteLength(json);
+        fs.writeFileSync(path.join(e.tmp, DOCUMENT_FILE), json);
+      } else {
+        e.meta.size = Buffer.byteLength(html);
+        fs.writeFileSync(path.join(e.tmp, 'content.html'), html);
+      }
     });
   }
 
@@ -283,6 +319,20 @@ function createInboxStore(opts) {
   let cache = null;
   let stale = false;
 
+  function documentAssets(meta) {
+    return (Array.isArray(meta.assets) ? meta.assets : []).filter((file) =>
+      typeof file === 'string' && /^assets\/img-[1-9]\d*\.(?:png|jpg|jpeg|gif|webp|heic|bmp|tiff|tif)$/i.test(file));
+  }
+
+  function documentRecord(dir, meta) {
+    const raw = fs.readFileSync(path.join(dir, DOCUMENT_FILE), 'utf8');
+    const codec = Document();
+    const assets = documentAssets(meta);
+    const document = codec.normalize(meta.documentEdit ?? JSON.parse(raw), assets);
+    const revision = Edit.revision({ ...meta, edit: meta.documentEdit }, raw);
+    return { document, revision, assets, raw };
+  }
+
   function scanMetas() {
     if (!fs.existsSync(root)) return [];
     const out = [];
@@ -292,11 +342,17 @@ function createInboxStore(opts) {
         const meta = JSON.parse(fs.readFileSync(path.join(root, id, 'meta.json'), 'utf8'));
         if (meta.type === 'text') {
           try {
-            const html = meta.edit?.html ?? fs.readFileSync(path.join(root, id, 'content.html'), 'utf8');
-            meta.body = (meta.edit?.text ?? htmlToPlain(stripInline(html))).slice(0, 5000);
-            if (meta.edit) { const lines = meta.body.split('\n').map((l) => l.trim()).filter(Boolean); meta.editPreview = lines.join(' ').slice(0, 120); meta.editRest = lines.slice(1).join(' ').slice(0, 60); }
+            if (meta.documentFormat === DOC_FORMAT) {
+              const current = documentRecord(path.join(root, id), meta);
+              meta.body = Document().plainText(current.document).slice(0, 5000);
+            } else {
+              const html = meta.edit?.html ?? fs.readFileSync(path.join(root, id, 'content.html'), 'utf8');
+              meta.body = (meta.edit?.text ?? htmlToPlain(stripInline(html))).slice(0, 5000);
+            }
+            if (meta.edit || meta.documentEdit) { const lines = meta.body.split('\n').map((l) => l.trim()).filter(Boolean); meta.editPreview = lines.join(' ').slice(0, 120); meta.editRest = lines.slice(1).join(' ').slice(0, 60); }
           } catch { /* 没正文 */ }
           delete meta.edit;
+          delete meta.documentEdit;
         }
         out.push(meta);
       } catch { /* 跳过坏条目 */ }
@@ -348,7 +404,12 @@ function createInboxStore(opts) {
     resolveTags(meta);
     const res = { meta, dir };
     if (meta.file) res.filePath = path.join(dir, meta.file);
-    if (meta.type === 'text') res.html = meta.edit?.html ?? fs.readFileSync(path.join(dir, 'content.html'), 'utf8');
+    if (meta.type === 'text' && meta.documentFormat === DOC_FORMAT) {
+      const { document, revision, assets } = documentRecord(dir, meta);
+      Object.assign(res, { document, revision, assets });
+      res.html = Document().renderHtml(res.document, res.assets);
+      res.text = Document().plainText(res.document);
+    } else if (meta.type === 'text') res.html = meta.edit?.html ?? fs.readFileSync(path.join(dir, 'content.html'), 'utf8');
     return res;
   }
 
@@ -393,16 +454,40 @@ function createInboxStore(opts) {
     }
   }
 
+  function saveDocument(id, request) {
+    const { dir, meta } = readMeta(id);
+    if (meta.type !== 'text' || meta.documentFormat !== DOC_FORMAT) throw new InboxError('protected', '此记录为旧格式，保留原文');
+    const previous = documentRecord(dir, meta);
+    if (!request || request.revision !== previous.revision) throw new InboxError('conflict', '这条收纳已更新，请重新打开后再编辑');
+    const codec = Document();
+    const document = codec.normalize(request.document, previous.assets);
+    if (JSON.stringify(document) === JSON.stringify(previous.document)) return { changed: false, revision: previous.revision };
+    requireNonemptyDocument(document, codec);
+    const next = { ...meta, documentEdit: document };
+    fs.rmSync(path.join(root, INDEX), { force: true });
+    writeMetaAtomic(dir, next);
+    stale = true;
+    try { invalidate(); stale = false; } catch { cache = null; }
+    return { changed: true, revision: Edit.revision({ ...next, edit: next.documentEdit }, previous.raw), indexPending: stale };
+  }
+
+  function requireNonemptyDocument(doc, codec) {
+    const hasImage = (node) => node.type === 'image' || (node.content || []).some(hasImage);
+    if (!codec.plainText(doc).trim() && !hasImage(doc)) throw new InboxError('invalid-edit', '正文不能为空');
+  }
+
   function editSource(id) {
     const { dir, meta } = readMeta(id);
-    const original = meta.type === 'text' ? fs.readFileSync(path.join(dir, 'content.html'), 'utf8') : '';
-    return { dir, meta, original, state: Edit.editState(meta, original) };
+    const original = meta.type === 'text' && meta.documentFormat !== DOC_FORMAT ? fs.readFileSync(path.join(dir, 'content.html'), 'utf8') : '';
+    const state = o.documentFormat || meta.documentFormat === DOC_FORMAT ?
+      { mode: 'protected', html: meta.edit?.html ?? original } : Edit.editState(meta, original);
+    return { dir, meta, original, state };
   }
 
   function readEdit(id) {
     const { meta, original, state } = editSource(id);
     return {
-      id, type: meta.type, title: meta.title, displayTitle: meta.displayTitle || '', note: meta.note || '',
+      id, type: meta.type, title: meta.title, displayTitle: meta.displayTitle || '', note: o.documentFormat ? '' : meta.note || '',
       url: meta.targetUrl || meta.sourceUrl || '', canUndoUrl: !!meta.previousUrl, canRestoreText: !!meta.edit,
       text: state.text, richParts: state.parts?.map((p) => p.text) || null,
       extracted: meta.type === 'text' ? htmlToPlain(state.html) : null, mode: state.mode,
@@ -423,7 +508,7 @@ function createInboxStore(opts) {
       if (/[\r\n]/.test(title)) throw new InboxError('invalid-edit', '标题须为单行');
       if (title) next.displayTitle = title; else delete next.displayTitle;
     }
-    if (request.note !== undefined) {
+    if (!o.documentFormat && request.note !== undefined) {
       const note = string(request.note, 2000);
       if (note) next.note = note; else delete next.note;
     }
@@ -443,6 +528,7 @@ function createInboxStore(opts) {
     }
     const bodyOps = Number(request.restoreText === true) + Number(request.text !== undefined) + Number(request.richParts !== undefined);
     if (bodyOps > 1 || (bodyOps && meta.type !== 'text')) throw new InboxError('invalid-edit', '仅文字可编辑正文');
+    if (o.documentFormat && bodyOps) throw new InboxError('protected', '请在正文详情中编辑；旧格式保留原文');
     if (request.restoreText === true) delete next.edit;
     if (request.text !== undefined) {
       if (state.mode !== 'plain') throw new InboxError('protected', '这条正文需要保护原格式');
@@ -654,7 +740,7 @@ function createInboxStore(opts) {
     purge();
   }
 
-  return { root, tags, save, saveAll, addFile, addImage, addText, addLink, list, get, readEdit, saveEdit, remove, setTags, addTag, removeTagFromItem, removeTagEverywhere,
+  return { root, tags, save, saveAll, addFile, addImage, addText, addLink, list, get, readEdit, saveEdit, saveDocument, remove, setTags, addTag, removeTagFromItem, removeTagEverywhere,
     listTags, createTag, renameTag, deleteTag, tagUsage, migrateTags, trash, restore, purge, relink, cleanup, rebuildIndex, readIndex };
 }
 
