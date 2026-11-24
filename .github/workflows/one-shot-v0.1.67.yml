@@ -1,0 +1,47 @@
+name: Dispatch authorized LanLi v0.1.67
+
+on:
+  push:
+    branches: [integration/release-v0.1.67]
+
+permissions: {}
+
+concurrency:
+  group: one-shot-lan-li-v0.1.67
+  cancel-in-progress: false
+
+jobs:
+  dispatch:
+    if: github.repository == 'allen-bot-ctl/lan-li' && github.actor_id == '352863755' && github.triggering_actor == 'allen-bot-ctl' && github.run_attempt == '1'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      EXPECTED: 13a3102092aecc1b434e87b36d8929ada6550697
+      BASELINE: 58d0fe4a8f3d2be7e2d6c34cbfca0b75811f50fd
+    steps:
+      - name: Confirm exact version, master and existing release
+        shell: bash
+        run: |
+          set -euo pipefail
+          api="repos/$GITHUB_REPOSITORY"
+          test "$(gh api "$api/git/ref/heads/master" --jq .object.sha)" = "$EXPECTED"
+          test "$(gh api "$api/git/ref/tags/v0.1.66" --jq .object.sha)" = "$BASELINE"
+          test "$(gh api "$api/releases/latest" --jq .tag_name)" = v0.1.66
+          test "$(gh api "$api/contents/package.json?ref=$EXPECTED" --jq .content | base64 -d | jq -r .version)" = 0.1.67
+          test "$(gh api "$api/contents/release-notes/v0.1.67.md?ref=$EXPECTED" --jq .size)" -gt 0
+          test "$(gh api "$api/git/matching-refs/tags/v0.1.67" --jq '[.[] | select(.ref == "refs/tags/v0.1.67")] | length')" = 0
+          if gh api "$api/releases/tags/v0.1.67" >/dev/null 2>"$RUNNER_TEMP/lan-li-existing.err"; then
+            echo "Release already exists; refusing to replace"
+            exit 1
+          fi
+          grep -q 'HTTP 404' "$RUNNER_TEMP/lan-li-existing.err"
+          gh api --method POST "$api/git/refs" -f ref=refs/tags/v0.1.67 -f sha="$EXPECTED" --jq '[.ref,.object.sha] | @tsv'
+          test "$(gh api "$api/git/ref/tags/v0.1.67" --jq .object.sha)" = "$EXPECTED"
+          test "$(gh api "$api/git/ref/heads/master" --jq .object.sha)" = "$EXPECTED"
+          if ! gh workflow run release.yml -R "$GITHUB_REPOSITORY" --ref master -f tag=v0.1.67 -f runner=macos-15-intel; then
+            echo "::error::Tag exists; verify exact SHA and existing Release runs. Do not retag or rerun the one-shot."
+            exit 1
+          fi
