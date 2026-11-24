@@ -275,6 +275,22 @@ function createInboxController(deps) {
     }
   }
 
+  // 0.1.62 收纳页「录入」：手动输入的纯文字，和粘贴文字走同一个入库函数（addText），meta.via = 'manual'
+  const MANUAL_MAX = 20000;
+  function addManual(input) {
+    const text = String(input == null ? '' : input).replace(/\r\n/g, '\n').trim();
+    if (!text) return { ok: false, kind: 'empty', text: '内容不能为空' };
+    if ([...text].length > MANUAL_MAX) return { ok: false, kind: 'too-long', text: `最多 ${MANUAL_MAX} 字` };
+    try {
+      lastSaved = store.saveAll([{ kind: 'text', text }], { via: 'manual' });
+      if (deps.onChanged) deps.onChanged();
+      return { ok: true, count: lastSaved.length, text: '已收纳', ids: lastSaved.map((m) => m.id) };
+    } catch (error) {
+      if (logger) logger.warn('[栏历] 录入失败：' + (error && error.message));
+      return { ok: false, kind: 'error', text: errorText(error) };
+    }
+  }
+
   // 0.1.50 框选收纳：截好的 PNG 存为图片条目（via=region），接纳框成功态。
   async function saveRegionImage(o) {
     const app = o.sourceApp && !/^(栏历|LanLi|Electron)$/i.test(o.sourceApp) ? o.sourceApp : '';
@@ -423,6 +439,7 @@ function createInboxController(deps) {
     ipcMain.on('drop:enter', () => { cancelHide(); });
     ipcMain.on('drop:leave', () => { if (!busy && state.state !== 'success' && state.state !== 'error') scheduleHide(LEAVE_HIDE_MS); });
     ipcMain.on('drop:data', (_e, payload) => { handleDrop({ ...(payload || {}), via: 'drag' }); });
+    ipcMain.handle('inbox:addManual', (_e, text) => addManual(text));
     ipcMain.handle('inbox:captureClipboard', () => captureClipboard({ via: 'panel' }));
     ipcMain.on('drop:openInbox', () => { hide(); if (deps.openInbox) deps.openInbox(); });
     ipcMain.handle('inbox:list', () => listForRenderer());

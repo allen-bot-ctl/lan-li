@@ -1661,6 +1661,64 @@ function captureFromPanel() {
   }).catch(() => {});
 }
 document.getElementById('inbox-paste').addEventListener('click', () => captureFromPanel());
+
+// 0.1.62 录入：手动输入或粘贴纯文字，走和粘贴文字同一条入库路径（inbox:addManual）
+const composeBox = document.getElementById('inbox-compose');
+const composeText = document.getElementById('inbox-compose-text');
+const composeCount = document.getElementById('inbox-compose-count');
+const composeSave = document.getElementById('inbox-compose-save');
+const composeBtn = document.getElementById('inbox-compose-btn');
+const COMPOSE_MAX = 20000;
+function composeSync() {
+  const n = [...composeText.value].length;
+  const blank = !composeText.value.trim();
+  composeCount.textContent = n ? `${n} / ${COMPOSE_MAX}` : '';
+  composeCount.classList.toggle('is-over', n > COMPOSE_MAX);
+  composeSave.disabled = blank || n > COMPOSE_MAX;
+  composeText.style.height = 'auto';
+  composeText.style.height = Math.min(composeText.scrollHeight + 2, 10 * 20 + 16) + 'px';
+}
+function openCompose() {
+  composeBox.hidden = false;
+  composeBtn.classList.add('inbox-compose-btn-on');
+  composeSync();
+  composeText.focus();
+}
+function closeCompose(clear) {
+  composeBox.hidden = true;
+  composeBtn.classList.remove('inbox-compose-btn-on');
+  if (clear) { composeText.value = ''; composeSync(); }
+}
+function saveCompose() {
+  if (composeSave.disabled) return;
+  const text = composeText.value;
+  api.addInboxManual(text).then((r) => {
+    if (r && r.ok) {
+      closeCompose(true);
+      refreshInbox();
+      showToast({ type: 'success', title: r.text || '已收纳' });
+    } else {
+      showToast({ type: r && r.kind === 'empty' ? 'warning' : 'error', title: (r && r.text) || '收纳失败' });
+    }
+  }).catch(() => {});
+}
+composeBtn.addEventListener('click', () => { if (composeBox.hidden) openCompose(); else closeCompose(false); });
+composeText.addEventListener('input', composeSync);
+composeText.addEventListener('paste', (e) => {
+  // 只取纯文本，图片和富文本格式丢弃
+  const t = e.clipboardData && e.clipboardData.getData('text/plain');
+  e.preventDefault();
+  if (!t) return;
+  composeText.setRangeText(t, composeText.selectionStart, composeText.selectionEnd, 'end');
+  composeSync();
+});
+composeText.addEventListener('keydown', (e) => {
+  if (e.isComposing) return;
+  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); saveCompose(); }
+  else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeCompose(true); }
+});
+composeSave.addEventListener('click', saveCompose);
+document.getElementById('inbox-compose-cancel').addEventListener('click', () => closeCompose(true));
 document.addEventListener('click', (e) => {
   if (!inboxMoreMenu.hidden && !e.target.closest('.inbox-more-wrap')) inboxMoreMenu.hidden = true;
   if (!inboxTagPop.hidden && !e.target.closest('#inbox-tagpop') && !e.target.closest('.inbox-act-tag')) closeTagPop();
@@ -1839,6 +1897,7 @@ api.onInboxChanged(() => { refreshInbox(); });
 // 右键「删除这条」和悬停 × 走同一条可撤销删除
 if (api.onInboxRequestDelete) api.onInboxRequestDelete((id) => deleteInboxEntry(id));
 api.onInboxEscape(() => {
+  if (!composeBox.hidden) { closeCompose(true); return; }
   if (!inboxTagPop.hidden) { closeTagPop(); return; }
   if (!inboxMoreMenu.hidden) { inboxMoreMenu.hidden = true; return; }
   if (inboxSearch.value) { inboxSearch.value = ''; inboxFilter.query = ''; renderInbox(); return; }
