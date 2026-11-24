@@ -95,7 +95,7 @@ test('系统剪贴板图文原位编辑，图前后、格式、取消、保存�
     await page.locator('#inbox-search').fill('');
     const plainText = '纯文字第一行\n\n最后一行';
     await app.evaluate(({ clipboard }, value) => { clipboard.clear(); clipboard.writeText(value); }, plainText);
-    expect(await app.evaluate(({clipboard}) => [clipboard.readText(), clipboard.readHTML()])).toEqual([plainText, '']);
+    expect(await app.evaluate(({clipboard}) => clipboard.readText())).toEqual(plainText);
     await page.click('#inbox-paste');
     const textRow = page.locator('.inbox-row').filter({hasText:'纯文字第一行'});
     await expect(textRow).toBeVisible();

@@ -49,9 +49,12 @@ test('新收纳只写 Tiptap 文档与相对图片引用，局部编辑保留其
 
 test('纯文字增加空行和首尾换行仍保持原样；旧正文与备注不被覆盖', (t) => {
   const { root, store, open } = fixture(t);
-  const [item] = classifyClipboard({ text: '\n 字首\n\n字尾 \n' });
+  const source = '\n 字首 <b>原样</b>\n\n字尾 \n';
+  const [item] = classifyClipboard({ text: source, html: source });
+  assert.deepEqual(item, {kind:'text', text:source});
   const created = store.save(item);
-  assert.equal(store.get(created.id).text,'\n 字首\n\n字尾 \n');
+  assert.equal(store.get(created.id).text,source);
+  assert.match(store.get(created.id).html, /&lt;b&gt;原样&lt;\/b&gt;/);
   const legacy = open(false);
   const old = legacy.addText('旧正文');
   legacy.saveEdit(old.id,{revision:legacy.readEdit(old.id).revision,note:'旧备注'});

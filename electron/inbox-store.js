@@ -113,8 +113,11 @@ function classifyClipboard(c) {
   const d = c || {};
   const files = (d.files || []).filter(Boolean);
   if (files.length) return files.map((p) => ({ kind: isImagePath(p) ? 'image' : 'file', path: p }));
-  const html = typeof d.html === 'string' ? d.html.trim() : '';
   const rawText = typeof d.text === 'string' ? d.text : '';
+  // On macOS Electron may read the same plain pasteboard string as HTML. Do not
+  // parse it as markup: preserve tabs, newlines and literal angle brackets.
+  const rawHtml = typeof d.html === 'string' ? d.html : '';
+  const html = rawHtml === rawText ? '' : rawHtml.trim();
   const text = rawText.trim();
   const htmlPlain = html ? htmlToPlain(html) : '';
   // 只复制了一张图：剪贴板里有位图，html 为空或只是一个 <img>，没有文字
