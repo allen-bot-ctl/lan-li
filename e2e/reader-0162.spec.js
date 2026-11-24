@@ -65,7 +65,8 @@ test.beforeAll(async () => {
   const args = process.platform === 'linux' ? ['--no-sandbox', '.'] : ['.'];
   app = await electron.launch({ args, env: { ...process.env, LANLI_E2E: '1', LANLI_INBOX_DIR: path.join(work, 'inbox'), LANLI_READER_DIR: path.join(work, 'user') } });
   page = await app.firstWindow();
-  await page.waitForSelector('#grid');
+  await page.waitForFunction(() => document.readyState === 'complete' &&
+    typeof window.openReaderView === 'function' && typeof window.renderReaderSettings === 'function');
 });
 test.afterAll(async () => { if (app) await app.close(); if (server) server.close(); });
 
@@ -82,7 +83,8 @@ function seedLegacyReaderRecord() {
 
 test('R2 没配置：输入框和「帮我读」disabled、提示卡、去设置；保存后回来立刻可用；删除 Key 后恢复禁用', async () => {
   const {legacyDir, legacyJson} = seedLegacyReaderRecord();
-  await openReader();
+  await page.locator('#reader-button').click();
+  await expect(page.locator('#reader-view')).toBeVisible();
   await expect(page.locator('#reader-input')).toBeDisabled();
   await expect(page.locator('#reader-input')).toHaveAttribute('placeholder', '先配置大模型才能用帮阅');
   await expect(page.locator('#reader-go')).toBeDisabled();
@@ -142,8 +144,12 @@ test('R2 没配置：输入框和「帮我读」disabled、提示卡、去设置
 });
 
 test('R5 提示词：默认预填逐字一致；保存、重开仍在；空不能保存；恢复默认；请求体 system/user', async () => {
+  expect((await hook('readerSaveConfig', {
+    baseURL: 'https://api.deepseek.com', model: 'deepseek-chat', apiKey: 'sk-e2e-0162'
+  })).ok).toBe(true);
   await openReaderSettings();
   const ta = page.locator('#reader-prompt');
+  await expect(ta).toBeEditable();
   const doc = fs.readFileSync(path.join(__dirname, '..', 'docs/changes/0.1.62.md'), 'utf8');
   const def = /### 5\.3 默认提示词（逐字）\n\n```\n([\s\S]*?)\n```/.exec(doc)[1];
   await expect(ta).toHaveValue(def);

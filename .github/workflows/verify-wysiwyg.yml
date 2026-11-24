@@ -17,7 +17,7 @@ jobs:
           node-version: 20
       - run: npm ci
       - run: npm test
-      - run: npm run e2e -- inbox-0142.spec.js inbox-b-0144.spec.js inbox-edit.spec.js inbox-detail-layout.spec.js
+      - run: npm run e2e -- inbox-0142.spec.js inbox-b-0144.spec.js inbox-edit.spec.js inbox-detail-layout.spec.js prompt-0164.spec.js reader-0162.spec.js
       - name: Archive synthetic-only native UI evidence
         if: always()
         uses: actions/upload-artifact@v4
