@@ -1,0 +1,28 @@
+name: Verify inbox WYSIWYG
+on:
+  push:
+    branches: [integration/inbox-wysiwyg]
+permissions:
+  contents: read
+jobs:
+  native:
+    runs-on: macos-15-intel
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npm test
+      - run: npm run e2e -- inbox-edit.spec.js inbox-detail-layout.spec.js
+      - name: Archive synthetic-only native UI evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: synthetic-native-ui
+          path: test-results/**/native-*.png
+          if-no-files-found: ignore
+          retention-days: 7

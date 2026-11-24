@@ -66,6 +66,7 @@ function createInboxController(deps) {
   const E2E = Boolean(deps.E2E);
   const store = createInboxStore({
     root: deps.root,
+    documentFormat: true,
     migrateFailAt: E2E ? Number(process.env.LANLI_E2E_MIGRATE_FAIL_AT) || 0 : 0,
     makeThumb: (src, dest) => {
       let img = nativeImage.createFromPath(src);
@@ -278,8 +279,8 @@ function createInboxController(deps) {
   // 0.1.62 收纳页「录入」：手动输入的纯文字，和粘贴文字走同一个入库函数（addText），meta.via = 'manual'
   const MANUAL_MAX = 20000;
   function addManual(input) {
-    const text = String(input == null ? '' : input).replace(/\r\n/g, '\n').trim();
-    if (!text) return { ok: false, kind: 'empty', text: '内容不能为空' };
+    const text = String(input == null ? '' : input).replace(/\r\n?/g, '\n');
+    if (!text.trim()) return { ok: false, kind: 'empty', text: '内容不能为空' };
     if ([...text].length > MANUAL_MAX) return { ok: false, kind: 'too-long', text: `最多 ${MANUAL_MAX} 字` };
     try {
       lastSaved = store.saveAll([{ kind: 'text', text }], { via: 'manual' });
@@ -335,7 +336,12 @@ function createInboxController(deps) {
       shell.openExternal(url);
       return { ok: true };
     }
-    // 内嵌图片换成 data: 内联，详情 iframe 用 sandbox 且无脚本
+    if (e.document) {
+      const attachments = documentAttachments(e);
+      return { ok: true, html: materializeDocumentHtml(e.html, attachments), title: m.displayTitle || m.title,
+        document: e.document, attachments, revision: e.revision };
+    }
+    // 旧正文继续使用现有 sandbox iframe；不会被转换或改写。
     let html = e.html;
     for (const a of m.assets || []) {
       try { html = html.split(a).join(dataUrl(path.join(e.dir, a))); } catch { /* 缺图就留相对路径 */ }
@@ -351,6 +357,29 @@ function createInboxController(deps) {
     if (E2E) { e2eOpenCalls.push({ how: 'showItemInFolder', target }); return true; }
     shell.showItemInFolder(target);
     return true;
+  }
+
+  function documentAttachments(e) {
+    const approved = new Set(e.assets);
+    const found = Object.create(null);
+    function collect(node) {
+      const src = node.type === 'image' && node.attrs?.src;
+      if (src && approved.has(src) && !Object.hasOwn(found, src)) {
+        try {
+          const file = path.join(e.dir, src);
+          const st = fs.lstatSync(file);
+          if (st.isFile() && st.size <= MAX_IMAGE_BYTES) found[src] = dataUrl(file);
+        } catch { /* Preserve document; a missing file may be shown as unavailable. */ }
+      }
+      for (const child of node.content || []) collect(child);
+    }
+    collect(e.document);
+    return found;
+  }
+
+  function materializeDocumentHtml(html, attachments) {
+    return html.replace(/<img\b[^>]*>/gi, (image) => image.replace(/\bsrc="([^"]+)"/i,
+      (whole, src) => attachments[src] ? `src="${attachments[src]}"` : whole));
   }
 
   function dataUrl(file) {
@@ -409,7 +438,10 @@ function createInboxController(deps) {
     let call;
     if (m.type === 'file') { call = { kind: 'text', text: m.sourcePath || '' }; clipboard.writeText(call.text); }
     else if (m.type === 'image') { call = { kind: 'image', file: e.filePath }; clipboard.writeImage(nativeImage.createFromPath(e.filePath)); }
-    else if (m.type === 'text') { call = { kind: 'html', text: e.meta.edit?.text ?? htmlToPlain(e.html) }; clipboard.write({ html: e.html, text: call.text }); }
+    else if (m.type === 'text') {
+      call = { kind: 'html', text: e.text ?? e.meta.edit?.text ?? htmlToPlain(e.html) };
+      clipboard.write({ html: e.document ? materializeDocumentHtml(e.html, documentAttachments(e)) : e.html, text: call.text });
+    }
     else { call = { kind: 'text', text: m.targetUrl || m.sourceUrl || '' }; clipboard.writeText(call.text); }
     e2eCopyCalls.push({ id, type: m.type, ...call });
     return { ok: true, kind: call.kind };
@@ -452,6 +484,16 @@ function createInboxController(deps) {
     ipcMain.handle('inbox:readEdit', (_e, id) => editResult(() => ({ value: store.readEdit(id) })));
     ipcMain.handle('inbox:saveEdit', (_e, id, draft) => editResult(() => {
       const result = store.saveEdit(id, draft);
+      if (result.changed) changed();
+      return result;
+    }));
+    ipcMain.handle('inbox:saveDocument', (event, id, draft) => editResult(() => {
+      const frame = event.senderFrame;
+      if (!frame || frame !== event.sender.mainFrame ||
+          !frame.url.startsWith('file:') || !new URL(frame.url).pathname.endsWith('/electron/renderer/calendar.html')) {
+        throw new InboxError('protected', '不允许从此页面保存正文');
+      }
+      const result = store.saveDocument(id, draft);
       if (result.changed) changed();
       return result;
     }));

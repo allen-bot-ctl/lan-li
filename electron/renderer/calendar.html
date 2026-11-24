@@ -245,15 +245,10 @@
         <form id="inbox-edit-form">
           <h2 id="inbox-edit-title">编辑收纳</h2>
           <label>显示标题 <input id="inbox-edit-name" maxlength="120"></label>
-          <label>备注 <textarea id="inbox-edit-note" maxlength="2000" rows="2"></textarea></label>
           <label id="inbox-edit-url-row" hidden>网址 <input id="inbox-edit-url" maxlength="4096" inputmode="url"></label>
-          <label id="inbox-edit-text-row" hidden>正文 <textarea id="inbox-edit-text" maxlength="20000" rows="7"></textarea></label>
-          <div id="inbox-edit-parts" hidden></div>
-          <p id="inbox-edit-protected" hidden>原正文受保护。可修改标题和备注，或把提取的文字另存为新条目；不改原格式或附件。</p>
+          <p id="inbox-edit-protected" hidden>旧收纳的正文按原样阅读；此处只改显示标题。</p>
           <p id="inbox-edit-status" role="alert"></p>
           <div class="inbox-edit-actions">
-            <button id="inbox-edit-copy" type="button" hidden>提取另存文字</button>
-            <button id="inbox-edit-restore" type="button" hidden>恢复原文</button>
             <button id="inbox-edit-undo-url" type="button" hidden>撤回改址</button>
             <button id="inbox-edit-discard" type="button" hidden>放弃修改</button>
             <button id="inbox-edit-cancel" type="button">取消</button>
@@ -262,6 +257,32 @@
         </form>
       </dialog>
       <div class="inbox-detail" id="inbox-detail" hidden>
+        <section id="inbox-wys-panel" hidden aria-label="编辑收纳正文">
+          <div id="inbox-wys-toolbar" role="group" aria-label="正文格式">
+            <button type="button" data-wys="paragraph">正文</button>
+            <button type="button" data-wys="heading:2">小标题</button>
+            <button type="button" data-wys="bold">粗体</button>
+            <button type="button" data-wys="italic">斜体</button>
+            <button type="button" data-wys="underline">下划线</button>
+            <button type="button" data-wys="strike">删除线</button>
+            <button type="button" data-wys="bulletList">项目列表</button>
+            <button type="button" data-wys="orderedList">编号</button>
+            <button type="button" data-wys="blockquote">引用</button>
+            <button type="button" id="inbox-wys-link">链接</button>
+          </div>
+          <form id="inbox-wys-link-form" hidden>
+            <label>链接地址 <input id="inbox-wys-href" placeholder="https://" inputmode="url"></label>
+            <button type="submit">应用</button>
+            <button type="button" id="inbox-wys-link-cancel">取消</button>
+          </form>
+          <div id="inbox-wys-body"></div>
+          <footer id="inbox-wys-actions">
+            <span id="inbox-wys-status" role="alert"></span>
+            <button type="button" id="inbox-wys-discard" hidden>放弃修改</button>
+            <button type="button" id="inbox-wys-cancel">取消</button>
+            <button type="button" id="inbox-wys-save">保存</button>
+          </footer>
+        </section>
         <iframe class="inbox-detail-frame" id="inbox-detail-frame" sandbox="" title="收纳内容"></iframe>
       </div>
     </div>
@@ -444,6 +465,7 @@
   <script src="toast.js"></script>
   <script src="inbox-query.js"></script>
   <script src="region-helpers-browser.js"></script>
+  <script src="vendor/inbox-writer.js"></script>
   <script src="calendar.js"></script>
   <script src="vendor/markdown-it.umd.min.js"></script>
   <script src="md-render.js"></script>
