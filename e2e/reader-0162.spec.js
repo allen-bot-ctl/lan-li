@@ -194,7 +194,8 @@ test('R6 详情页 Markdown：标题、列表、粗体、引用、代码块；<s
   // R6 validates Markdown independent of earlier tests configuring the fake model.
   seedLegacyReaderRecord();
   await openReaderSettings();
-  await expect(page.locator('#reader-key-status')).not.toBeEmpty();
+  await expect(page.locator('#reader-base')).toHaveValue('https://api.deepseek.com');
+  await expect(page.locator('#reader-model')).toHaveValue('deepseek-chat');
   await page.fill('#reader-key', 'sk-e2e-0162');
   await page.click('#reader-key-save');
   await expect(page.locator('#reader-key-status')).toHaveText('已配置 · deepseek-chat');
