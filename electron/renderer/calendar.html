@@ -73,14 +73,23 @@
           id="settings-button"
           type="button"
           aria-label="设置"
-          aria-haspopup="menu"
-          aria-expanded="false"
         >
           <span class="settings-gear" aria-hidden="true">⚙︎</span>
           <span>设置</span>
         </button>
       </div>
     </header>
+
+    <div class="quit-overlay" id="quit-overlay" hidden>
+      <div class="quit-card" role="alertdialog" aria-modal="true" aria-labelledby="quit-title" aria-describedby="quit-desc">
+        <div class="quit-title" id="quit-title">确定退出栏历吗？</div>
+        <div class="quit-desc" id="quit-desc">退出后，菜单栏时钟、快捷键和框选收纳都会停用。要再使用，需要从「应用程序」里重新打开栏历。</div>
+        <div class="quit-actions">
+          <button type="button" class="nav-pill quit-cancel" id="quit-cancel">取消</button>
+          <button type="button" class="nav-pill quit-confirm" id="quit-confirm">退出</button>
+        </div>
+      </div>
+    </div>
 
     <div class="icon-tooltip" id="icon-tooltip" role="tooltip" hidden>钉住窗口，移开鼠标也不隐藏</div>
 
@@ -260,6 +269,7 @@
       <div class="settings-head">
         <button class="settings-back" id="settings-back" type="button">‹ 返回</button>
         <span class="settings-head-title" id="settings-head-title">设置</span>
+        <button class="settings-quit" id="settings-quit" type="button">退出栏历</button>
       </div>
       <div class="settings-body">
       <nav class="settings-nav" aria-label="设置分类">

@@ -568,10 +568,7 @@ yearSelect.addEventListener('change', () => {
   requestView({ year, month, focusY: year, focusM: month, focusD: day });
 });
 
-function clearSettingsHighlight() {
-  settingsButton.classList.remove('is-open');
-  settingsButton.setAttribute('aria-expanded', 'false');
-}
+function clearSettingsHighlight() {}
 
 const ICON_TOOLTIP_UNPINNED = '钉住窗口，移开鼠标也不隐藏';
 const ICON_TOOLTIP_PINNED = '取消钉住并关闭';
@@ -647,15 +644,8 @@ pinButton.addEventListener('click', () => {
   }).catch(() => {});
 });
 
-settingsButton.addEventListener('click', () => {
-  const rect = settingsButton.getBoundingClientRect();
-  settingsButton.classList.add('is-open');
-  settingsButton.setAttribute('aria-expanded', 'true');
-  api.openSettings({
-    x: Math.round(rect.left),
-    y: Math.round(rect.bottom + 4)
-  });
-});
+// 0.1.63：⚙ 设置直接进设置页（下拉菜单已去掉）；进入后由主进程按 0.1.62 规则自动钉住。
+settingsButton.addEventListener('click', () => { hideIconTooltip(); openSettingsView(); });
 
 function renderVersion(label) {
   const text = typeof label === 'string' ? label : '';
@@ -1192,6 +1182,7 @@ function openSettingsView(tab = 'ui') {
 }
 
 function closeSettingsView() {
+  closeQuitConfirm();
   if (settingsView.hidden) return;
   closeAllPickers();
   settingsTab = null;
@@ -1203,6 +1194,29 @@ function closeSettingsView() {
 function afterPickerChoice(tab) {
   if (!settingsView.hidden && settingsTab === tab) selectSettingsTab(tab);
 }
+
+// 0.1.63 设置页「退出栏历」：窗口内确认框，默认聚焦「取消」；退出走主进程 quitWithFallback。
+const quitOverlay = document.getElementById('quit-overlay');
+const quitCancel = document.getElementById('quit-cancel');
+const quitConfirm = document.getElementById('quit-confirm');
+function openQuitConfirm() {
+  quitOverlay.hidden = false;
+  api.setQuitConfirm(true);
+  quitCancel.focus();
+}
+function closeQuitConfirm() {
+  if (quitOverlay.hidden) return;
+  quitOverlay.hidden = true;
+  api.setQuitConfirm(false);
+}
+document.getElementById('settings-quit').addEventListener('click', openQuitConfirm);
+quitCancel.addEventListener('click', closeQuitConfirm);
+quitConfirm.addEventListener('click', () => { api.quitApp(); });
+quitOverlay.addEventListener('pointerdown', (e) => { if (e.target === quitOverlay) closeQuitConfirm(); });
+api.onQuitEscape(closeQuitConfirm);
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !quitOverlay.hidden) { e.preventDefault(); closeQuitConfirm(); }
+});
 
 settingsBack.addEventListener('click', () => {
   closeSettingsView();

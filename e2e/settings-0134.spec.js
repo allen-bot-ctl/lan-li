@@ -24,9 +24,7 @@ const trayTitle = () => mainEval(() => globalThis.__lanliTest.trayTitle());
 const trayTooltip = () => mainEval(() => globalThis.__lanliTest.trayTooltip());
 const loginItemCalls = () => mainEval(() => globalThis.__lanliTest.loginItemCalls());
 const menuBarZone = () => mainEval(() => globalThis.__lanliTest.menuBarZone());
-const settingsMenuItems = () => mainEval(() => globalThis.__lanliTest.settingsMenuItems());
 const hideWindow = () => mainEval(() => globalThis.__lanliTest.hideWindow());
-const closeSettingsMenu = () => mainEval(() => globalThis.__lanliTest.closeSettingsMenu());
 
 async function launchApp() {
   const args = process.platform === 'linux' ? ['--no-sandbox', '.'] : ['.'];
@@ -39,9 +37,6 @@ async function openMore() {
   // 先确保窗口可见（前面的 spec 可能留下指针在窗外，窗口会被自动隐藏）。
   await trayEnter();
   await page.click('#settings-button');
-  // 原生菜单 popup 是异步建立的；轮询到菜单项真正点上为止（偶发 flaky 修复）。
-  await expect.poll(() => mainEval(() => globalThis.__lanliTest.clickSettingsMenuItem('more-settings')), { timeout: 5000 }).toBe(true);
-  await closeSettingsMenu();
   await expect(page.locator('#settings-view')).toBeVisible();
 }
 
@@ -76,17 +71,7 @@ test.afterAll(async () => {
   if (app) await app.close().catch(() => {});
 });
 
-test('C1 settings menu labels and view open', async () => {
-  const items = await settingsMenuItems();
-  const moreIdx = items.findIndex((i) => i.id === 'more-settings');
-  expect(moreIdx).toBeGreaterThanOrEqual(0);
-  expect(items[moreIdx].label).toBe('全部设置…');
-  expect(items[moreIdx + 1].type).toBe('separator');
-  expect(items[moreIdx + 2].id).toBe('quit');
-  const login = items.find((i) => i.id === 'open-at-login');
-  expect(login.label).toBe('开机自启动');
-  expect(items.some((i) => i.label === '登录时打开')).toBe(false);
-
+test('C1 settings view open', async () => {
   await openMore();
   await expect(page.locator('#settings-view')).toBeVisible();
   await expect(page.locator('.app-body')).toBeHidden();
@@ -109,16 +94,12 @@ test('C3 open-at-login toggle', async () => {
     const calls = await loginItemCalls();
     return calls.length > before ? calls[calls.length - 1].openAtLogin : null;
   }).toBe(true);
-  let items = await settingsMenuItems();
-  expect(items.find((i) => i.id === 'open-at-login').checked).toBe(true);
 
   await page.click('label.settings-row:has(#setting-open-at-login)');
   await expect.poll(async () => {
     const calls = await loginItemCalls();
     return calls.length > before + 1 ? calls[calls.length - 1].openAtLogin : null;
   }).toBe(false);
-  items = await settingsMenuItems();
-  expect(items.find((i) => i.id === 'open-at-login').checked).toBe(false);
 });
 
 test('C4 menu bar show date', async () => {

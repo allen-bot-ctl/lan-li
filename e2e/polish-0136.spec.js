@@ -25,8 +25,6 @@ async function openSettings(tab) {
   await hook('trayEnter');
   if (await page.locator('#settings-view').isHidden()) {
     await page.click('#settings-button');
-    await expect.poll(() => hook('clickSettingsMenuItem', 'more-settings'), { timeout: 5000 }).toBe(true);
-    await hook('closeSettingsMenu');
   }
   await expect(page.locator('#settings-view')).toBeVisible();
   if (tab) await page.click(`.settings-tab[data-tab="${tab}"]`);

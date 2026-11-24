@@ -84,7 +84,7 @@ test('C2 通栏顶栏：32px、左上是应用图标＋栏历、右上检查更�
   assert.ok(settings, 'settings button should exist');
   assert.match(settings[0], /class="nav-pill settings-button"/);
   assert.match(settings[0], /aria-label="设置"/);
-  assert.match(settings[0], /aria-haspopup="menu"/);
+  assert.equal(/aria-haspopup/.test(settings[0]), false, '0.1.63 no dropdown');
   assert.match(settings[0], /<span>设置<\/span>/);
   assert.match(settings[0], /class="settings-gear" aria-hidden="true">⚙︎</);
   assert.equal(/title="设置"/.test(settings[0]), false, 'the pill has visible text, no title bubble');
@@ -161,10 +161,9 @@ test('C4 功能图标气泡在按钮下方右对齐并钳在窗口内，交互�
   assert.match(tip.body, /pointer-events:\s*none/);
 });
 
-test('C5 设置胶囊把左缘与下方 4px 交给原生菜单', () => {
-  assert.match(RENDERER, /x:\s*Math\.round\(rect\.left\)/);
-  assert.match(RENDERER, /y:\s*Math\.round\(rect\.bottom \+ 4\)/);
-  assert.equal(/SETTINGS_MENU_WIDTH/.test(SOURCE_MAIN), false);
+test('C5 设置胶囊直接进设置页，不再有原生下拉（0.1.63）', () => {
+  assert.match(RENDERER, /settingsButton\.addEventListener\('click', \(\) => \{ hideIconTooltip\(\); openSettingsView\(\); \}\);/);
+  assert.equal(/menu:openSettings|openSettingsMenu|buildSettingsMenuTemplate|settingsMenuOpen/.test(SOURCE_MAIN), false);
 });
 
 const SOURCE_MAIN = source('electron/main.js');

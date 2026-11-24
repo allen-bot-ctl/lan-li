@@ -31,9 +31,6 @@ async function box(selector) {
 async function openSettings() {
   await trayEnter();
   await page.click('#settings-button');
-  // 原生菜单 popup 是异步建立的；轮询到菜单项真正点上为止（偶发 flaky 修复）。
-  await expect.poll(() => mainEval(() => globalThis.__lanliTest.clickSettingsMenuItem('more-settings')), { timeout: 5000 }).toBe(true);
-  await hook('closeSettingsMenu');
   await expect(page.locator('#settings-view')).toBeVisible();
 }
 
@@ -192,11 +189,7 @@ test('C3 签筒按钮内联 SVG 24×24、有 #pop-stick；点击动画 500ms 内
   expect(after.pool).toContain(after.quote);
 });
 
-test('C4 下拉菜单是「全部设置…」，没有「更多…」，点击进入设置页', async () => {
-  const items = await hook('settingsMenuItems');
-  const labels = items.map((i) => i.label);
-  expect(labels).toContain('全部设置…');
-  expect(labels).not.toContain('更多…');
+test('C4 点「设置」直接进设置页（0.1.63 无下拉）', async () => {
   await openSettings();
   await backToCalendar();
 });

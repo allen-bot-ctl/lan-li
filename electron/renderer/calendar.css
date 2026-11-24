@@ -358,11 +358,6 @@ select {
   flex: 0 0 auto;
 }
 
-.settings-button.is-open {
-  background: var(--accent);
-  color: #fff;
-}
-
 .settings-gear {
   font-size: 14px;
   line-height: 1;
@@ -1594,3 +1589,18 @@ mark.inbox-hit{background:rgba(255,200,0,.45);color:inherit;border-radius:2px;}
 .reader-prompt-grid .reader-prompt{grid-column:2;margin-top:0;}
 .reader-prompt-grid .reader-prompt-btns{grid-column:2;margin-top:0;}
 .reader-prompt-hint{margin-left:62px;}
+
+/* ---- 0.1.63 设置页「退出栏历」与确认弹层 ---- */
+.settings-head .settings-quit{all:unset;box-sizing:border-box;position:absolute;right:0;top:0;height:36px;line-height:36px;padding:0 16px;font-size:13px;color:var(--red);cursor:pointer;white-space:nowrap;}
+.settings-head .settings-quit:hover{background:var(--chip);}
+.settings-head .settings-quit:focus-visible{outline:2px solid var(--accent);outline-offset:-2px;}
+.quit-overlay{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.35);}
+.quit-overlay[hidden]{display:none !important;}
+.quit-card{box-sizing:border-box;width:280px;padding:20px;border-radius:12px;background:var(--sheet-bg);border:1px solid var(--sheet-border);box-shadow:var(--sheet-shadow);color:var(--text);}
+.quit-title{font-size:15px;font-weight:600;}
+.quit-desc{margin-top:8px;font-size:13px;line-height:1.6;color:var(--muted);}
+.quit-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px;}
+.quit-actions .nav-pill{height:30px;padding:0 16px;font-size:13px;}
+.quit-actions .nav-pill:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+.quit-confirm{background:var(--red);color:#fff;}
+.quit-confirm:hover{background:var(--red);filter:brightness(.92);}

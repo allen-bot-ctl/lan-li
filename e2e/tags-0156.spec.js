@@ -52,8 +52,6 @@ async function openSettingsTags() {
     await page.evaluate(() => { if (typeof closeInboxView === 'function') closeInboxView(); });
     await hook('trayEnter');
     await page.click('#settings-button');
-    await expect.poll(() => hook('clickSettingsMenuItem', 'more-settings'), { timeout: 5000 }).toBe(true);
-    await hook('closeSettingsMenu');
   }
   await expect(page.locator('#settings-view')).toBeVisible();
   await page.click('.settings-tab[data-tab="tags"]');

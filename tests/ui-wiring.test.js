@@ -9,14 +9,13 @@ function source(relativePath) {
   return fs.readFileSync(path.join(__dirname, '..', relativePath), 'utf8');
 }
 
-test('settings menu anchors to the button left edge four pixels below', () => {
+test('0.1.63 settings button has no native menu; settings page has quit button with confirm', () => {
   const main = source('electron/main.js');
-  const renderer = source('electron/renderer/calendar.js');
-
-  assert.equal(/SETTINGS_MENU_WIDTH/.test(main), false);
-  assert.match(renderer, /x:\s*Math\.round\(rect\.left\)/);
-  assert.match(renderer, /y:\s*Math\.round\(rect\.bottom \+ 4\)/);
-  assert.match(main, /x:\s*Math\.max\(0,\s*Math\.round\(x\)\)/);
+  const html = source('electron/renderer/calendar.html');
+  assert.equal(/openSettingsMenu|settingsMenuAnchor/.test(main), false);
+  assert.match(html, /id="settings-quit"[^>]*>退出栏历</);
+  assert.match(html, /确定退出栏历吗？/);
+  assert.match(main, /ipcMain\.on\('app:quit', \(\) => \{ quitApp\(\); \}\)/);
 });
 
 test('weather card is a single row ending with 更换 ›', () => {

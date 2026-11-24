@@ -310,29 +310,13 @@ test('C4 悬停 500ms 气泡在按钮下方右对齐，文案正确且完全在�
   await page.screenshot({ path: path.join(SHOTS, '03-topbar-pin-tooltip.png') });
 });
 
-test('C5 点「设置」弹出原生菜单，锚点为按钮左缘、下方 4px', async () => {
+test('C5 点「设置」直接进设置页，没有下拉菜单', async () => {
   await showUnpinned();
-  const button = await page.locator('#settings-button').boundingBox();
-
   await page.click('#settings-button');
-  await page.waitForTimeout(200);
-
-  const anchor = await mainEval(() => globalThis.__lanliTest.lastSettingsAnchor());
-  expect(anchor).not.toBeNull();
-  expect(anchor.x).toBe(Math.round(button.x));
-  expect(anchor.y).toBe(Math.round(button.y + button.height + 4));
-
-  // Menu popup takes the anchor as its top-left corner; the source side of
-  // that contract is also asserted in tests/ui-wiring.test.js.
-  await mainEval(() => globalThis.__lanliTest.closeSettingsMenu());
-  // Dismissing the menu for real always lands a pointerdown in the window
-  // (that is the 0.1.24 signal that clears the pill); replay it, then the
-  // button must be back to its resting state.
-  await page.evaluate(() =>
-    document.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })));
-  await page.waitForTimeout(100);
-  await expect(page.locator('#settings-button')).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.locator('#settings-view')).toBeVisible();
   await page.screenshot({ path: path.join(SHOTS, '04-topbar-settings.png') });
+  await page.click('#settings-back');
+  await expect(page.locator('#settings-view')).toBeHidden();
 });
 
 test('C6 真实翻月显示最宽副标题：不省略、顶栏单行且按钮不重叠', async () => {

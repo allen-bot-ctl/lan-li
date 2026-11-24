@@ -64,7 +64,7 @@ const {
   removeClock,
   searchCatalog
 } = require('./world-clocks');
-const { buildSettingsMenuTemplate, buildTrayMenuTemplate } = require('./settings-menu');
+const { buildTrayMenuTemplate } = require('./settings-menu');
 const { computePanelBounds } = require('./window-layout');
 const {
   RELEASES_LATEST_URL,
@@ -108,11 +108,8 @@ const e2eLoginCalls = [];
 let calendarWindow = null;
 let clockTimer = null;
 let closeTimer = null;
-let settingsMenuOpen = false;
-// E2E-only probe: records the anchor actually received for the settings menu.
-let e2eLastSettingsAnchor = null;
-let e2eSettingsMenu = null;
 let settingsViewOpen = false;
+let quitConfirmOpen = false; // 0.1.63 设置页「退出栏历」确认框是否开着
 // 0.1.40 托盘右键菜单：菜单开着时悬停不开日历；从菜单打开设置后保持打开，
 // 直到鼠标进入窗口再离开（或 Esc / 隐藏）。
 let trayMenuOpen = false;
@@ -451,7 +448,10 @@ function createCalendarWindow() {
   calendarWindow.webContents.on('before-input-event', (event, input) => {
     if (input.type === 'keyDown' && (input.key === 'Escape' || input.key === 'Esc')) {
       event.preventDefault();
-      if (settingsViewOpen && readerViewOpen) {
+      if (quitConfirmOpen) {
+        // 0.1.63：退出确认框开着时 Esc 只关框（由渲染层关），不退回日历。
+        calendarWindow.webContents.send('quit:escape');
+      } else if (settingsViewOpen && readerViewOpen) {
         calendarWindow.webContents.send('reader:escape');
       } else if (settingsViewOpen && inboxViewOpen) {
         // 0.1.44：收纳面板里 Esc 先关标签输入框/清空搜索，再退出面板（由渲染层决定）
@@ -647,77 +647,6 @@ function pointerInsideWindow() {
 
 // The renderer sends the settings button's left edge and bottom + 4. Electron's
 // popup takes the menu's top-left corner, so use that point as-is.
-function settingsMenuAnchor(position) {
-  const x = Number(position && position.x);
-  const y = Number(position && position.y);
-  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
-  return {
-    x: Math.max(0, Math.round(x)),
-    y: Math.round(y)
-  };
-}
-
-function openSettingsMenu(event, position) {
-  if (!calendarWindow || calendarWindow.isDestroyed()) return;
-  const target = BrowserWindow.fromWebContents(event.sender);
-  if (!target || target.isDestroyed()) return;
-
-  cancelClose();
-  settingsMenuOpen = true;
-
-  // Actions that open a panel or show update feedback keep the panel visible
-  // after the native menu closes. Dismissing the menu without one of those
-  // falls back to the normal pointer-outside close.
-  let keepWindowOpen = false;
-
-  const template = buildSettingsMenuTemplate(
-    {
-      version: formatVersionLabel(app.getVersion()),
-      openAtLogin: getOpenAtLogin()
-    },
-    {
-      checkUpdate: () => {
-        keepWindowOpen = true;
-        requestUpdateCheck();
-      },
-      setOpenAtLogin: (value) => {
-        applyLoginItem(Boolean(value));
-      },
-      openAlmanacStyles: () => {
-        keepWindowOpen = true;
-        sendPanel('almanac');
-      },
-      openClocks: () => {
-        keepWindowOpen = true;
-        sendPanel('clocks');
-      },
-      openWeather: () => {
-        keepWindowOpen = true;
-        sendPanel('weather');
-      },
-      openMore: () => { keepWindowOpen = true; sendPanel('settings'); },
-      quit: () => app.quit()
-    }
-  );
-
-  const menu = Menu.buildFromTemplate(template);
-  const anchor = settingsMenuAnchor(position);
-  if (E2E) {
-    e2eLastSettingsAnchor = anchor;
-    e2eSettingsMenu = menu;
-  }
-  const options = { window: target };
-  if (anchor) {
-    options.x = anchor.x;
-    options.y = anchor.y;
-  }
-  options.callback = () => {
-    settingsMenuOpen = false;
-    if (!keepWindowOpen && !pointerInsideWindow()) scheduleClose();
-  };
-  menu.popup(options);
-}
-
 function isAllowedUpdateUrl(value) {
   if (typeof value !== 'string' || value.trim() === '') return false;
   try {
@@ -800,9 +729,6 @@ function scheduleClose() {
   // Pinned windows ignore tray mouse-leave and window pointer-leave until the
   // user unpins (× or Esc) or the window is hidden by another path.
   if (pinned) return;
-  // A native settings menu floats above the window; pointer-leave would
-  // otherwise hide the calendar while the user is still choosing an item.
-  if (settingsMenuOpen) return;
   if (trayMenuOpen || trayMenuHold) return;
   closeTimer = setTimeout(hideCalendar, 200);
 }
@@ -848,6 +774,7 @@ function hideCalendar() {
   cancelClose();
   trayMenuHold = false;
   settingsViewOpen = false;
+  quitConfirmOpen = false;
   // Hiding always ends the pinned session; the next tray hover reopens in the
   // default unpinned state, as required (nothing is persisted).
   const wasPinned = pinned;
@@ -959,6 +886,8 @@ function registerIpc() {
   ipcMain.handle('settings:setHotkey', (_e, a) => setHotkey(a && a.kind, a && a.accelerator));
   ipcMain.handle('settings:setOpenAtLogin', (_e, value) => applyLoginItem(Boolean(value)));
   ipcMain.handle('settings:setMenuBarShowDate', (_e, value) => setMenuBarShowDate(value));
+  ipcMain.on('quit:confirmState', (_e, open) => { quitConfirmOpen = Boolean(open); });
+  ipcMain.on('app:quit', () => { quitApp(); });
   ipcMain.on('settings:viewState', (_e, open) => { settingsViewOpen = Boolean(open); setSubPage(open); });
   ipcMain.on('inbox:viewState', (_e, open) => { inboxViewOpen = Boolean(open); });
   ipcMain.on('reader:viewState', (_e, open) => { readerViewOpen = Boolean(open); });
@@ -1142,10 +1071,6 @@ function registerIpc() {
     return { pinned };
   });
 
-  ipcMain.on('menu:openSettings', (event, position) => {
-    openSettingsMenu(event, position);
-  });
-
   // Footer 「检查更新」 reuses the settings menu path and the same
   // update:status feedback, so there is only one update-check implementation.
   ipcMain.on('update:check', () => {
@@ -1218,16 +1143,6 @@ function registerE2eHooks() {
     isPinned() {
       return pinned;
     },
-    lastSettingsAnchor() {
-      return e2eLastSettingsAnchor;
-    },
-    closeSettingsMenu() {
-      if (e2eSettingsMenu && typeof e2eSettingsMenu.closePopup === 'function') {
-        e2eSettingsMenu.closePopup();
-      }
-      e2eSettingsMenu = null;
-      return true;
-    },
     trayRightClick() { openTrayMenu(); return { menuOpen: trayMenuOpen, visible: Boolean(calendarWindow && !calendarWindow.isDestroyed() && calendarWindow.isVisible()) }; },
     trayMenuItems() { return e2eTrayMenu ? e2eTrayMenu.items.map((i) => ({ id: i.id, label: i.label, type: i.type, accelerator: i.accelerator || null })) : null; },
     clickTrayMenuItem(id) { const item = e2eTrayMenu && e2eTrayMenu.getMenuItemById(id); if (!item) return false; e2eUpdateChecks0 = e2eUpdateChecks; item.click(); trayMenuOpen = false; e2eTrayMenu = null; return true; },
@@ -1281,8 +1196,8 @@ function registerE2eHooks() {
     inboxAddTag(a) { return inbox.store.addTag(a.id, a.tag); },
     inboxIndexPath() { return path.join(inbox.store.root, 'index.json'); },
     clipboardText() { return clipboard.readText(); },
+    quitConfirmOpen() { return quitConfirmOpen; },
     trayMenuStats() { return { quitCalls: e2eQuitCalls, updateChecks: e2eUpdateChecks - e2eUpdateChecks0, hold: trayMenuHold }; },
-    clickSettingsMenuItem(id) { const item = e2eSettingsMenu && e2eSettingsMenu.getMenuItemById(id); if (!item) return false; item.click(); return true; },
     emitUpdateStatus(status) {
       sendUpdateStatus(status);
       return true;
@@ -1300,7 +1215,6 @@ function registerE2eHooks() {
     trayTooltip() { return lastTrayTooltip; },
     loginItemCalls() { return e2eLoginCalls.slice(); },
     menuBarZone() { return resolvedMenuBarTimeZone() || defaultLocalTimeZone(); },
-    settingsMenuItems() { return buildSettingsMenuTemplate({ version: formatVersionLabel(app.getVersion()), openAtLogin: getOpenAtLogin() }, {}).map((i) => ({ id: i.id || null, type: i.type || 'normal', label: i.label || '', checked: i.checked === true })); },
     setWeatherFail(v) { e2eWeatherFail = Boolean(v); return true; },
     weatherRefreshCalls() { return e2eWeatherRefreshCalls.slice(); },
     triggerResume() { if (weatherRefresher) weatherRefresher.onResume(); return true; },

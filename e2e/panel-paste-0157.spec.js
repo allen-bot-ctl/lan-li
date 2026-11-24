@@ -66,8 +66,6 @@ test('P5 标签页「删除」常态 --muted，悬停 #ff3b30', async () => {
   await page.evaluate(() => { if (typeof closeInboxView === 'function') closeInboxView(); });
   await hook('trayEnter');
   await page.click('#settings-button');
-  await expect.poll(() => hook('clickSettingsMenuItem', 'more-settings'), { timeout: 5000 }).toBe(true);
-  await hook('closeSettingsMenu');
   await page.click('.settings-tab[data-tab="tags"]');
   const del = page.locator('.tag-row-delete').first();
   await expect(del).toBeVisible();

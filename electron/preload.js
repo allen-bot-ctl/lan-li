@@ -37,7 +37,9 @@ contextBridge.exposeInMainWorld('lanli', {
   onPinState: (callback) => {
     ipcRenderer.on('pin:state', (_event, payload) => callback(payload));
   },
-  openSettings: (position) => ipcRenderer.send('menu:openSettings', position),
+  setQuitConfirm: (open) => ipcRenderer.send('quit:confirmState', open),
+  onQuitEscape: (callback) => { ipcRenderer.on('quit:escape', () => callback()); },
+  quitApp: () => ipcRenderer.send('app:quit'),
   onOpenPanel: (callback) => {
     ipcRenderer.on('ui:openPanel', (_event, panel) => callback(panel));
   },
