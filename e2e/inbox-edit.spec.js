@@ -38,6 +38,7 @@ test('系统剪贴板图文原位编辑，图前后、格式、取消、保存�
     await row.click();
     const frame = () => page.frameLocator('#inbox-detail-frame');
     await expect(frame().locator('a')).toHaveAttribute('href', 'https://example.org/reference');
+    await expect(page.locator('#toast')).toBeHidden();
     await page.screenshot({path:info.outputPath('native-reading.png')});
     const paneTop = (await page.locator('#inbox-detail-frame').boundingBox()).y;
     await page.click('#inbox-detail-edit');
@@ -84,18 +85,29 @@ test('系统剪贴板图文原位编辑，图前后、格式、取消、保存�
     await expect(frame().locator('img')).toBeVisible();
     assert.equal(fs.readFileSync(disk,'utf8'),originalBefore);
     await page.click('#inbox-back');
+    await page.locator('#inbox-search').fill('图后：修改已保存');
     const reopenRow = page.locator(`.inbox-row[data-id="${id}"]`);
+    await expect(reopenRow).toBeVisible();
     await reopenRow.hover();
     await reopenRow.locator('.inbox-act-copy').click();
     await expect.poll(() => app.evaluate(({clipboard})=>clipboard.readHTML())).toContain('图后：修改已保存');
     expect(await app.evaluate(({clipboard})=>clipboard.readHTML())).toMatch(/<img[^>]+src="data:image\/png;base64,/);
-    await app.evaluate(({ clipboard }) => { clipboard.clear(); clipboard.writeText('纯文字第一行\n\n最后一行'); });
+    await page.locator('#inbox-search').fill('');
+    const plainText = '纯文字第一行\n\n最后一行';
+    await app.evaluate(({ clipboard }, value) => { clipboard.clear(); clipboard.writeText(value); }, plainText);
+    expect(await app.evaluate(({clipboard}) => [clipboard.readText(), clipboard.readHTML()])).toEqual([plainText, '']);
     await page.click('#inbox-paste');
-    await page.locator('.inbox-row').filter({hasText:'纯文字第一行'}).click();
+    const textRow = page.locator('.inbox-row').filter({hasText:'纯文字第一行'});
+    await expect(textRow).toBeVisible();
+    const plainId = await textRow.getAttribute('data-id');
+    const plainDisk = JSON.parse(fs.readFileSync(path.join(work,'inbox',plainId,'document.json'),'utf8'));
+    expect(plainDisk.content.map(pmText)).toEqual(plainText.split('\n'));
+    await textRow.click();
     await page.click('#inbox-detail-edit');
     writer = page.locator('#inbox-wys-body .tiptap');
-    await expect(writer.locator(':scope > p')).toHaveCount(3);
-    await expect(writer.locator(':scope > p').nth(1)).toHaveText('');
+    await expect(writer).toBeVisible();
+    await expect.poll(() => writer.evaluate(el => Array.from(el.children).map(n => [n.tagName, n.textContent])))
+      .toEqual(plainText.split('\n').map(line => ['P', line]));
     await page.click('#inbox-wys-save');
     await expect(page.locator('#inbox-detail-edit')).toBeVisible();
   } finally {
