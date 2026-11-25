@@ -853,7 +853,7 @@ function updateClock() {
         tray.setImage(nativeImage.createEmpty());
         tray.setTitle(title, { fontType: 'monospacedDigit' });
       }
-      if (E2E) e2eTrayFrame = { face: compact ? face : null, png: compact ? img.toPNG({scaleFactor:2}).toString('base64') : null, title: img ? '' : title, dark };
+      if (E2E) e2eTrayFrame = { face: compact ? face : null, png: compact ? img.toPNG({scaleFactor:2}).toString('base64') : null, png1x: compact ? img.toPNG({scaleFactor:1}).toString('base64') : null, title: img ? '' : title, dark };
       lastTrayFrameKey = frameKey;
     }
     if (tooltip && typeof tray.setToolTip === 'function') tray.setToolTip(tooltip);

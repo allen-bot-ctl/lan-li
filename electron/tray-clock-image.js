@@ -19,7 +19,7 @@ function advanceOf(ch) {
   return ADVANCE_PT[ch];
 }
 
-function atlasScript(scale, chars = CHARS, fontPt = FONT_PT, heightPt = HEIGHT_PT) {
+function atlasScript(scale, chars = CHARS, fontPt = FONT_PT, heightPt = HEIGHT_PT, weight = 400) {
   const adv = {};
   for (const ch of chars) adv[ch] = (advanceOf(ch) ?? ADVANCE_PT.cjk) * fontPt / FONT_PT;
   return `(() => {
@@ -27,7 +27,7 @@ function atlasScript(scale, chars = CHARS, fontPt = FONT_PT, heightPt = HEIGHT_P
     const s = ${scale}, H = ${heightPt} * s;
     const c = document.createElement('canvas');
     const ctx = c.getContext('2d');
-    const font = (${fontPt} * s) + 'px -apple-system, "SF Pro Text", "PingFang SC", sans-serif';
+    const font = '${weight} ' + (${fontPt} * s) + 'px -apple-system, "SF Pro Text", "PingFang SC", sans-serif';
     ctx.font = font;
     const m = ctx.measureText('0月');
     const asc = m.fontBoundingBoxAscent, desc = m.fontBoundingBoxDescent;
@@ -60,10 +60,12 @@ async function buildAtlas(BrowserWindow) {
     const a1 = await win.webContents.executeJavaScript(atlasScript(1));
     const a2 = await win.webContents.executeJavaScript(atlasScript(2));
     const compact = {};
+    const seconds = {};
     for (const scale of [1,2]) {
       compact[scale] = await win.webContents.executeJavaScript(atlasScript(scale, '0123456789周日一二三四五六', 8, 10));
+      seconds[scale] = await win.webContents.executeJavaScript(atlasScript(scale, DIGITS, 9, 12, 650));
     }
-    return { 1: a1, 2: a2, compact };
+    return { 1: a1, 2: a2, compact, seconds };
   } finally {
     if (!win.isDestroyed()) win.destroy();
   }
@@ -106,7 +108,7 @@ function createClockImageMaker(nativeImage, atlas) {
   };
 }
 
-const COMPACT_WIDTH = 77;
+const COMPACT_WIDTH = 82;
 function composeCompactBitmap(atlas, face, scale, dark) {
   const H = HEIGHT_PT * scale, W = COMPACT_WIDTH * scale;
   const buf = Buffer.alloc(W * H * 4);
@@ -127,19 +129,19 @@ function composeCompactBitmap(atlas, face, scale, dark) {
     }
   }
   const tau = Math.PI * 2, progress = Number(face.seconds) / 60;
-  const radius = 8.25, halfStroke = 0.85;
-  for (let y=0;y<H;y++) for (let x=0;x<20*scale;x++) {
-    const dx=(x+0.5)/scale-10,dy=(y+0.5)/scale-11;
+  const radius = 9.25, halfStroke = 0.85;
+  for (let y=0;y<H;y++) for (let x=0;x<22*scale;x++) {
+    const dx=(x+0.5)/scale-11,dy=(y+0.5)/scale-11;
     const coverage = Math.min(1, Math.max(0, (halfStroke - Math.abs(Math.hypot(dx,dy)-radius)) * scale + 0.5));
     if (!coverage) continue;
     const angle = (Math.atan2(dx,-dy)+tau)%tau;
     if (angle < tau*progress) pixel(x,y,...cyanGreen,Math.round(255*coverage));
     else pixel(x,y,ink,ink,ink,Math.round(60*coverage));
   }
-  glyphs(atlas.compact[scale],face.seconds,10,6);
-  glyphs(atlas.compact[scale],face.day,30,1);
-  glyphs(atlas.compact[scale],face.weekday,30,11);
-  glyphs(atlas[scale],face.time,58,0);
+  glyphs(atlas.seconds[scale],face.seconds,11,5);
+  glyphs(atlas.compact[scale],face.day+'日',33,1);
+  glyphs(atlas.compact[scale],face.weekday,33,11);
+  glyphs(atlas[scale],face.time,63,0);
   return {buf,W,H};
 }
 

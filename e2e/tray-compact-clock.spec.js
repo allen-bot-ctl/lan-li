@@ -48,18 +48,25 @@ test('macOS 状态栏三种时钟模式、绿环与换日、深浅外观及重�
     await expect.poll(async () => (await state())?.dark).toBe(true);
     const dark=await state();
     const image=Buffer.from(dark.png,'base64');
-    expect(image.readUInt32BE(16)).toBe(154);
+    expect(image.readUInt32BE(16)).toBe(164);
     expect(image.readUInt32BE(20)).toBe(44);
     expect(dark.title).toBe('');
     fs.writeFileSync(info.outputPath('tray-compact-dark.png'),image);
+    const one=Buffer.from(dark.png1x,'base64');
+    expect(one.readUInt32BE(16)).toBe(82);
+    expect(one.readUInt32BE(20)).toBe(22);
+    fs.writeFileSync(info.outputPath('tray-compact-dark-1x.png'),one);
     await app.evaluate(({nativeTheme})=>{nativeTheme.themeSource='light';});
     await expect.poll(async () => (await state())?.dark).toBe(false);
     const light=await state();
     expect(light.png).not.toEqual(dark.png);
     fs.writeFileSync(info.outputPath('tray-compact-light.png'),Buffer.from(light.png,'base64'));
+    fs.writeFileSync(info.outputPath('tray-compact-light-1x.png'),Buffer.from(light.png1x,'base64'));
     await hook('setNow','2026-11-01T00:00:00');
     await expect.poll(async () => (await state())?.face).toEqual({seconds:'00',day:'01',weekday:'周日',time:'00:00'});
 
+    const midnight=await state();
+    fs.writeFileSync(info.outputPath('tray-compact-01-1x.png'),Buffer.from(midnight.png1x,'base64'));
     await app.close(); app=null; page=await launch();
     await openSettings(page);
     await expect(read(page,date)).not.toBeChecked();

@@ -1447,7 +1447,8 @@ mark.inbox-hit{background:rgba(255,200,0,.45);color:inherit;border-radius:2px;}
 .settings-head .settings-back{margin:0;flex:0 0 auto;white-space:nowrap;}
 .settings-head-title{position:absolute;left:50%;transform:translateX(-50%);font-size:13px;font-weight:600;white-space:nowrap;pointer-events:none;}
 .settings-body{flex:1 1 auto;min-height:0;display:flex;flex-direction:row;}
-.settings-nav{padding-top:8px;gap:10px;scroll-padding-block:8px;}
+.settings-nav{padding-top:8px;gap:6px;scroll-padding-block:8px;}
+.settings-nav-divider{flex:0 0 1px;margin-inline:10px;background:color-mix(in srgb,var(--text) 27%,transparent);pointer-events:none;}
 .settings-nav-group{display:flex;flex:0 0 auto;flex-direction:column;gap:2px;}
 .settings-nav-heading{margin:0;padding:0 10px;color:var(--muted-strong);font-size:11px;font-weight:600;line-height:18px;}
 .settings-page-title{height:32px;line-height:32px;margin:0 0 4px;padding:0;font-size:13px;font-weight:600;border-bottom:0;}

@@ -34,6 +34,14 @@ test('八类设置保留相同入口，标题层级清楚，内嵌选择器与�
   const apps = page.getByRole('group', { name: '应用', exact: true });
   await expect(basics.getByRole('button')).toHaveText(['界面设置', '大模型', '升级']);
   await expect(apps.getByRole('button')).toHaveText(['黄历', '天气', '世界时钟', '收纳', '帮阅']);
+  const divider = page.locator('.settings-nav-divider');
+  await expect(divider).toBeVisible();
+  await expect(divider).toHaveAttribute('aria-hidden', 'true');
+  const [before, line, after] = await Promise.all([basics.boundingBox(), divider.boundingBox(), apps.boundingBox()]);
+  expect(line.height).toBe(1);
+  expect(line.width).toBeGreaterThan(75);
+  expect(line.y).toBeGreaterThan(before.y + before.height);
+  expect(line.y + line.height).toBeLessThan(after.y);
   await tab('ui').focus();
   await page.keyboard.press('Tab');
   await expect(tab('llm')).toBeFocused();

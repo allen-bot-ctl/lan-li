@@ -28,10 +28,10 @@ test('秒、两位日号、周几和 HH:mm 来自同一选择时区，跨周午�
 
 test('紧凑位图绿环推进且主题反色，1×/2×保留固定尺寸', () => {
   const mk = (scale,H) => ({H:H*scale,out:Object.fromEntries([...new Set('0123456789:周日一')].map(ch=>[ch,{w:scale,adv:2,a:Array(H*scale*scale).fill(255)}]))});
-  const atlas = {1:mk(1,22),2:mk(2,22),compact:{1:mk(1,10),2:mk(2,10)}};
+  const atlas = {1:mk(1,22),2:mk(2,22),compact:{1:mk(1,10),2:mk(2,10)},seconds:{1:mk(1,12),2:mk(2,12)}};
   const data=face(new Date('2026-11-01T03:59:59Z'),'UTC','UTC');
   const a=bitmap(atlas,data,1,false), b=bitmap(atlas,{...data,seconds:'00'},2,true);
-  assert.deepEqual([a.W,a.H,b.W,b.H],[77,22,154,44]);
+  assert.deepEqual([a.W,a.H,b.W,b.H],[82,22,164,44]);
   const green = b => {let n=0;for(let i=0;i<b.buf.length;i+=4) if(b.buf[i+1]>b.buf[i+2] && b.buf[i+1]>b.buf[i] && b.buf[i+3])n++;return n;};
   assert.ok(green(a)>30);
   assert.equal(green(b),0);
