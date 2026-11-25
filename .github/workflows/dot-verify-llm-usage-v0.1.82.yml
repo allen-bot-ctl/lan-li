@@ -1,0 +1,41 @@
+name: Verify LanLi model usage v0.1.82
+on:
+  push:
+    branches: [integration/verify-v0.1.82-markers]
+    paths: [.github/workflows/dot-verify-llm-usage-v0.1.82.yml]
+permissions:
+  contents: read
+jobs:
+  native:
+    if: github.repository == 'allen-bot-ctl/lan-li' && github.actor_id == '352863755'
+    runs-on: macos-15-intel
+    timeout-minutes: 12
+    env:
+      EXPECTED: 634704f244278b2308d4674cd4452d600df0ba16
+      EXPECTED_TREE: d16d8c9a02580389f6ac59f2337159aca46d2cae
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.EXPECTED }}
+          persist-credentials: false
+      - name: Verify exact checked-out source and runner
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED"
+          test "$(git rev-parse 'HEAD^{tree}')" = "$EXPECTED_TREE"
+          test "$(uname -m)" = x86_64
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - name: Native settings, fake-provider usage and restart
+        run: npm run e2e -- e2e/llm-usage.spec.js
+      - name: Upload only synthetic usage captures and failure traces
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: synthetic-model-usage
+          path: |
+            test-results/**/usage-*.png
+            test-results/**/trace.zip
+          retention-days: 3
+          if-no-files-found: warn
