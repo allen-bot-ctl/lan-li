@@ -38,9 +38,6 @@ test('macOS 状态栏三种时钟模式、绿环与换日、深浅外观及重�
     let page=await launch();
     await hook('setNow','2026-10-31T23:59:59');
     await openSettings(page);
-    await expect(read(page,date)).toBeChecked();
-    await expect(read(page,compact)).not.toBeChecked();
-    await tap(page,compact);
     await expect(read(page,compact)).toBeChecked();
     await expect(read(page,date)).not.toBeChecked();
     await expect.poll(async () => (await state())?.face).toEqual({seconds:'59',day:'31',weekday:'周六',time:'23:59'});
@@ -79,6 +76,13 @@ test('macOS 状态栏三种时钟模式、绿环与换日、深浅外观及重�
     await expect(read(page,date)).not.toBeChecked();
     await expect(read(page,compact)).not.toBeChecked();
     await expect.poll(()=>hook('trayTitle')).toMatch(/^\d{2}:\d{2}:\d{2}$/);
+    await app.close(); app=null; page=await launch();
+    await openSettings(page);
+    await expect(read(page,date)).not.toBeChecked();
+    await expect(read(page,compact)).not.toBeChecked();
+    await tap(page,compact);
+    await expect(read(page,compact)).toBeChecked();
+    await expect(read(page,date)).not.toBeChecked();
   } finally {
     if (app) await app.close();
     fs.rmSync(dir,{recursive:true,force:true});

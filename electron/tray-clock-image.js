@@ -62,7 +62,7 @@ async function buildAtlas(BrowserWindow) {
     const compact = {};
     const seconds = {};
     for (const scale of [1,2]) {
-      compact[scale] = await win.webContents.executeJavaScript(atlasScript(scale, '0123456789周日一二三四五六', 8, 10));
+      compact[scale] = await win.webContents.executeJavaScript(atlasScript(scale, '0123456789周日一二三四五六', 8, 10, 600));
       seconds[scale] = await win.webContents.executeJavaScript(atlasScript(scale, DIGITS, 9, 12, 650));
     }
     return { 1: a1, 2: a2, compact, seconds };

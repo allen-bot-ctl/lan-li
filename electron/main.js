@@ -86,7 +86,7 @@ const {
 } = require('./quick-cities');
 const { createLoginItem } = require('./login-item');
 const { createWeatherRefresher } = require('./weather-refresh');
-const { readTrayClockStyle, nextTrayClockStyle } = require('./tray-clock-style');
+const { readTrayClockStyle, initialTrayClockStyle, nextTrayClockStyle } = require('./tray-clock-style');
 const { buildAtlas, createClockImageMaker, createCompactClockImageMaker } = require('./tray-clock-image');
 const { createInboxController, frontAppName } = require('./inbox-main');
 const { createRegionController } = require('./region-capture');
@@ -361,7 +361,17 @@ function initializeAlmanacStyle() {
   almanacStyleCatalog = configureAlmanacStyles({ logger });
   configureAlmanacFocus({ logger });
   almanacStyle = readAlmanacStyle(readPreferences());
-  trayClockStyle = readTrayClockStyle(readPreferences());
+}
+
+// Must precede login-item and clock preference writes. Chromium's own cache
+// may already exist on a fresh profile, so check only files owned by LanLi.
+function initializeTrayClockStyle() {
+  const dir = app.getPath('userData');
+  const existing = ['preferences.json', 'inbox', 'read', 'reader-api-key', 'reader-prompt.txt']
+    .some(name => fs.existsSync(path.join(dir, name)));
+  const saved = readPreferences();
+  trayClockStyle = initialTrayClockStyle(saved, existing);
+  if (!existing) writePreferences({ ...saved, ...trayClockStyle });
 }
 
 function persistWorldClocks() {
@@ -1404,6 +1414,7 @@ async function bootstrap() {
   }
 
   Menu.setApplicationMenu(null);
+  initializeTrayClockStyle();
   initializeLoginItem();
   resetViewToToday();
   loadWorldClocks();

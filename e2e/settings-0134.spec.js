@@ -2,6 +2,9 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const os = require('node:os');
+const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'lanli-legacy-settings-'));
+fs.writeFileSync(path.join(profile, 'preferences.json'),'{}');
 const { test, expect, _electron: electron } = require('@playwright/test');
 
 let app = null;
@@ -28,7 +31,7 @@ const hideWindow = () => mainEval(() => globalThis.__lanliTest.hideWindow());
 
 async function launchApp() {
   const args = process.platform === 'linux' ? ['--no-sandbox', '.'] : ['.'];
-  app = await electron.launch({ args, env: { ...process.env, LANLI_E2E: '1' } });
+  app = await electron.launch({ args, env: { ...process.env, LANLI_E2E: '1', LANLI_E2E_USER_DATA_DIR: profile } });
   page = await app.firstWindow();
   await page.waitForSelector('#grid');
 }
@@ -69,6 +72,7 @@ test.afterAll(async () => {
     await setNow(null);
   } catch {}
   if (app) await app.close().catch(() => {});
+  fs.rmSync(profile, {recursive:true, force:true});
 });
 
 test('C1 settings view open', async () => {

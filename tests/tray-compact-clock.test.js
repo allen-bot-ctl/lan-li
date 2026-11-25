@@ -1,7 +1,7 @@
 'use strict';
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
-const {readTrayClockStyle: read, nextTrayClockStyle: change} = require('../electron/tray-clock-style');
+const {readTrayClockStyle: read, initialTrayClockStyle: initial, nextTrayClockStyle: change} = require('../electron/tray-clock-style');
 const {formatCompactTrayClock: face} = require('../electron/world-clocks');
 const {composeCompactBitmap: bitmap} = require('../electron/tray-clock-image');
 
@@ -17,6 +17,10 @@ test('旧设置升级保持；三态互斥，关闭任一种不隐式开启另�
   assert.deepEqual(change(compact,'menuBarCompactClock',false),plain);
   assert.deepEqual(change(regular,'menuBarShowDate',false),plain);
   assert.equal(change(regular,'menuBarShowDate','false'),regular);
+  assert.deepEqual(initial({},false),compact);
+  assert.deepEqual(initial({},true),regular);
+  assert.deepEqual(initial({loginItemInitialized:true},true),regular);
+  for (const mode of [regular,plain,compact]) assert.deepEqual(initial(mode,true),mode);
 });
 
 test('秒、两位日号、周几和 HH:mm 来自同一选择时区，跨周午夜秒数归零', () => {
