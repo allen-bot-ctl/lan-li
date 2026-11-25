@@ -116,7 +116,7 @@ test('R6b 设置页：填 Key 保存后状态行「已配置」；网址不合�
   await page.fill('#reader-key', 'sk-e2e-0160');
   await page.click('#reader-key-save');
   await expect(page.locator('#reader-key-status')).toHaveText('已配置 · deepseek-chat');
-  expect(await page.locator('.settings-tab').allTextContents()).toEqual(['界面设置', '黄历', '天气', '世界时钟', '收纳', '大模型', '帮阅', '升级']);
+  expect(await page.locator('.settings-tab').allTextContents()).toEqual(['界面设置', '大模型', '升级', '黄历', '天气', '世界时钟', '收纳', '帮阅']);
   for (const scheme of ['dark', 'light']) {
     await page.emulateMedia({ colorScheme: scheme });
     await page.waitForTimeout(100);

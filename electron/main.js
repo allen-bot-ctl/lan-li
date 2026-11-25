@@ -6,6 +6,7 @@ const {
   Tray,
   Menu,
   nativeImage,
+  nativeTheme,
   screen,
   ipcMain,
   dialog,
@@ -55,6 +56,7 @@ const {
   formatClockTime,
   describeClockRelative,
   formatMenuTitleInZone,
+  formatCompactTrayClock,
   formatTrayTooltipInZone,
   resolveMenuBarTimeZone,
   normalizeMenuBarTimeZone,
@@ -84,7 +86,8 @@ const {
 } = require('./quick-cities');
 const { createLoginItem } = require('./login-item');
 const { createWeatherRefresher } = require('./weather-refresh');
-const { buildAtlas, createClockImageMaker } = require('./tray-clock-image');
+const { readTrayClockStyle, nextTrayClockStyle } = require('./tray-clock-style');
+const { buildAtlas, createClockImageMaker, createCompactClockImageMaker } = require('./tray-clock-image');
 const { createInboxController, frontAppName } = require('./inbox-main');
 const { createRegionController } = require('./region-capture');
 const { createReaderController } = require('./reader-main');
@@ -105,7 +108,10 @@ if (E2E && process.env.LANLI_E2E_USER_DATA_DIR) {
 }
 
 let tray = null;
-let menuBarShowDate = true;
+let trayClockStyle = readTrayClockStyle();
+let makeCompactClockImage = null;
+let lastTrayFrameKey = '';
+let e2eTrayFrame = null;
 let lastTrayTitle = '';
 let makeClockImage = null; // v0.1.38: null until the glyph atlas is ready; falls back to setTitle
 let lastTrayTooltip = '';
@@ -342,22 +348,20 @@ function setInboxDateLinkEnabled(value) {
   return result;
 }
 
-function readMenuBarShowDate(preferences) {
-  return !(preferences && preferences.menuBarShowDate === false);
-}
-
-function setMenuBarShowDate(value) {
-  menuBarShowDate = Boolean(value);
-  writePreferences({ ...readPreferences(), menuBarShowDate });
-  updateClock();
-  return menuBarShowDate;
+function setTrayClockPreference(key, value) {
+  const next = nextTrayClockStyle(trayClockStyle, key, value);
+  if (next !== trayClockStyle && writePreferences({ ...readPreferences(), ...next })) {
+    trayClockStyle = next;
+    updateClock();
+  }
+  return trayClockStyle[key];
 }
 
 function initializeAlmanacStyle() {
   almanacStyleCatalog = configureAlmanacStyles({ logger });
   configureAlmanacFocus({ logger });
   almanacStyle = readAlmanacStyle(readPreferences());
-  menuBarShowDate = readMenuBarShowDate(readPreferences());
+  trayClockStyle = readTrayClockStyle(readPreferences());
 }
 
 function persistWorldClocks() {
@@ -833,16 +837,24 @@ function updateClock() {
 
   if (tray) {
     const zone = resolvedMenuBarTimeZone(); const local = defaultLocalTimeZone();
-    const title = formatMenuTitleInZone(now, zone, local, { showDate: menuBarShowDate }) || formatMenuTitle(now, { showDate: menuBarShowDate });
+    const title = formatMenuTitleInZone(now, zone, local, { showDate: trayClockStyle.menuBarShowDate }) || formatMenuTitle(now, { showDate: trayClockStyle.menuBarShowDate });
     const tooltip = formatTrayTooltipInZone(now, zone, local);
-    const img = makeClockImage && title !== lastTrayTitle ? makeClockImage(title) : null;
-    if (img) {
-      if (process.env.LANLI_DUMP_CLOCK) require('fs').writeFileSync(process.env.LANLI_DUMP_CLOCK, img.toPNG({ scaleFactor: 2 }));
-      tray.setImage(img);
-      tray.setTitle('');
-    } else if (!makeClockImage || title !== lastTrayTitle) {
-      if (makeClockImage) tray.setImage(nativeImage.createEmpty());
-      tray.setTitle(title, { fontType: 'monospacedDigit' });
+    const face = trayClockStyle.menuBarCompactClock ? formatCompactTrayClock(now, zone, local) : null;
+    const dark = Boolean(nativeTheme.shouldUseDarkColors);
+    const compact = face && makeCompactClockImage;
+    const frameKey = compact ? 'compact:' + dark + ':' + JSON.stringify(face) : 'regular:' + title;
+    if (frameKey !== lastTrayFrameKey) {
+      const img = compact ? makeCompactClockImage(face, dark) : makeClockImage?.(title);
+      if (img) {
+        if (process.env.LANLI_DUMP_CLOCK) fs.writeFileSync(process.env.LANLI_DUMP_CLOCK, img.toPNG({ scaleFactor: 2 }));
+        tray.setImage(img);
+        tray.setTitle('');
+      } else {
+        tray.setImage(nativeImage.createEmpty());
+        tray.setTitle(title, { fontType: 'monospacedDigit' });
+      }
+      if (E2E) e2eTrayFrame = { face: compact ? face : null, png: compact ? img.toPNG({scaleFactor:2}).toString('base64') : null, title: img ? '' : title, dark };
+      lastTrayFrameKey = frameKey;
     }
     if (tooltip && typeof tray.setToolTip === 'function') tray.setToolTip(tooltip);
     lastTrayTitle = title; lastTrayTooltip = tooltip;
@@ -902,11 +914,12 @@ function applyViewPayload(payload) {
 function registerIpc() {
   ipcMain.handle('app:version', () => formatVersionLabel(app.getVersion()));
 
-  ipcMain.handle('settings:get', () => ({ openAtLogin: getOpenAtLogin(), menuBarShowDate, inboxDateLinkEnabled: readInboxDateLinkEnabled(readPreferences()), captureHotkey: captureHotkeyEnabled(), captureHotkeyBusy: hotkeyState('capture').busy, hotkeys: { capture: hotkeyState('capture'), region: hotkeyState('region') }, version: app.getVersion() }));
+  ipcMain.handle('settings:get', () => ({ openAtLogin: getOpenAtLogin(), ...trayClockStyle, inboxDateLinkEnabled: readInboxDateLinkEnabled(readPreferences()), captureHotkey: captureHotkeyEnabled(), captureHotkeyBusy: hotkeyState('capture').busy, hotkeys: { capture: hotkeyState('capture'), region: hotkeyState('region') }, version: app.getVersion() }));
   ipcMain.handle('settings:setCaptureHotkey', (_e, value) => setCaptureHotkey(value));
   ipcMain.handle('settings:setHotkey', (_e, a) => setHotkey(a && a.kind, a && a.accelerator));
   ipcMain.handle('settings:setOpenAtLogin', (_e, value) => applyLoginItem(Boolean(value)));
-  ipcMain.handle('settings:setMenuBarShowDate', (_e, value) => setMenuBarShowDate(value));
+  ipcMain.handle('settings:setMenuBarShowDate', (_e, value) => setTrayClockPreference('menuBarShowDate', value));
+  ipcMain.handle('settings:setMenuBarCompactClock', (_e, value) => setTrayClockPreference('menuBarCompactClock', value));
   ipcMain.handle('settings:setInboxDateLinkEnabled', (_e, value) => setInboxDateLinkEnabled(value));
   ipcMain.on('promptai:state', (_e, open) => { promptAiOpen = Boolean(open); });
   ipcMain.on('quit:confirmState', (_e, open) => { quitConfirmOpen = Boolean(open); });
@@ -1237,6 +1250,7 @@ function registerE2eHooks() {
       return true;
     },
     trayTitle() { return lastTrayTitle; },
+    trayClockFrame() { return e2eTrayFrame; },
     trayTooltip() { return lastTrayTooltip; },
     loginItemCalls() { return e2eLoginCalls.slice(); },
     menuBarZone() { return resolvedMenuBarTimeZone() || defaultLocalTimeZone(); },
@@ -1411,10 +1425,12 @@ async function bootstrap() {
   updateClock();
   clockTimer = setInterval(updateClock, 1000);
 
-  if (tray && process.platform === 'darwin' && process.env.LANLI_TITLE_TEXT !== '1' && process.env.LANLI_E2E !== '1') {
+  if (tray && process.platform === 'darwin' && process.env.LANLI_TITLE_TEXT !== '1' && (!E2E || process.env.LANLI_E2E_TRAY_IMAGE === '1')) {
+    nativeTheme.on('updated', updateClock);
     buildAtlas(BrowserWindow).then((atlas) => {
       makeClockImage = createClockImageMaker(nativeImage, atlas);
-      lastTrayTitle = '';
+      makeCompactClockImage = createCompactClockImageMaker(nativeImage, atlas);
+      lastTrayFrameKey = '';
       updateClock();
     }).catch((error) => {
       logger.warn('[栏历] 时钟图片生成失败，继续用文字标题：' + reasonOf(error));

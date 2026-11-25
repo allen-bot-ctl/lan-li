@@ -19,21 +19,21 @@ function advanceOf(ch) {
   return ADVANCE_PT[ch];
 }
 
-function atlasScript(scale) {
+function atlasScript(scale, chars = CHARS, fontPt = FONT_PT, heightPt = HEIGHT_PT) {
   const adv = {};
-  for (const ch of CHARS) adv[ch] = advanceOf(ch);
+  for (const ch of chars) adv[ch] = (advanceOf(ch) ?? ADVANCE_PT.cjk) * fontPt / FONT_PT;
   return `(() => {
     const ADV = ${JSON.stringify(adv)};
-    const s = ${scale}, H = ${HEIGHT_PT} * s;
+    const s = ${scale}, H = ${heightPt} * s;
     const c = document.createElement('canvas');
     const ctx = c.getContext('2d');
-    const font = (${FONT_PT} * s) + 'px -apple-system, "SF Pro Text", "PingFang SC", sans-serif';
+    const font = (${fontPt} * s) + 'px -apple-system, "SF Pro Text", "PingFang SC", sans-serif';
     ctx.font = font;
     const m = ctx.measureText('0月');
     const asc = m.fontBoundingBoxAscent, desc = m.fontBoundingBoxDescent;
     const base = Math.round((H - (asc + desc)) / 2 + asc);
     const out = {};
-    for (const ch of ${JSON.stringify(CHARS)}) {
+    for (const ch of ${JSON.stringify(chars)}) {
       const adv = ADV[ch] * s;
       const w = Math.max(1, Math.ceil(adv) + 1);
       c.width = w; c.height = H;
@@ -59,7 +59,11 @@ async function buildAtlas(BrowserWindow) {
     await win.loadURL('data:text/html;charset=utf-8,<html><body></body></html>');
     const a1 = await win.webContents.executeJavaScript(atlasScript(1));
     const a2 = await win.webContents.executeJavaScript(atlasScript(2));
-    return { 1: a1, 2: a2 };
+    const compact = {};
+    for (const scale of [1,2]) {
+      compact[scale] = await win.webContents.executeJavaScript(atlasScript(scale, '0123456789周日一二三四五六', 8, 10));
+    }
+    return { 1: a1, 2: a2, compact };
   } finally {
     if (!win.isDestroyed()) win.destroy();
   }
@@ -102,4 +106,54 @@ function createClockImageMaker(nativeImage, atlas) {
   };
 }
 
-module.exports = { buildAtlas, composeBitmap, createClockImageMaker, CHARS, advanceOf };
+const COMPACT_WIDTH = 77;
+function composeCompactBitmap(atlas, face, scale, dark) {
+  const H = HEIGHT_PT * scale, W = COMPACT_WIDTH * scale;
+  const buf = Buffer.alloc(W * H * 4);
+  const ink = dark ? 244 : 28;
+  const cyanGreen = dark ? [61, 208, 127] : [16, 151, 79];
+  function pixel(x,y,r,g,b,a) {
+    if (x < 0 || y < 0 || x >= W || y >= H) return;
+    const i = (y * W + x) * 4;
+    if (a > buf[i+3]) { buf[i]=b; buf[i+1]=g; buf[i+2]=r; buf[i+3]=a; }
+  }
+  function glyphs(mask, text, center, top) {
+    const layer = composeBitmap(mask, text, scale);
+    if (!layer) return;
+    const left = Math.round(center * scale - layer.W / 2), y0 = Math.round(top * scale);
+    for (let y=0;y<layer.H;y++) for (let x=0;x<layer.W;x++) {
+      const a = layer.buf[(y * layer.W + x) * 4 + 3];
+      if (a) pixel(left+x,y0+y,ink,ink,ink,a);
+    }
+  }
+  const tau = Math.PI * 2, progress = Number(face.seconds) / 60;
+  const radius = 8.25, halfStroke = 0.85;
+  for (let y=0;y<H;y++) for (let x=0;x<20*scale;x++) {
+    const dx=(x+0.5)/scale-10,dy=(y+0.5)/scale-11;
+    const coverage = Math.min(1, Math.max(0, (halfStroke - Math.abs(Math.hypot(dx,dy)-radius)) * scale + 0.5));
+    if (!coverage) continue;
+    const angle = (Math.atan2(dx,-dy)+tau)%tau;
+    if (angle < tau*progress) pixel(x,y,...cyanGreen,Math.round(255*coverage));
+    else pixel(x,y,ink,ink,ink,Math.round(60*coverage));
+  }
+  glyphs(atlas.compact[scale],face.seconds,10,6);
+  glyphs(atlas.compact[scale],face.day,30,1);
+  glyphs(atlas.compact[scale],face.weekday,30,11);
+  glyphs(atlas[scale],face.time,58,0);
+  return {buf,W,H};
+}
+
+function createCompactClockImageMaker(nativeImage, atlas) {
+  return (face, dark) => {
+    const at = (s) => {
+      const b = composeCompactBitmap(atlas, face, s, dark);
+      return nativeImage.createFromBitmap(b.buf,{width:b.W,height:b.H,scaleFactor:s});
+    };
+    const img=at(1);
+    img.addRepresentation({scaleFactor:2,buffer:at(2).toPNG()});
+    img.setTemplateImage(false);
+    return img;
+  };
+}
+
+module.exports = { buildAtlas, composeBitmap, createClockImageMaker, composeCompactBitmap, createCompactClockImageMaker, CHARS, advanceOf };

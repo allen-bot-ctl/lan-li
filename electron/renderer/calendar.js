@@ -59,6 +59,7 @@ const settingsPageUpdate = document.getElementById('settings-page-update');
 const settingsPageTags = document.getElementById('settings-page-tags');
 const settingOpenAtLogin = document.getElementById('setting-open-at-login');
 const settingShowDate = document.getElementById('setting-show-date');
+const settingCompactClock = document.getElementById('setting-compact-clock');
 const settingInboxDateLink = document.getElementById('setting-inbox-date-link');
 let inboxDateLinkWrite = 0;
 const settingCaptureHint = document.getElementById('setting-capture-hint');
@@ -1183,6 +1184,7 @@ function openSettingsView(tab = 'ui') {
   api.getSettings().then((s) => {
     settingOpenAtLogin.checked = s.openAtLogin === true;
     settingShowDate.checked = s.menuBarShowDate !== false;
+    settingCompactClock.checked = s.menuBarCompactClock === true;
     if (dateLinkSnapshot === inboxDateLinkWrite) {
       settingInboxDateLink.checked = s.inboxDateLinkEnabled !== false;
       settingInboxDateLink.disabled = false;
@@ -1286,9 +1288,22 @@ Object.keys(hotkeyUi).forEach((kind) => {
   });
   u.clear.addEventListener('click', () => { hotkeyRecording = null; applyHotkey(kind, ''); });
 });
-settingShowDate.addEventListener('change', () => {
-  api.setMenuBarShowDate(settingShowDate.checked);
-});
+async function setMenuBarClockStyle(control, other, setter) {
+  const old = !control.checked, oldOther = other.checked;
+  if (control.checked) other.checked = false;
+  control.disabled = other.disabled = true;
+  try {
+    const value = await setter(control.checked);
+    control.checked = value;
+    other.checked = !value && oldOther;
+  } catch {
+    control.checked = old;
+    other.checked = oldOther;
+    showToast({type:'warning', title:'未能保存菜单栏时钟设置'});
+  } finally { control.disabled = other.disabled = false; }
+}
+settingShowDate.addEventListener('change', () => setMenuBarClockStyle(settingShowDate, settingCompactClock, api.setMenuBarShowDate));
+settingCompactClock.addEventListener('change', () => setMenuBarClockStyle(settingCompactClock, settingShowDate, api.setMenuBarCompactClock));
 settingInboxDateLink.addEventListener('change', async () => {
   inboxDateLinkWrite += 1;
   const enabled = settingInboxDateLink.checked;

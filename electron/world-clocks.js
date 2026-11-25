@@ -268,6 +268,16 @@ const TRAY_WEEKDAY_ZH = {
   Sat: '六'
 };
 
+function formatCompactTrayClock(date, timeZone, localTimeZone) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return null;
+  const zone = isValidTimeZone(timeZone) ? timeZone.trim() :
+    (isValidTimeZone(localTimeZone) ? localTimeZone.trim() : defaultLocalTimeZone());
+  if (!isValidTimeZone(zone)) return null;
+  const p = zonedParts(date, zone);
+  return { seconds: pad2(p.second), day: pad2(p.day), weekday: '周' + TRAY_WEEKDAY_ZH[p.weekday],
+    time: pad2(p.hour) + ':' + pad2(p.minute) };
+}
+
 // Tray tooltip in a specific IANA zone: `${year}年${month}月${day}日 周${X}`.
 // Zone resolution matches formatMenuTitleInZone exactly. Illegal input → ''.
 function formatTrayTooltipInZone(date, timeZone, localTimeZone) {
@@ -505,6 +515,7 @@ module.exports = {
   formatClockOffset,
   describeClockRelative,
   formatMenuTitleInZone,
+  formatCompactTrayClock,
   formatTrayTooltipInZone,
   isValidMenuTitle,
   resolveMenuBarTimeZone,

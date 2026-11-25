@@ -335,14 +335,20 @@
       </div>
       <div class="settings-body">
         <nav class="settings-nav" aria-label="设置分类">
-          <button class="settings-tab" type="button" data-tab="ui">界面设置</button>
-          <button class="settings-tab" type="button" data-tab="almanac">黄历</button>
-          <button class="settings-tab" type="button" data-tab="weather">天气</button>
-          <button class="settings-tab" type="button" data-tab="clocks">世界时钟</button>
-          <button class="settings-tab" type="button" data-tab="tags">收纳</button>
-          <button class="settings-tab" type="button" data-tab="llm">大模型</button>
-          <button class="settings-tab" type="button" data-tab="reader">帮阅</button>
-          <button class="settings-tab" type="button" data-tab="update">升级</button>
+          <div class="settings-nav-group" role="group" aria-labelledby="settings-nav-basic">
+            <h3 class="settings-nav-heading" id="settings-nav-basic">基础</h3>
+            <button class="settings-tab" type="button" data-tab="ui">界面设置</button>
+            <button class="settings-tab" type="button" data-tab="llm">大模型</button>
+            <button class="settings-tab" type="button" data-tab="update">升级</button>
+          </div>
+          <div class="settings-nav-group" role="group" aria-labelledby="settings-nav-apps">
+            <h3 class="settings-nav-heading" id="settings-nav-apps">应用</h3>
+            <button class="settings-tab" type="button" data-tab="almanac">黄历</button>
+            <button class="settings-tab" type="button" data-tab="weather">天气</button>
+            <button class="settings-tab" type="button" data-tab="clocks">世界时钟</button>
+            <button class="settings-tab" type="button" data-tab="tags">收纳</button>
+            <button class="settings-tab" type="button" data-tab="reader">帮阅</button>
+          </div>
         </nav>
         <section class="settings-content" id="settings-content" aria-labelledby="settings-page-title">
           <h2 class="settings-page-title" id="settings-page-title">界面设置</h2>
@@ -352,6 +358,7 @@
                 <h3 class="settings-card-title" id="settings-display-title">启动与显示</h3>
                 <label class="settings-row"><span class="settings-label">开机自启动</span><input class="settings-switch" id="setting-open-at-login" type="checkbox" role="switch"><span class="switch-track" aria-hidden="true"></span></label>
                 <label class="settings-row"><span class="settings-label">菜单栏显示日期</span><input class="settings-switch" id="setting-show-date" type="checkbox" role="switch"><span class="switch-track" aria-hidden="true"></span></label>
+                <label class="settings-row"><span class="settings-label">菜单栏紧凑时钟</span><input class="settings-switch" id="setting-compact-clock" type="checkbox" role="switch"><span class="switch-track" aria-hidden="true"></span></label>
               </section>
               <section class="settings-card" aria-labelledby="settings-shortcuts-title">
                 <h3 class="settings-card-title" id="settings-shortcuts-title">快捷键</h3>

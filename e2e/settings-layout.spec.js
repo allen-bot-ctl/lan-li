@@ -30,6 +30,19 @@ const pageHeading = () => page.locator('#settings-page-title');
 
 test('八类设置保留相同入口，标题层级清楚，内嵌选择器与静态卡片不重叠', async ({}, testInfo) => {
   await page.locator('#settings-button').click();
+  const basics = page.getByRole('group', { name: '基础', exact: true });
+  const apps = page.getByRole('group', { name: '应用', exact: true });
+  await expect(basics.getByRole('button')).toHaveText(['界面设置', '大模型', '升级']);
+  await expect(apps.getByRole('button')).toHaveText(['黄历', '天气', '世界时钟', '收纳', '帮阅']);
+  await tab('ui').focus();
+  await page.keyboard.press('Tab');
+  await expect(tab('llm')).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(tab('update')).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(tab('almanac')).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(pageHeading()).toHaveText('黄历');
   const categories = [
     ['ui', '界面设置', ['启动与显示', '快捷键']],
     ['almanac', '黄历', ['黄历风格']],
