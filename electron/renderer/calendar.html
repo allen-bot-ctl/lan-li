@@ -381,7 +381,11 @@
               </section>
             </div>
             <div class="settings-page" id="settings-page-llm" hidden>
-              <section class="settings-card" aria-labelledby="settings-model-title">
+              <div class="llm-usage-tabs" role="tablist" aria-label="大模型栏目">
+                <button type="button" class="nav-pill" role="tab" id="llm-config-tab" aria-selected="true" aria-controls="llm-config-panel">配置</button>
+                <button type="button" class="nav-pill" role="tab" id="llm-usage-tab" aria-selected="false" aria-controls="llm-usage-panel" tabindex="-1">消耗</button>
+              </div>
+              <section class="settings-card" id="llm-config-panel" role="tabpanel" aria-labelledby="llm-config-tab">
                 <h3 class="settings-card-title" id="settings-model-title">大模型</h3>
                 <div class="reader-llm-grid">
                   <label class="reader-llm-label" for="reader-base">接口地址</label><input class="reader-llm-input" id="reader-base" type="text" aria-describedby="reader-base-err" placeholder="https://api.deepseek.com" autocomplete="off" spellcheck="false">
@@ -394,6 +398,44 @@
                 <div class="reader-key-status" id="reader-key-status" role="status">未配置</div>
                 <div class="reader-key-hint">支持 OpenAI 兼容接口（DeepSeek、OpenAI、通义、Kimi 等）。Key 只存在本机。</div>
               </section>
+              <div id="llm-usage-panel" role="tabpanel" aria-labelledby="llm-usage-tab" hidden>
+                <section class="settings-card" aria-labelledby="llm-usage-summary-title">
+                  <div class="llm-usage-header">
+                    <h3 class="settings-card-title" id="llm-usage-summary-title">消耗汇总</h3>
+                    <select id="llm-usage-period" aria-label="统计周期">
+                      <option value="today">今天</option><option value="7d" selected>近 7 天</option>
+                      <option value="30d">近 30 天</option><option value="all">全部</option>
+                    </select>
+                  </div>
+                  <p class="llm-usage-note">仅统计本机从此版本起最近保留的 10,000 次请求。Token 以接口上报为准，不含费用。</p>
+                  <dl class="llm-usage-metrics" id="llm-usage-metrics" hidden>
+                    <div><dt>总 Token</dt><dd id="llm-usage-total"></dd></div>
+                    <div><dt>输入 Token</dt><dd id="llm-usage-input"></dd></div>
+                    <div><dt>输出 Token</dt><dd id="llm-usage-output"></dd></div>
+                    <div><dt>请求次数</dt><dd id="llm-usage-count"></dd></div>
+                  </dl>
+                  <p class="llm-usage-note" id="llm-usage-counts" hidden></p>
+                  <p class="llm-usage-note" id="llm-usage-state" role="status" hidden></p>
+                  <button class="nav-pill" type="button" id="llm-usage-retry" hidden>重新加载</button>
+                </section>
+                <section class="settings-card" aria-labelledby="llm-usage-model-title">
+                  <h3 class="settings-card-title" id="llm-usage-model-title">按模型</h3>
+                  <ul class="llm-usage-list" id="llm-usage-models"></ul>
+                </section>
+                <section class="settings-card" aria-labelledby="llm-usage-task-title">
+                  <div class="llm-usage-header">
+                    <h3 class="settings-card-title" id="llm-usage-task-title">任务明细</h3>
+                    <button class="nav-pill" type="button" id="llm-usage-all-models" hidden>清除模型筛选</button>
+                  </div>
+                  <p class="llm-usage-note" id="llm-usage-filter" hidden></p>
+                  <ul class="llm-usage-list" id="llm-usage-tasks"></ul>
+                  <div class="llm-usage-pagination" id="llm-usage-pagination" hidden>
+                    <button class="nav-pill" type="button" id="llm-usage-prev">上一页</button>
+                    <span id="llm-usage-page" role="status"></span>
+                    <button class="nav-pill" type="button" id="llm-usage-next">下一页</button>
+                  </div>
+                </section>
+              </div>
             </div>
             <div class="settings-page" id="settings-page-reader" hidden>
               <div class="reader-nollm reader-settings-nollm" id="reader-prompt-lock" hidden>
@@ -490,5 +532,6 @@
   <script src="vendor/markdown-it.umd.min.js"></script>
   <script src="md-render.js"></script>
   <script src="reader.js"></script>
+  <script src="llm-usage-view.js"></script>
 </body>
 </html>

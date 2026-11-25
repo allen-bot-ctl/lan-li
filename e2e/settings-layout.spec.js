@@ -69,7 +69,7 @@ test('八类设置保留相同入口，标题层级清楚，内嵌选择器与�
       await expect(pageHeading()).toHaveText(title);
       const pane = page.locator('.settings-page:not([hidden]), .picker-overlay.is-embedded:not([hidden])');
       await expect(pane).toHaveCount(1);
-      const panels = pane.locator('.settings-card-title, .picker-title');
+      const panels = pane.locator('.settings-card-title:visible, .picker-title:visible');
       await expect(panels).toHaveText(headings);
       const rect = await pageHeading().boundingBox();
       const panel = await panels.first().boundingBox();
