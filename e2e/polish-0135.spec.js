@@ -212,7 +212,7 @@ test('C5 设置导航（0.1.46）：「‹ 返回」在顶栏一行、导航项�
 
 test('C6 八个设置页：内容标题 18px/600 左对齐，内容区可见文字 ≥12px', async () => {
   await openSettings();
-  const tabs = ['界面设置', '黄历', '天气', '世界时钟', '收纳', '大模型', '帮阅', '升级'];
+  const tabs = ['界面设置', '大模型', '升级', '黄历', '天气', '世界时钟', '收纳', '帮阅'];
   await expect(page.locator('.settings-tab')).toHaveText(tabs);
   for (const tab of tabs) {
     await page.click(`.settings-tab:text-is("${tab}")`);
