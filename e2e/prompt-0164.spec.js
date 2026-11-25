@@ -111,17 +111,44 @@ test('R1 无大模型仍可手动改提示词，只锁 AI；入口、保存和�
   await expect(page.locator('#toast-title')).toHaveText('已恢复默认');
   expect(fileText()).toBeNull();
 
-  // A fake 401 from Test Connection does not invalidate saved model fields.
+  // A failed explicit test of the saved model blocks AI, without deleting
+  // its key or preventing local prompt editing. A retry can recover.
   await modelCta.click();
   await page.fill('#reader-key', 'sk-e2e-0164');
   await page.click('#reader-key-save');
   await expect(page.locator('#reader-key-status')).toHaveText('已配置 · deepseek-chat');
-  await hook('readerSetFakeLlm', { status: 401 });
-  await page.click('#reader-test');
-  await expect(page.locator('#reader-key-status')).toContainText('测试失败');
-  await page.locator('.settings-tab[data-tab="reader"]').click();
-  await expect(ai).toBeEnabled();
-  await hook('readerSetFakeLlm', null);
+  try {
+    await hook('readerSetFakeLlm', { status: 401 });
+    await page.click('#reader-test');
+    await expect(page.locator('#reader-key-status')).toContainText('测试失败');
+    await page.locator('.settings-tab[data-tab="reader"]').click();
+    await expect(ai).toBeDisabled();
+    await expect(warning).toContainText('大模型连接测试未通过');
+    await expect(editor).toBeEditable();
+
+    await modelCta.click();
+    await expect(page.locator('#reader-key')).toHaveAttribute('placeholder', '已保存，留空不修改');
+    await expect(page.locator('#reader-model')).toHaveValue('deepseek-chat');
+    await hook('readerSetFakeLlm', { status: 200, raw: '模拟连接正常' });
+    await page.click('#reader-test');
+    await expect(page.locator('#reader-key-status')).toHaveText('测试通过');
+    await page.locator('.settings-tab[data-tab="reader"]').click();
+    await expect(ai).toBeEnabled();
+    await expect(warning).toBeHidden();
+
+    // Testing an unsaved model is not evidence against the saved model.
+    await page.locator('.settings-tab[data-tab="llm"]').click();
+    await expect(page.locator('#reader-model')).toHaveValue('deepseek-chat');
+    await page.fill('#reader-model', 'unsaved-fixture-model');
+    await hook('readerSetFakeLlm', { status: 401 });
+    await page.click('#reader-test');
+    await expect(page.locator('#reader-key-status')).toContainText('测试失败');
+    await page.locator('.settings-tab[data-tab="reader"]').click();
+    await expect(ai).toBeEnabled();
+    await expect(warning).toBeHidden();
+  } finally {
+    await hook('readerSetFakeLlm', null);
+  }
 });
 
 test('R2a 刚打开：需求框空且有焦点、无结果区、取消 + 生成新版（空时置灰）；需求框不超过 500 字', async () => {

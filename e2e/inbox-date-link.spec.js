@@ -40,6 +40,7 @@ test('收纳设置可让日历独立，重启仍关闭，独立收纳与日期�
     return page;
   }
   const switchFor = page => page.getByRole('switch', {name:'是否在日历中链接收纳', exact:true});
+  const switchRow = page => page.locator('label.settings-row').filter({has: switchFor(page)});
   const calendarDay = page => page.locator(`#grid .cell[data-day="${dayKey}"]`);
   const prefs = () => JSON.parse(fs.readFileSync(preferenceFile,'utf8'));
   async function openLinkSetting(page) {
@@ -60,7 +61,9 @@ test('收纳设置可让日历独立，重启仍关闭，独立收纳与日期�
     await expect(calendarDay(page)).toHaveAttribute('data-tooltip', /收纳 1 项/);
     await openLinkSetting(page);
     await expect(switchFor(page)).toBeChecked();
-    await switchFor(page).uncheck();
+    // The native input is visually clipped. Operate its painted label as users do.
+    await switchRow(page).locator('.switch-track').click();
+    await expect(switchFor(page)).not.toBeChecked();
     await expect.poll(() => prefs().inboxDateLinkEnabled).toBe(false);
     expect(prefs().menuBarShowDate).toBe(false);
     await page.locator('#settings-back').click();
@@ -87,7 +90,8 @@ test('收纳设置可让日历独立，重启仍关闭，独立收纳与日期�
     await assertUnlinked(page);
     await openLinkSetting(page);
     await expect(switchFor(page)).not.toBeChecked();
-    await switchFor(page).check();
+    await switchRow(page).locator('.settings-label').click();
+    await expect(switchFor(page)).toBeChecked();
     await expect.poll(() => prefs().inboxDateLinkEnabled).toBe(true);
     await page.locator('#settings-back').click();
     await expect(page.locator('#inbox-button')).toBeVisible();
