@@ -232,6 +232,8 @@ main.setupUpdates()
 
 三个追问频道只接受栏历日历窗口的主 frame。成功问答按文章写在本机 `read/<id>/qa.json`，保留最近 50 对；失败和取消不改变已保存的历史或原摘要。请求复用既有模型配置，带文章上下文以及最多 8 对近期问答（总对话上下文不超过 12,000 字）；「消耗」只记独立的追问请求元数据，不记问答内容。
 
+追问可选用 [DeepSeek 官方 Web Tools](https://api-docs.deepseek.com/guides/web_tools/)：只有已保存的官方 HTTPS 主机、`deepseek-flash`、全局授权与当次追问允许同时满足时，才通过现有 Chat Completions 请求声明 `deepseek_web_search`。工具由 DeepSeek 执行；应用不直接抓取来源。历史只保留追问结果、实际搜索状态和可安全打开的来源，不保存供应商原始工具数据。未请求搜索时沿用原有请求路径。
+
 **invoke（渲染 → 主，返回 Promise）**
 
 | 频道 | preload API | 作用 |

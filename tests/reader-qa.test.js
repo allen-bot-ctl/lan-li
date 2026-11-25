@@ -33,7 +33,7 @@ function fixture(t) {
 test('追问读取不联网，同文章多轮使用实际原文与历史，重启恢复且另一文章隔离', async (t) => {
   const f = fixture(t);
   const qa = f.build();
-  assert.deepEqual(qa.get('r_a'),{ok:true,turns:[],available:true});
+  assert.deepEqual(qa.get('r_a'),{ok:true,turns:[],available:true,webSearchAvailable:false});
   assert.equal(f.requests.length,0);
   assert.equal((await f.send(qa,'鸟是什么颜色？')).ok,true);
   const loaded = f.build();
@@ -92,4 +92,47 @@ test('原子保存失败不覆盖历史、不遗留临时文件，文章删除�
   f.store.remove('r_a');
   assert.equal((await pending).code,'canceled');
   assert.equal(qa.get('r_a').code,'not-found');
+});
+
+test('DeepSeek 联网只对合格的追问启用，证据按真实工具调用保存，单条关可退出', async (t) => {
+  const f=fixture(t), qa=f.build();
+  f.cfg.baseURL='https://api.deepseek.com/v1';
+  f.cfg.model='deepseek-flash';
+  assert.equal(qa.get('r_a').webSearchAvailable,false);
+  f.cfg.webSearchEnabled=true;
+  assert.equal(qa.get('r_a').webSearchAvailable,true);
+  const citation = (url,title='资料')=>({type:'url_citation',url_citation:{url,title,start_index:0,end_index:2}});
+  f.setResponse(async (url, opts) => {
+    assert.equal(url.href,'https://api.deepseek.com/v1/chat/completions');
+    assert.equal(opts.redirect,'error');
+    return {ok:true,json:async()=>({choices:[{message:{
+      content:'蓝色，外部来源另附。',
+      server_tool_calls:[{index:0,calls:[{type:'deepseek_web_search',status:'completed',action:{queries:['不存的搜索词']}}]}],
+      annotations:[citation('https://example.com/art'),citation('javascript:alert(1)'),citation('https://x:y@example.com/'),
+        citation('https://example.com/art'),citation(`https://example.com/${f.cfg.apiKey}`)]
+    }}]})};
+  });
+  const result=await f.send(qa,'本次可以搜');
+  assert.deepEqual(f.requests[0].tools,[{type:'deepseek_web_search'}]);
+  assert.deepEqual(f.requests[0].thinking,{type:'disabled'});
+  assert.equal('tool_choice' in f.requests[0],false);
+  assert.deepEqual(result.turns[0].webSearch,{status:'used',sources:[{url:'https://example.com/art',title:'资料'}]});
+  assert.deepEqual(f.build().get('r_a').turns,result.turns);
+  const bytes=fs.readFileSync(path.join(f.root,'r_a','qa.json'),'utf8');
+  assert.ok(!bytes.includes('queries') && !bytes.includes('javascript') && !bytes.includes(f.cfg.apiKey));
+  f.setResponse(async (_url,opts)=> {
+    assert.equal(opts.redirect,undefined);
+    return {ok:true,json:async()=>({choices:[{message:{content:'只依据原文'}}]})};
+  });
+  const off=await qa.send({id:'r_a',question:'仅用原文',requestId:'opt-out',webSearch:false},1);
+  assert.equal('tools' in f.requests[1],false);
+  assert.equal('webSearch' in off.turns[1],false);
+  assert.ok(!JSON.stringify(f.requests[1]).includes('server_tool_calls'));
+});
+
+test('结构化响应区分未搜索、失败和未知，不用答案正文猜测', () => {
+  const {searchMetadata}=require('../electron/reader-web-search');
+  assert.deepEqual(searchMetadata({content:'搜索了'}),{status:'unknown',sources:[]});
+  assert.deepEqual(searchMetadata({server_tool_calls:[]}),{status:'not-used',sources:[]});
+  assert.deepEqual(searchMetadata({server_tool_calls:[{calls:[{type:'deepseek_web_search',status:'failed'}]}]}),{status:'failed',sources:[]});
 });

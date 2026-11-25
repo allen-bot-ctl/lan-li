@@ -215,7 +215,7 @@ function createReaderController(deps) {
     if (!fakeLlm) return globalThis.fetch;
     return async (url, opts) => {
       const f = fakeLlm;
-      try { const b = JSON.parse(opts.body); e2eLlmCalls.push({ url: String(url), model: b.model, ping: b.max_tokens === 1, system: (b.messages.find((x) => x.role === 'system') || {}).content, user: (b.messages.find((x) => x.role === 'user') || {}).content, messages: b.messages, maxTokens: b.max_tokens, hasResponseFormat: 'response_format' in b }); } catch { /* ignore */ }
+      try { const b = JSON.parse(opts.body); e2eLlmCalls.push({ url: String(url), model: b.model, ping: b.max_tokens === 1, system: (b.messages.find((x) => x.role === 'system') || {}).content, user: (b.messages.find((x) => x.role === 'user') || {}).content, messages: b.messages, tools:b.tools, maxTokens: b.max_tokens, hasResponseFormat: 'response_format' in b }); } catch { /* ignore */ }
       if (f.delayMs) await new Promise((r) => setTimeout(r, f.delayMs));
       if (opts && opts.signal && opts.signal.aborted) { const e = new Error('aborted'); e.name = 'AbortError'; throw e; }
       if (f.networkError) throw new Error('synthetic unavailable');
@@ -223,7 +223,7 @@ function createReaderController(deps) {
       const n = f.points || 5;
       const content = f.raw != null ? f.raw : `## 一句话总结\n这是一句话总结。\n\n## 核心要点\n${Array.from({ length: n }, (_, i) => `${i + 1}. 要点 ${i + 1}`).join('\n')}`;
       if (f.once) fakeLlm = f.once;
-      return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content } }], usage:f.usage, model:f.model }) };
+      return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content, server_tool_calls:f.serverToolCalls, annotations:f.annotations } }], usage:f.usage, model:f.model }) };
     };
   }
 
