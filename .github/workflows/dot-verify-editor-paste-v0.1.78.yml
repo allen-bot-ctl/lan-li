@@ -1,0 +1,38 @@
+name: Verify LanLi editor paste v0.1.78
+on:
+  push:
+    branches: [integration/verify-v0.1.78]
+    paths: [.github/workflows/dot-verify-editor-paste-v0.1.78.yml]
+permissions:
+  contents: read
+jobs:
+  native:
+    if: github.repository == 'allen-bot-ctl/lan-li' && github.actor_id == '352863755'
+    runs-on: macos-15-intel
+    timeout-minutes: 14
+    env:
+      EXPECTED: 6d3b5cca316a05bb613e6e73fb0e0ef352a5502a
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.EXPECTED }}
+          persist-credentials: false
+      - name: Verify exact checked-out source and Intel runner
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED"
+          test "$(uname -m)" = x86_64
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npm test
+      - name: Verify native clipboard and affected Electron regressions
+        run: npm run e2e -- e2e/inbox-editor-paste.spec.js e2e/inbox-edit.spec.js e2e/polish-0135.spec.js e2e/reader-0160.spec.js e2e/inbox-date-link.spec.js
+      - name: Keep synthetic failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: synthetic-editor-paste-failure
+          path: test-results/
+          retention-days: 3
+          if-no-files-found: ignore
