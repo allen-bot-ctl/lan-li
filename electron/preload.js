@@ -92,6 +92,7 @@ contextBridge.exposeInMainWorld('lanli', {
   openReaderOriginal: (id) => ipcRenderer.invoke('reader:openOriginal', id),
   copyReader: (id) => ipcRenderer.invoke('reader:copy', id),
   readerClipboardUrl: () => ipcRenderer.invoke('reader:clipboardUrl'),
+  getLlmUsage: (request) => ipcRenderer.invoke('llm:getUsage', request),
   getReaderConfig: () => ipcRenderer.invoke('reader:getConfig'),
   saveReaderConfig: (c) => ipcRenderer.invoke('reader:saveConfig', c),
   removeReaderKey: () => ipcRenderer.invoke('reader:removeKey'),

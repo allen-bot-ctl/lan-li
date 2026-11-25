@@ -9,62 +9,73 @@ function endpointFor(baseURL) {
   return new URL(`${String(baseURL).replace(/\/+$/, '')}/chat/completions`);
 }
 
-async function complete({ system, user, configuration, fetchImpl = globalThis.fetch, timeoutMs = 90_000, signal = null }) {
+const { parseUsage } = require('./llm-usage');
+
+async function request({ configuration, body, fetchImpl, timeoutMs, signal, pingOnly, reportUsage, kind }) {
+  const endpoint = endpointFor(configuration.baseURL);
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
   const onAbort = () => controller.abort();
-  if (signal) signal.addEventListener('abort', onAbort);
-  let response;
+  if (signal?.aborted) throw new LlmError('canceled', '请求已取消');
+  signal?.addEventListener('abort', onAbort);
+  const timer = setTimeout(onAbort, timeoutMs);
+  const started = Date.now();
+  let status = 'failed';
+  let payload;
   try {
-    response = await fetchImpl(endpointFor(configuration.baseURL), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${configuration.apiKey}` },
-      body: JSON.stringify({
-        model: configuration.model,
-        messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
-        max_tokens: 4096,
-        thinking: { type: 'disabled' },
-        stream: false
-      }),
-      signal: controller.signal
-    });
-  } catch (error) {
-    if (error && error.name === 'AbortError') throw new LlmError('timeout', '请求超时');
-    throw new LlmError('network', `无法连接：${error && error.message}`);
+    let response;
+    try {
+      response = await fetchImpl(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${configuration.apiKey}` },
+        body: JSON.stringify(body),
+        signal: controller.signal
+      });
+    } catch (error) {
+      if (error?.name === 'AbortError') throw new LlmError(signal?.aborted ? 'canceled' : 'timeout', signal?.aborted ? '请求已取消' : '请求超时');
+      throw new LlmError('network', `无法连接：${error?.message}`);
+    }
+    if (!response.ok) throw new LlmError('http', `HTTP ${response.status}`, response.status);
+    if (!pingOnly || reportUsage) {
+      try {
+        // A missing or malformed Test Connection payload does not change its HTTP-success contract.
+        payload = await response.json();
+      } catch {
+        if (!pingOnly) throw new LlmError('bad-response', '无法读取的响应');
+      }
+    }
+    if (!pingOnly) {
+      const content = payload?.choices?.[0]?.message?.content;
+      if (typeof content !== 'string') throw new LlmError('bad-response', '无法读取的响应');
+      const trimmed = content.trim();
+      if (!trimmed) throw new LlmError('empty', '空返回');
+      status = 'success';
+      return trimmed;
+    }
+    status = 'success';
+    return true;
   } finally {
     clearTimeout(timer);
-    if (signal) signal.removeEventListener('abort', onAbort);
+    signal?.removeEventListener('abort', onAbort);
+    if (reportUsage) try {
+      reportUsage({at:started,durationMs:Math.max(0,Date.now()-started),kind,
+        status:signal?.aborted?'canceled':status,baseURL:endpoint.origin,requestedModel:configuration.model === configuration.apiKey ? '' : configuration.model,
+        responseModel:payload?.model === configuration.apiKey ? '' : payload?.model,usage:parseUsage(payload?.usage)});
+    } catch { /* Ledger failures must never change the request result. */ }
   }
-  if (!response.ok) throw new LlmError('http', `HTTP ${response.status}`, response.status);
-  let payload;
-  try { payload = await response.json(); } catch { throw new LlmError('bad-response', '无法读取的响应'); }
-  const content = payload && payload.choices && payload.choices[0] && payload.choices[0].message && payload.choices[0].message.content;
-  if (typeof content !== 'string') throw new LlmError('bad-response', '无法读取的响应');
-  const trimmed = content.trim();
-  if (!trimmed) throw new LlmError('empty', '空返回');
-  return trimmed;
 }
 
-// 0.1.61「测试连接」：最小请求（user「ping」，max_tokens 1，15 秒超时），HTTP 成功就算通过
-async function ping({ configuration, fetchImpl = globalThis.fetch, timeoutMs = 15_000 }) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  let response;
-  try {
-    response = await fetchImpl(endpointFor(configuration.baseURL), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${configuration.apiKey}` },
-      body: JSON.stringify({ model: configuration.model, messages: [{ role: 'user', content: 'ping' }], max_tokens: 1, stream: false }),
-      signal: controller.signal
-    });
-  } catch (error) {
-    if (error && error.name === 'AbortError') throw new LlmError('timeout', '请求超时');
-    throw new LlmError('network', `无法连接：${error && error.message}`);
-  } finally {
-    clearTimeout(timer);
-  }
-  if (!response.ok) throw new LlmError('http', `HTTP ${response.status}`, response.status);
-  return true;
+function complete({ system, user, configuration, fetchImpl = globalThis.fetch, timeoutMs = 90_000, signal = null, reportUsage, kind = 'summarize' }) {
+  return request({ configuration, fetchImpl, timeoutMs, signal, reportUsage, kind, body:{
+    model: configuration.model, messages: [{ role:'system', content:system }, { role:'user', content:user }],
+    max_tokens:4096, thinking:{type:'disabled'}, stream:false
+  }});
+}
+
+// HTTP success is sufficient; usage, when available, is read from the same response.
+function ping({ configuration, fetchImpl = globalThis.fetch, timeoutMs = 15_000, reportUsage }) {
+  return request({configuration,fetchImpl,timeoutMs,reportUsage,kind:'test',pingOnly:true,body:{
+    model:configuration.model,messages:[{role:'user',content:'ping'}],max_tokens:1,stream:false
+  }});
 }
 
 module.exports = { LlmError, endpointFor, complete, ping };
