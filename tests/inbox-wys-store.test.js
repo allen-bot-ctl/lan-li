@@ -34,12 +34,15 @@ test('新收纳只写 Tiptap 文档与相对图片引用，局部编辑保留其
   assert.equal(store.saveDocument(created.id, before).changed, false);
   const change = structuredClone(before.document);
   change.content[2].content[0].text='图片后新稿';
-  assert(store.saveDocument(created.id,{document:change,revision:before.revision}).changed);
+  assert(store.saveDocument(created.id,{document:change,revision:before.revision,displayTitle:'图文新标题'}).changed);
   assert.throws(() => store.saveDocument(created.id,{document:change,revision:before.revision}),/重新打开/);
   assert.equal(fs.readFileSync(path.join(dir, 'document.json'),'utf8'),raw);
   const restarted = open(true);
   const after = restarted.get(created.id);
   assert.match(after.html,/图片后新稿/);
+  assert.equal(after.meta.displayTitle, '图文新标题');
+  assert.equal(restarted.list()[0].displayTitle, '图文新标题');
+  assert.equal(after.meta.title, created.title);
   assert.match(after.html,/href="https:\/\/example.org\/ref"/);
   assert.match(after.html,/src="assets\/img-1.png"/);
   assert.match(restarted.list()[0].body,/图片后新稿/);
@@ -79,10 +82,25 @@ test('工作版保存失败不影响旧值；索引缺失重启后仍读当前�
   const document = structuredClone(before.document);
   document.content[0].content[0].text = '工作版';
   const io = Object.assign({},fs,{renameSync(a,b){if(String(b).endsWith('meta.json'))throw new Error('模拟落盘失败');return fs.renameSync(a,b);}});
-  assert.throws(()=>open(true,io).saveDocument(m.id,{revision:before.revision,document}),/模拟落盘失败/);
+  assert.throws(()=>open(true,io).saveDocument(m.id,{revision:before.revision,document,displayTitle:'不会落盘的新标题'}),/模拟落盘失败/);
   assert.equal(open(true).get(m.id).text,'原件');
+  assert.equal(open(true).get(m.id).meta.displayTitle,undefined);
+  assert.throws(()=>store.saveDocument(m.id,{revision:before.revision,document,displayTitle:'题'.repeat(121)}),/标题最多/);
+  assert.equal(store.get(m.id).text, '原件');
   const io2 = Object.assign({},fs,{writeFileSync(file,...args){if(String(file).endsWith('index.json'))throw new Error('模拟缓存故障');return fs.writeFileSync(file,...args);}});
   assert(open(true,io2).saveDocument(m.id,{revision:before.revision,document}).changed);
   assert(!fs.existsSync(path.join(root,'index.json')));
   assert.equal(open(true).list()[0].body,'工作版');
+});
+
+test('标题独立保存不创建正文工作版，清空后恢复原始标题', (t) => {
+  const { root, store } = fixture(t);
+  const m = store.addText('原始首行');
+  const before = store.get(m.id);
+  const renamed = store.saveDocument(m.id, { revision: before.revision, document: before.document, displayTitle: ' 新标题 ' });
+  assert.equal(renamed.title, '新标题');
+  const meta = JSON.parse(fs.readFileSync(path.join(root, m.id, 'meta.json'), 'utf8'));
+  assert.equal(meta.title, '原始首行');
+  assert.equal(meta.documentEdit, undefined);
+  assert.equal(store.saveDocument(m.id, { revision: renamed.revision, document: before.document, displayTitle:'' }).title, '原始首行');
 });

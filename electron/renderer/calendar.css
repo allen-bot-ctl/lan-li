@@ -1712,3 +1712,22 @@ mark.inbox-hit{background:rgba(255,200,0,.45);color:inherit;border-radius:2px;}
 #inbox-wys-body :is(p,h1,h2,h3,h4,h5,h6,ul,ol,blockquote) { margin: 0 0 10px; }
 #inbox-wys-body img { max-width: 100%; height: auto; display: block; }
 #inbox-wys-body .ProseMirror-selectednode { outline: 2px solid var(--accent); }
+
+/* Block images can leave a leading empty paragraph when rich clipboard HTML
+   wraps the image in <p>. The read view collapses it; ProseMirror's caret
+   placeholder makes it a visible blank line. Keep the node and any real line
+   breaks, but match the read view for this one placeholder before an image. */
+#inbox-wys-body .tiptap > p:first-child:has(> br.ProseMirror-trailingBreak:only-child):has(+ img) {
+  margin: 0;
+  height: 0;
+}
+/* Keep the editable title in the same header slot as the reading title. */
+#inbox-view[data-mode="detail"] #inbox-wys-title:not([hidden]) {
+  box-sizing: border-box; flex: 1; width: 0; padding: 4px 6px;
+  color: var(--text); background: var(--chip); border: 1px solid var(--sheet-border);
+  border-radius: 6px; user-select: text;
+}
+#inbox-wys-title:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+#inbox-detail:has(#inbox-wys-panel[data-title-only]:not([hidden])) { flex-direction: column; }
+#inbox-wys-panel[data-title-only] { flex: 0 0 auto; order: 1; }
+#inbox-detail:has(#inbox-wys-panel[data-title-only]:not([hidden])) #inbox-detail-frame { min-height: 0; }

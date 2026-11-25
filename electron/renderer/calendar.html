@@ -194,7 +194,8 @@
       <div class="inbox-head">
         <button class="settings-back inbox-back" id="inbox-back" type="button">‹ 返回</button>
         <span class="inbox-title" id="inbox-title">收纳</span>
-        <button class="nav-pill" id="inbox-detail-edit" type="button" hidden>编辑收纳</button>
+        <input class="inbox-title" id="inbox-wys-title" type="text" aria-label="收纳标题" spellcheck="false" autocomplete="off" hidden>
+        <button class="nav-pill" id="inbox-detail-edit" type="button" hidden>编辑</button>
         <span class="inbox-count" id="inbox-count"></span>
         <button class="inbox-paste" id="inbox-compose-btn" type="button" title="手动输入或粘贴文字">录入</button>
         <button class="inbox-paste" id="inbox-paste" type="button" title="收纳剪贴板内容（⌘V）">粘贴收纳</button>
@@ -257,7 +258,7 @@
         </form>
       </dialog>
       <div class="inbox-detail" id="inbox-detail" hidden>
-        <section id="inbox-wys-panel" hidden aria-label="编辑收纳正文">
+        <section id="inbox-wys-panel" hidden aria-label="编辑收纳">
           <div id="inbox-wys-toolbar" role="group" aria-label="正文格式">
             <button type="button" data-wys="paragraph">正文</button>
             <button type="button" data-wys="heading:2">小标题</button>

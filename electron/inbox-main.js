@@ -346,7 +346,7 @@ function createInboxController(deps) {
     for (const a of m.assets || []) {
       try { html = html.split(a).join(dataUrl(path.join(e.dir, a))); } catch { /* 缺图就留相对路径 */ }
     }
-    return { ok: true, html, title: m.displayTitle || m.title };
+    return { ok: true, html, title: m.displayTitle || m.title, revision: store.readEdit(id).revision };
   }
 
   function reveal(id) {

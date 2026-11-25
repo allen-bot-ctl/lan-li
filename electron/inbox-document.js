@@ -74,6 +74,12 @@ function importHtml(html, assets = [], aliases = Object.create(null)) {
   const { document } = parseHTML('<!doctype html><html><body></body></html>');
   const host = document.createElement('div');
   host.innerHTML = clean;
+  // The schema stores images as blocks. Unwrap an image-only paragraph
+  // before parsing so it doesn't become an extra empty text block.
+  for (const p of host.querySelectorAll('p')) {
+    const nodes = Array.from(p.childNodes).filter(n => n.nodeType !== 3 || !/^[\t\r\n ]*$/.test(n.textContent));
+    if (nodes.length === 1 && nodes[0].nodeName === 'IMG') p.replaceWith(nodes[0]);
+  }
   const raw = DOMParser.fromSchema(schema).parse(host).toJSON();
   if (!raw.content?.length) return importPlain('');
   return normalize(raw, assets);

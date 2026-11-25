@@ -9,6 +9,10 @@ const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAXwAAAB8CAIAAADl8pwpAAACZ0lEQVR4nO3dwUnEUBh
 test('系统剪贴板图文原位编辑，图前后、格式、取消、保存重开及复制', async ({}, info) => {
   const work = fs.mkdtempSync(path.join(os.tmpdir(), 'lanli-wys-'));
   let app;
+  const legacy = require('../electron/inbox-store').createInboxStore({ root: path.join(work, 'inbox') });
+  const legacyItem = legacy.addText('旧格式正文内容');
+  const legacyPath = path.join(work, 'inbox', legacyItem.id, 'content.html');
+  const legacyOriginal = fs.readFileSync(legacyPath, 'utf8');
   const launch = async () => {
     app = await electron.launch({ args: process.platform === 'linux' ? ['--no-sandbox', '.'] : ['.'],
       env: { ...process.env, LANLI_E2E: '1', LANLI_INBOX_DIR: path.join(work, 'inbox'), LANLI_READER_DIR: path.join(work, 'reader') } });
@@ -41,7 +45,13 @@ test('系统剪贴板图文原位编辑，图前后、格式、取消、保存�
     await expect(page.locator('#toast')).toBeHidden();
     await page.screenshot({path:info.outputPath('native-reading.png')});
     const paneTop = (await page.locator('#inbox-detail-frame').boundingBox()).y;
+    await expect(page.locator('#inbox-detail-edit')).toHaveText('编辑');
+    const titleX = (await page.locator('#inbox-title').boundingBox()).x;
     await page.click('#inbox-detail-edit');
+    const titleEdit = page.getByRole('textbox', {name:'收纳标题'});
+    await expect(titleEdit).toBeFocused();
+    expect((await titleEdit.boundingBox()).x).toBe(titleX);
+    await expect(page.locator('#inbox-title')).toBeHidden();
     await expect(page.locator('#inbox-detail-frame')).toBeHidden();
     expect((await page.locator('#inbox-wys-panel').boundingBox()).y).toBe(paneTop);
     let writer = page.locator('#inbox-wys-body .tiptap');
@@ -63,17 +73,31 @@ test('系统剪贴板图文原位编辑，图前后、格式、取消、保存�
       });
       await page.keyboard.insertText(text);
     };
+    await titleEdit.fill('不应被保存的标题');
     await replace('图前：','图前：不应被保存');
     await expect(writer.locator('p').filter({ hasText: '图前：不应被保存' })).toBeVisible();
     await page.click('#inbox-wys-cancel');
     await expect(page.locator('#inbox-wys-discard')).toBeVisible();
     await page.click('#inbox-wys-discard');
+    await expect(page.locator('#inbox-title')).not.toHaveText('不应被保存的标题');
     await expect(frame().locator('p').filter({hasText:'图后：待修改'})).toBeVisible();
+    await expect(frame().locator('p').filter({hasText:'图前：不应被保存'})).toHaveCount(0);
     await page.click('#inbox-detail-edit');
+    await titleEdit.fill('只改标题');
+    await page.click('#inbox-wys-save');
+    await expect(page.locator('#inbox-title')).toHaveText('只改标题');
+    const titleOnly = JSON.parse(fs.readFileSync(path.join(work,'inbox',id,'meta.json'),'utf8'));
+    expect(titleOnly.displayTitle).toBe('只改标题');
+    expect(titleOnly.documentEdit).toBeUndefined();
+    await page.click('#inbox-detail-edit');
+    await titleEdit.fill('已保存的新标题');
     await replace('图后：待修改','图后：修改已保存');
     await page.click('#inbox-wys-save');
     await expect(frame().locator('p').filter({hasText:'图后：修改已保存'})).toBeVisible();
-    const saved = JSON.parse(fs.readFileSync(path.join(work,'inbox',id,'meta.json'),'utf8')).documentEdit;
+    await expect(page.locator('#inbox-title')).toHaveText('已保存的新标题');
+    const savedMeta = JSON.parse(fs.readFileSync(path.join(work,'inbox',id,'meta.json'),'utf8'));
+    expect(savedMeta.displayTitle).toBe('已保存的新标题');
+    const saved = savedMeta.documentEdit;
     const pmText = n => n.type === 'text' ? n.text : (n.content||[]).map(pmText).join('');
     const changed = saved.content.findIndex(n=>pmText(n)==='图后：修改已保存');
     expect(changed).toBeGreaterThanOrEqual(0);
@@ -84,6 +108,7 @@ test('系统剪贴板图文原位编辑，图前后、格式、取消、保存�
     await expect(frame().locator('p').filter({hasText:'图后：修改已保存'})).toBeVisible();
     await expect(frame().locator('img')).toBeVisible();
     assert.equal(fs.readFileSync(disk,'utf8'),originalBefore);
+    await expect(page.locator('#inbox-title')).toHaveText('已保存的新标题');
     await page.click('#inbox-back');
     await page.locator('#inbox-search').fill('图后：修改已保存');
     const reopenRow = page.locator(`.inbox-row[data-id="${id}"]`);
@@ -93,6 +118,15 @@ test('系统剪贴板图文原位编辑，图前后、格式、取消、保存�
     await expect.poll(() => app.evaluate(({clipboard})=>clipboard.readHTML())).toContain('图后：修改已保存');
     expect(await app.evaluate(({clipboard})=>clipboard.readHTML())).toMatch(/<img[^>]+src="data:image\/png;base64,/);
     await page.locator('#inbox-search').fill('');
+    await page.locator(`.inbox-row[data-id="${legacyItem.id}"]`).click();
+    await page.click('#inbox-detail-edit');
+    await expect(frame().locator('p')).toHaveText('旧格式正文内容');
+    await expect(page.locator('#inbox-edit-dialog')).toBeHidden();
+    await titleEdit.fill('旧格式新标题');
+    await page.click('#inbox-wys-save');
+    await expect(page.locator('#inbox-title')).toHaveText('旧格式新标题');
+    assert.equal(fs.readFileSync(legacyPath,'utf8'),legacyOriginal);
+    await page.click('#inbox-back');
     const plainText = '纯文字第一行\n\n最后一行';
     await app.evaluate(({ clipboard }, value) => { clipboard.clear(); clipboard.writeText(value); }, plainText);
     expect(await app.evaluate(({clipboard}) => clipboard.readText())).toEqual(plainText);
@@ -113,5 +147,61 @@ test('系统剪贴板图文原位编辑，图前后、格式、取消、保存�
   } finally {
     if (app) await app.close();
     fs.rmSync(work,{force:true,recursive:true});
+  }
+});
+
+test('首张图片上方不冒出空行，有意的换行仍然保留', async () => {
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), 'lanli-wys-leading-image-'));
+  let app;
+  try {
+    app = await electron.launch({ args: process.platform === 'linux' ? ['--no-sandbox', '.'] : ['.'],
+      env: { ...process.env, LANLI_E2E: '1', LANLI_INBOX_DIR: path.join(work, 'inbox'), LANLI_READER_DIR: path.join(work, 'reader') } });
+    const page = await app.firstWindow();
+    await page.waitForFunction(() => document.readyState === 'complete' && typeof window.openReaderView === 'function');
+    await app.evaluate(() => globalThis.__lanliTest.showWindow());
+    await page.click('#inbox-button');
+    const raw = '<p><img src="data:image/png;base64,' + PNG + '"></p>' +
+      '<pre>合成样本首行\n\n末行</pre><p>段首<br><br>段末</p>';
+    await app.evaluate(({ clipboard }, html) => { clipboard.clear(); clipboard.write({ html, text: '合成样本首行' }); }, raw);
+    await page.click('#inbox-paste');
+    const row = page.locator('#inbox-list .inbox-row').filter({ hasText: '合成样本首行' });
+    const id = await row.getAttribute('data-id');
+    const disk = path.join(work, 'inbox', id, 'document.json');
+    const stored = JSON.parse(fs.readFileSync(disk, 'utf8'));
+    expect(stored.content[0].type).toBe('image');
+    // Simulate an already-captured v0.1.73 image wrapper. It could leave an
+    // empty paragraph in the document; the update must also fix that display.
+    stored.content.unshift({ type: 'paragraph' });
+    fs.writeFileSync(disk, JSON.stringify(stored));
+    await row.click();
+    const frame = page.frameLocator('#inbox-detail-frame');
+    const readImage = await frame.locator('img').boundingBox();
+    const readFrame = await page.locator('#inbox-detail-frame').boundingBox();
+    await page.click('#inbox-detail-edit');
+    const editable = page.locator('#inbox-wys-body .tiptap');
+    const editImage = await editable.locator('img').boundingBox();
+    const editBody = await page.locator('#inbox-wys-body').boundingBox();
+    expect(Math.abs((editImage.y - editBody.y) - (readImage.y - readFrame.y))).toBeLessThan(8);
+    expect(await editable.locator('pre').textContent()).toBe('合成样本首行\n\n末行');
+    await expect(editable.locator('p').last().locator('br:not(.ProseMirror-trailingBreak)')).toHaveCount(2);
+    await page.click('#inbox-wys-save');
+    await expect(frame.locator('img')).toBeVisible();
+    expect(await frame.locator('pre').textContent()).toBe('合成样本首行\n\n末行');
+    await expect(frame.locator('p').last().locator('br')).toHaveCount(2);
+    expect(JSON.parse(fs.readFileSync(disk, 'utf8'))).toEqual(stored);
+    // A real leading line break is not the caret-only placeholder.
+    await page.click('#inbox-back');
+    stored.content[0] = { type: 'paragraph', content: [{ type: 'hardBreak' }] };
+    fs.writeFileSync(disk, JSON.stringify(stored));
+    await row.click();
+    await expect(frame.locator('img')).toBeVisible();
+    await page.click('#inbox-detail-edit');
+    const authoredImage = await editable.locator('img').boundingBox();
+    const authoredBody = await page.locator('#inbox-wys-body').boundingBox();
+    expect((authoredImage.y - authoredBody.y) - (editImage.y - editBody.y)).toBeGreaterThan(10);
+    await expect(editable.locator('p').first().locator('br:not(.ProseMirror-trailingBreak)')).toHaveCount(1);
+  } finally {
+    if (app) await app.close();
+    fs.rmSync(work, { force: true, recursive: true });
   }
 });

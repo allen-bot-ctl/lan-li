@@ -454,6 +454,14 @@ function createInboxStore(opts) {
     }
   }
 
+  function applyDisplayTitle(meta, value) {
+    if (value === undefined) return;
+    if (typeof value !== 'string' || [...value].length > 120) throw new InboxError('invalid-edit', '标题最多 120 个字符');
+    if (/[\r\n]/.test(value)) throw new InboxError('invalid-edit', '标题须为单行');
+    const title = value.trim();
+    if (title) meta.displayTitle = title; else delete meta.displayTitle;
+  }
+
   function saveDocument(id, request) {
     const { dir, meta } = readMeta(id);
     if (meta.type !== 'text' || meta.documentFormat !== DOC_FORMAT) throw new InboxError('protected', '此记录为旧格式，保留原文');
@@ -461,14 +469,19 @@ function createInboxStore(opts) {
     if (!request || request.revision !== previous.revision) throw new InboxError('conflict', '这条收纳已更新，请重新打开后再编辑');
     const codec = Document();
     const document = codec.normalize(request.document, previous.assets);
-    if (JSON.stringify(document) === JSON.stringify(previous.document)) return { changed: false, revision: previous.revision };
-    requireNonemptyDocument(document, codec);
-    const next = { ...meta, documentEdit: document };
+    const next = { ...meta };
+    applyDisplayTitle(next, request.displayTitle);
+    const bodyChanged = JSON.stringify(document) !== JSON.stringify(previous.document);
+    if (bodyChanged) {
+      requireNonemptyDocument(document, codec);
+      next.documentEdit = document;
+    }
+    if (!bodyChanged && next.displayTitle === meta.displayTitle) return { changed: false, revision: previous.revision, title: meta.displayTitle || meta.title };
     fs.rmSync(path.join(root, INDEX), { force: true });
     writeMetaAtomic(dir, next);
     stale = true;
     try { invalidate(); stale = false; } catch { cache = null; }
-    return { changed: true, revision: Edit.revision({ ...next, edit: next.documentEdit }, previous.raw), indexPending: stale };
+    return { changed: true, revision: Edit.revision({ ...next, edit: next.documentEdit }, previous.raw), indexPending: stale, title: next.displayTitle || next.title };
   }
 
   function requireNonemptyDocument(doc, codec) {
@@ -503,11 +516,7 @@ function createInboxStore(opts) {
       if (typeof s !== 'string' || [...s].length > max) throw new InboxError('invalid-edit', '编辑内容过长或格式无效');
       return s;
     };
-    if (request.displayTitle !== undefined) {
-      const title = string(request.displayTitle, 120).trim();
-      if (/[\r\n]/.test(title)) throw new InboxError('invalid-edit', '标题须为单行');
-      if (title) next.displayTitle = title; else delete next.displayTitle;
-    }
+    applyDisplayTitle(next, request.displayTitle);
     if (!o.documentFormat && request.note !== undefined) {
       const note = string(request.note, 2000);
       if (note) next.note = note; else delete next.note;
@@ -553,7 +562,7 @@ function createInboxStore(opts) {
     // meta.json replacement is the transaction boundary; the index is derived.
     stale = true;
     try { invalidate(); stale = false; } catch { cache = null; }
-    return { changed: true, indexPending: stale };
+    return { changed: true, indexPending: stale, revision: Edit.revision(next, original), title: next.displayTitle || next.title };
   }
 
   function idsForNames(names) {

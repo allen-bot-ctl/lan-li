@@ -223,7 +223,7 @@ test('C8 三个卡片入口统一以 › 结尾', () => {
   assert.match(HTML, /<button class="card-link" id="almanac-customize" type="button">去定制 ›<\/button>/);
   assert.match(HTML, /<button class="card-link" id="clock-edit" type="button">编辑 ›<\/button>/);
   assert.match(HTML, /<span class="card-link weather-change">更换 ›<\/span>/);
-  assert.equal(/>编辑<\/button>/.test(HTML), false);
+  assert.equal(/<button class="card-link"[^>]*>编辑<\/button>/.test(HTML), false);
 });
 
 test('C9 右栏底部只剩 10px 版本号，更新提示改成不占布局的浮层', () => {

@@ -1908,7 +1908,6 @@ function openInboxRow(m) {
       inboxDetail.hidden = false;
       inboxView.dataset.mode = 'detail';
       inboxDetailData = r;
-      inboxDetailEdit.textContent = r.document ? '编辑正文' : '编辑标题';
       inboxDetailEdit.hidden = false;
       inboxTitle.textContent = r.title || m.displayTitle || m.title || '文字';
       inboxTitle.title = inboxTitle.textContent;
@@ -2051,6 +2050,8 @@ function closeInboxWriter() {
   if (!writerState) return;
   writerState = null;
   inboxWriter?.reset();
+  wysEl('title').hidden = true;
+  inboxTitle.hidden = false;
   wysEl('panel').hidden = true;
   inboxDetailFrame.hidden = false;
   inboxDetailEdit.hidden = false;
@@ -2060,7 +2061,7 @@ function requestCloseInboxWriter() {
   if (!writerState) return true;
   if (writerBusy) return false;
   let dirty = true;
-  try { dirty = writerState.initial !== JSON.stringify(inboxWriter.document()); } catch { /* malformed draft is still unsaved */ }
+  try { dirty = writerState.title !== wysEl('title').value || (writerState.rich && writerState.initial !== JSON.stringify(inboxWriter.document())); } catch { /* malformed draft is still unsaved */ }
   if (!dirty) { closeInboxWriter(); return true; }
   wysEl('status').textContent = '修改尚未保存。请保存，或选择「放弃修改」。';
   wysEl('discard').hidden = false;
@@ -2069,47 +2070,64 @@ function requestCloseInboxWriter() {
 function openInboxWriter() {
   const id = inboxListOrigin?.id;
   if (!id) return;
-  if (!inboxDetailData?.document) { openInboxEditor(id); return; }
-  if (writerState) return;
+  if (!inboxDetailData || writerState) return;
   try {
-    inboxWriter ||= window.LanliInboxWriter.createWriter(wysEl('body'), wysEl('toolbar'));
-    inboxWriter.begin(inboxDetailData.document, inboxDetailData.attachments);
-    writerState = { id, revision: inboxDetailData.revision, initial: JSON.stringify(inboxWriter.document()) };
+    const rich = Boolean(inboxDetailData.document);
+    if (rich) {
+      inboxWriter ||= window.LanliInboxWriter.createWriter(wysEl('body'), wysEl('toolbar'));
+      inboxWriter.begin(inboxDetailData.document, inboxDetailData.attachments);
+    }
+    const title = inboxTitle.textContent;
+    writerState = { id, rich, title, revision: inboxDetailData.revision, initial: rich ? JSON.stringify(inboxWriter.document()) : null };
+    wysEl('title').value = title;
+    wysEl('title').hidden = false;
+    inboxTitle.hidden = true;
     wysEl('panel').hidden = false;
+    wysEl('panel').toggleAttribute('data-title-only', !rich);
+    wysEl('toolbar').hidden = !rich;
+    wysEl('body').hidden = !rich;
     wysEl('link-form').hidden = true;
     wysEl('discard').hidden = true;
     wysEl('status').textContent = '';
-    inboxDetailFrame.hidden = true;
+    inboxDetailFrame.hidden = rich;
     inboxDetailEdit.hidden = true;
-    inboxWriter.focus();
+    wysEl('title').focus({ preventScroll: true });
   } catch (e) { showToast({ type: 'warning', title: e.message || '无法打开编辑器' }); }
 }
 async function saveInboxWriter() {
   if (!writerState || writerBusy) return;
-  const { id, revision } = writerState;
+  const { id, revision, rich, title } = writerState;
+  const displayTitle = wysEl('title').value;
   writerBusy = true;
-  inboxWriter.setEditable(false);
+  wysEl('title').readOnly = true;
+  if (rich) inboxWriter.setEditable(false);
   for (const b of wysEl('panel').querySelectorAll('button')) b.disabled = true;
   try {
-    const result = await api.saveInboxDocument(id, { revision, document: inboxWriter.document() });
+    const draft = { revision, ...(displayTitle !== title ? { displayTitle } : {}) };
+    const result = rich ? await api.saveInboxDocument(id, { ...draft, document: inboxWriter.document() }) :
+      (displayTitle === title ? { ok: true } : await api.saveInboxEdit(id, draft));
     if (!result?.ok) { wysEl('status').textContent = result?.text || '保存失败'; return; }
     if (result.changed) {
       const r = await api.openInboxEntry(id).catch(() => null);
       if (writerState?.id !== id) return;
-      if (!r?.document) {
+      if (!r?.ok) {
         writerState.revision = result.revision;
-        wysEl('status').textContent = '正文已保存；如果预览未刷新，请返回后重新打开。';
-        writerState.initial = JSON.stringify(inboxWriter.document());
+        wysEl('status').textContent = '收纳已保存；如果预览未刷新，请返回后重新打开。';
+        writerState.title = displayTitle;
+        if (result.title) inboxTitle.textContent = inboxTitle.title = result.title;
+        if (rich) writerState.initial = JSON.stringify(inboxWriter.document());
         return;
       }
       inboxDetailData = r;
-      inboxDetailFrame.srcdoc = `<!doctype html><meta charset="utf-8"><style>${DETAIL_FRAME_CSS}</style>${r.html}`;
+      inboxTitle.textContent = inboxTitle.title = r.title || '文字';
+      if (rich) inboxDetailFrame.srcdoc = `<!doctype html><meta charset="utf-8"><style>${DETAIL_FRAME_CSS}</style>${r.html}`;
     }
     closeInboxWriter();
   } catch (e) { wysEl('status').textContent = e.message || '保存失败'; }
   finally {
     writerBusy = false;
-    inboxWriter.setEditable(true);
+    wysEl('title').readOnly = false;
+    if (rich) inboxWriter.setEditable(true);
     for (const b of wysEl('panel').querySelectorAll('button')) b.disabled = false;
   }
 }
