@@ -1,0 +1,33 @@
+name: Verify LanLi 0.1.83
+on:
+  push:
+    branches: [integration/verify-v0.1.83]
+permissions:
+  contents: read
+jobs:
+  reader:
+    runs-on: macos-15-intel
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: f7ab03742c26ebef8e8a87e9365e82657ecfd99f
+      - name: Check exact tree and architecture
+        run: |
+          test "$(git rev-parse HEAD^{tree})" = "4a75dbb29c042e89a4b4fdc5bb207204ccd05b13"
+          test "$(uname -m)" = x86_64
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run e2e -- e2e/reader-followup.spec.js --workers=1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: reader-followup-evidence
+          if-no-files-found: warn
+          path: |
+            e2e/screenshots/
+            test-results/
