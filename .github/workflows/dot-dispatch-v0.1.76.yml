@@ -1,0 +1,80 @@
+name: Verify and dispatch LanLi v0.1.76
+
+on:
+  push:
+    branches: [integration/release-v0.1.76]
+
+permissions: {}
+
+concurrency:
+  group: one-shot-lan-li-v0.1.76
+  cancel-in-progress: false
+
+env:
+  EXPECTED: 9d2dbd4a67b68064974c3db34951d7b4073dd7f1
+  BASELINE: 99d2a657ac3c7aa7f8f3d7d83340521e8757719b
+
+jobs:
+  native:
+    if: github.repository == 'allen-bot-ctl/lan-li' && github.actor_id == '352863755' && github.triggering_actor == 'allen-bot-ctl' && github.run_attempt == '1'
+    runs-on: macos-15-intel
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.EXPECTED }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Verify exact source and both inbox editing paths
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED"
+          test "$(uname -m)" = x86_64
+          npm run e2e -- e2e/inbox-edit.spec.js
+      - name: Keep synthetic diagnostics if targeted verification fails
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: synthetic-inbox-failure
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 3
+
+  dispatch:
+    if: github.repository == 'allen-bot-ctl/lan-li' && github.actor_id == '352863755' && github.triggering_actor == 'allen-bot-ctl' && github.run_attempt == '1'
+    needs: native
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Verify exact fast-forward, release baseline and vacant tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          api="repos/$GITHUB_REPOSITORY"
+          test "$(gh api "$api/git/ref/heads/master" --jq .object.sha)" = "$EXPECTED"
+          test "$(gh api "$api/git/ref/tags/v0.1.75" --jq .object.sha)" = "$BASELINE"
+          test "$(gh api "$api/releases/latest" --jq .tag_name)" = v0.1.75
+          test "$(gh api "$api/git/commits/$EXPECTED" --jq '[.parents[].sha] | join(" ")')" = "$BASELINE"
+          test "$(gh api "$api/contents/package.json?ref=$EXPECTED" --jq .content | base64 -d | jq -r .version)" = 0.1.76
+          test "$(gh api "$api/contents/release-notes/v0.1.76.md?ref=$EXPECTED" --jq .size)" -gt 0
+          test "$(gh api "$api/git/matching-refs/tags/v0.1.76" --jq '[.[] | select(.ref == "refs/tags/v0.1.76")] | length')" = 0
+          if gh api "$api/releases/tags/v0.1.76" >/dev/null 2>"$RUNNER_TEMP/lan-li-existing.err"; then
+            echo "::error::Release already exists; refusing to replace it."
+            exit 1
+          fi
+          grep -q 'HTTP 404' "$RUNNER_TEMP/lan-li-existing.err"
+          gh api --method POST "$api/git/refs" -f ref=refs/tags/v0.1.76 -f sha="$EXPECTED" --jq '[.ref,.object.sha] | @tsv'
+          test "$(gh api "$api/git/ref/tags/v0.1.76" --jq .object.sha)" = "$EXPECTED"
+          test "$(gh api "$api/git/ref/heads/master" --jq .object.sha)" = "$EXPECTED"
+          if ! gh workflow run release.yml -R "$GITHUB_REPOSITORY" --ref master -f tag=v0.1.76 -f runner=macos-15-intel; then
+            echo "::error::Tag exists; verify exact SHA and existing Release runs. Do not retag or rerun the one-shot."
+            exit 1
+          fi
