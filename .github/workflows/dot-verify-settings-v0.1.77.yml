@@ -1,0 +1,35 @@
+name: Recheck LanLi settings v0.1.77
+on:
+  push:
+    branches: [integration/verify-v0.1.77-b]
+permissions:
+  contents: read
+jobs:
+  native:
+    if: github.repository == 'allen-bot-ctl/lan-li' && github.actor_id == '352863755'
+    runs-on: macos-15-intel
+    timeout-minutes: 10
+    env:
+      EXPECTED: ec82ccbf4b246bbcd6fb38f7db01c6238495cd87
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.EXPECTED }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Verify visible switch and global model availability
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED"
+          test "$(uname -m)" = x86_64
+          npm run e2e -- e2e/inbox-date-link.spec.js e2e/prompt-0164.spec.js --grep '收纳设置可让日历独立|R1 无大模型'
+      - name: Keep synthetic failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: synthetic-module-settings-recheck-failure
+          path: test-results/
+          retention-days: 3
+          if-no-files-found: ignore
