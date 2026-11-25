@@ -1,0 +1,37 @@
+name: Promote exact LanLi 0.1.83
+on:
+  push:
+    branches: [integration/publish-v0.1.83]
+permissions:
+  contents: write
+  actions: write
+concurrency:
+  group: promote-lanli-0.1.83
+  cancel-in-progress: false
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: f7ab03742c26ebef8e8a87e9365e82657ecfd99f
+      - name: Confirm release gates and dispatch stable Intel workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE: "f7ab03742c26ebef8e8a87e9365e82657ecfd99f"
+          EXPECTED_TREE: "4a75dbb29c042e89a4b4fdc5bb207204ccd05b13"
+          CHECK_RUN: "45592858915"
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$CANDIDATE"
+          test "$(git rev-parse HEAD^{tree})" = "$EXPECTED_TREE"
+          test "$(node -p 'require("./package.json").version')" = 0.1.83
+          test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/master" --jq .object.sha)" = "$CANDIDATE"
+          base_sha="$(git ls-remote --tags origin refs/tags/v0.1.82 'refs/tags/v0.1.82^{}' | awk 'END {print $1}')"
+          test "$base_sha" = "634704f244278b2308d4674cd4452d600df0ba16"
+          test "$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name)" = v0.1.82
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$CHECK_RUN" | jq -e '.head_branch == "integration/verify-v0.1.83" and .name == "Verify LanLi 0.1.83" and .conclusion == "success" and .head_sha == "fe92d8ed4b4ed7214f84fac95d70f8aa71aeee22"'
+          test -z "$(git ls-remote --tags origin refs/tags/v0.1.83)"
+          gh api -X POST "repos/$GITHUB_REPOSITORY/git/refs" -f ref=refs/tags/v0.1.83 -f sha="$CANDIDATE" --jq .object.sha
+          gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref master -f tag=v0.1.83 -f runner=macos-15-intel
