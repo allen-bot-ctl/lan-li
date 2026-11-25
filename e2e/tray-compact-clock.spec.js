@@ -17,7 +17,11 @@ test('macOS 状态栏三种时钟模式、绿环与换日、深浅外观及重�
   const launch = async () => {
     app = await electron.launch({args:['.'],env:{...process.env,LANLI_E2E:'1',LANLI_E2E_TRAY_IMAGE:'1',
       LANLI_E2E_USER_DATA_DIR:path.join(dir,'prefs'),LANLI_INBOX_DIR:path.join(dir,'inbox'),LANLI_READER_DIR:path.join(dir,'reader')}});
-    const page=await app.firstWindow();
+    // The production glyph atlas briefly owns a second hidden BrowserWindow.
+    // Use the persistent settings window, not whichever page loads first.
+    const calendar = () => app.windows().find(p => /\/electron\/renderer\/calendar\.html(?:$|[?#])/.test(p.url()));
+    await expect.poll(() => Boolean(calendar())).toBe(true);
+    const page=calendar();
     await page.waitForFunction(()=>document.readyState==='complete' && typeof window.openSettingsView==='function');
     await hook('showWindow');
     return page;

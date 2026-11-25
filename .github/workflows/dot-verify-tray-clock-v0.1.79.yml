@@ -11,7 +11,7 @@ jobs:
     runs-on: macos-15-intel
     timeout-minutes: 14
     env:
-      EXPECTED: 79c63d962445db8d3c45ba2529cbf2c7ca9d2028
+      EXPECTED: 09ab2c9630ab13f2928ed85da2d0fd6b1f951806
     steps:
       - uses: actions/checkout@v4
         with:
