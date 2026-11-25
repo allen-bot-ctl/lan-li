@@ -1,0 +1,40 @@
+name: Dispatch authorized LanLi v0.1.82
+on:
+  push:
+    branches: [integration/release-v0.1.82]
+permissions: {}
+concurrency:
+  group: one-shot-lan-li-v0.1.82
+  cancel-in-progress: false
+jobs:
+  dispatch:
+    if: github.repository == 'allen-bot-ctl/lan-li' && github.actor_id == '352863755' && github.triggering_actor == 'allen-bot-ctl' && github.run_attempt == '1'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      EXPECTED: 634704f244278b2308d4674cd4452d600df0ba16
+      BASELINE: fc83e7d64a05e1180e6fb24c9b27fdfb5fff2603
+    steps:
+      - name: Verify exact revision, baseline, and vacant tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          api="repos/$GITHUB_REPOSITORY"
+          test "$(gh api "$api/git/ref/heads/master" --jq .object.sha)" = "$EXPECTED"
+          test "$(gh api "$api/git/ref/tags/v0.1.81" --jq .object.sha)" = "$BASELINE"
+          test "$(gh api "$api/releases/latest" --jq .tag_name)" = v0.1.81
+          test "$(gh api "$api/actions/runs/45572281081" --jq '[.head_sha,.conclusion] | join(" ")')" = "ea0ebc8721077d01ef7fa21b7fa124241299b151 success"
+          test "$(gh api "$api/git/commits/$EXPECTED" --jq .tree.sha)" = "d16d8c9a02580389f6ac59f2337159aca46d2cae"
+          test "$(gh api "$api/git/commits/$EXPECTED" --jq '[.parents[].sha] | join(" ")')" = "$BASELINE"
+          test "$(gh api "$api/contents/package.json?ref=$EXPECTED" --jq .content | base64 -d | jq -r .version)" = 0.1.82
+          test "$(gh api "$api/contents/release-notes/v0.1.82.md?ref=$EXPECTED" --jq .size)" -gt 0
+          test "$(gh api "$api/git/matching-refs/tags/v0.1.82" --jq '[.[] | select(.ref == "refs/tags/v0.1.82")] | length')" = 0
+          if gh api "$api/releases/tags/v0.1.82" >/dev/null 2>"$RUNNER_TEMP/lan-li-existing.err"; then exit 1; fi
+          grep -q 'HTTP 404' "$RUNNER_TEMP/lan-li-existing.err"
+          gh api --method POST "$api/git/refs" -f ref=refs/tags/v0.1.82 -f sha="$EXPECTED" --jq '[.ref,.object.sha] | @tsv'
+          test "$(gh api "$api/git/ref/tags/v0.1.82" --jq .object.sha)" = "$EXPECTED"
+          test "$(gh api "$api/git/ref/heads/master" --jq .object.sha)" = "$EXPECTED"
+          gh workflow run release.yml -R "$GITHUB_REPOSITORY" --ref master -f tag=v0.1.82 -f runner=macos-15-intel
