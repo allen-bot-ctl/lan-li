@@ -1386,6 +1386,7 @@ function setupReader() {
     root: path.join(base, 'read'),
     keyFile: path.join(base, 'reader-api-key'),
     promptFile: path.join(base, 'reader-prompt.txt'),
+    usageFile: path.join(base, 'llm-usage.jsonl'),
     prefs: { read: readPreferences, write: writePreferences },
     onChanged: () => sendWin('reader:changed'),
     onDone: (m) => { if (calendarWindow && !calendarWindow.isDestroyed() && calendarWindow.isVisible()) sendWin('reader:done', { id: m.id, title: m.title }); }

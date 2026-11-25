@@ -5,6 +5,7 @@ const path = require('node:path');
 const fs = require('node:fs');
 const C = require('./reader-core');
 const { complete, ping } = require('./reader-llm');
+const { createLlmUsageStore } = require('./llm-usage');
 
 const READ_TIMEOUT_MS = 20_000; // 整个读取 20 秒
 const LOAD_WAIT_MS = 8_000; // did-finish-load 最多等 8 秒
@@ -66,6 +67,7 @@ function createReaderController(deps) {
   const store = C.createReaderStore({ root });
   const keys = C.createKeyStore({ file: keyFile, prefs });
   const prompts = C.createPromptStore({ file: promptFile });
+  const usage = createLlmUsageStore({file:deps.usageFile});
   const queue = [];
   let running = null; // { id, abort }
   let fakeLlm = null; // e2e：{ status, points, delayMs, raw }
@@ -214,11 +216,12 @@ function createReaderController(deps) {
       try { const b = JSON.parse(opts.body); e2eLlmCalls.push({ url: String(url), model: b.model, ping: b.max_tokens === 1, system: (b.messages.find((x) => x.role === 'system') || {}).content, user: (b.messages.find((x) => x.role === 'user') || {}).content, maxTokens: b.max_tokens, hasResponseFormat: 'response_format' in b }); } catch { /* ignore */ }
       if (f.delayMs) await new Promise((r) => setTimeout(r, f.delayMs));
       if (opts && opts.signal && opts.signal.aborted) { const e = new Error('aborted'); e.name = 'AbortError'; throw e; }
+      if (f.networkError) throw new Error('synthetic unavailable');
       if (f.status && f.status !== 200) return { ok: false, status: f.status, json: async () => ({}) };
       const n = f.points || 5;
       const content = f.raw != null ? f.raw : `## 一句话总结\n这是一句话总结。\n\n## 核心要点\n${Array.from({ length: n }, (_, i) => `${i + 1}. 要点 ${i + 1}`).join('\n')}`;
       if (f.once) fakeLlm = f.once;
-      return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content } }] }) };
+      return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content } }], usage:f.usage, model:f.model }) };
     };
   }
 
@@ -236,7 +239,7 @@ function createReaderController(deps) {
     const aborted = () => { e2eRewriteAborts += 1; return { ok: false, code: 'cancel' }; };
     try {
       const msgs = C.buildRewriteMessages({ prompt: base, request: req });
-      const raw = await complete({ system: msgs.system, user: msgs.user, configuration: cfg, fetchImpl: llmFetch(), signal: controller.signal });
+      const raw = await complete({ system: msgs.system, user: msgs.user, configuration: cfg, fetchImpl: llmFetch(), signal: controller.signal, reportUsage:usage.record, kind:'rewrite' });
       if (controller.signal.aborted) return aborted();
       const out = C.cleanRewrite(raw);
       if (!out) return { ok: false, code: 'empty', error: C.rewriteErrorText({ code: 'empty' }) };
@@ -250,7 +253,7 @@ function createReaderController(deps) {
     }
   }
 
-  async function summarize(id, signal) {
+  async function summarize(id, signal, isRetry) {
     const m = store.get(id);
     const cfg = keys.config();
     if (!cfg.apiKey) throw Object.assign(new Error('no key'), { code: 'http', status: 401 });
@@ -259,13 +262,14 @@ function createReaderController(deps) {
       user: C.buildUserMessage({ title: m.title, url: m.finalUrl || m.url, text: store.readText(id) }),
       configuration: cfg,
       fetchImpl: llmFetch(),
+      reportUsage:usage.record, kind:isRetry?'retry':'summarize',
       signal
     });
     return { markdown: C.cleanOutput(raw), model: cfg.model };
   }
 
   async function runOne(job) {
-    const { id, reuseText } = job;
+    const { id, reuseText, isRetry } = job;
     const controller = new AbortController();
     running = { id, abort: () => controller.abort() };
     try {
@@ -298,7 +302,7 @@ function createReaderController(deps) {
       }
       setStatus(id, { status: 'summarizing', error: null });
       let r;
-      try { r = await summarize(id, controller.signal); } catch (e) {
+      try { r = await summarize(id, controller.signal, isRetry); } catch (e) {
         if (controller.signal.aborted || !store.get(id)) return;
         setStatus(id, { status: 'error', error: C.llmErrorText(e) });
         return;
@@ -343,7 +347,7 @@ function createReaderController(deps) {
     const hasText = Boolean(store.readText(id));
     store.update(id, { status: 'queued', error: null });
     notify(store.get(id));
-    queue.push({ id, reuseText: reuseText && hasText });
+    queue.push({ id, reuseText: reuseText && hasText, isRetry:true });
     pump();
     return { ok: true };
   }
@@ -363,7 +367,7 @@ function createReaderController(deps) {
     if (!r.ok) return { ok: false, code: r.code, error: r.error };
     if (!r.apiKey) return { ok: false, code: 'no-key', error: '测试失败：还没填 API Key' };
     try {
-      await ping({ configuration: { baseURL: r.baseURL, model: r.model, apiKey: r.apiKey }, fetchImpl: llmFetch() });
+      await ping({ configuration: { baseURL: r.baseURL, model: r.model, apiKey: r.apiKey }, fetchImpl: llmFetch(), reportUsage:usage.record });
       return { ok: true, text: '测试通过' };
     } catch (e) {
       return { ok: false, code: e && e.code, error: C.testErrorText(e) };
@@ -403,6 +407,7 @@ function createReaderController(deps) {
       const t = String(clipboard.readText() || '').trim();
       return /^\S+$/.test(t) && C.validateUrl(t) ? t : '';
     });
+    ipcMain.handle('llm:getUsage', (_e, request) => usage.query(request));
     ipcMain.handle('reader:getConfig', () => keys.getPublic());
     ipcMain.handle('reader:saveConfig', (_e, c) => keys.save(c || {}));
     ipcMain.handle('reader:removeKey', () => keys.removeKey());

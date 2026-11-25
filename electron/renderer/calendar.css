@@ -1740,3 +1740,28 @@ mark.inbox-hit{background:rgba(255,200,0,.45);color:inherit;border-radius:2px;}
 html[data-calendar-inbox-unlinked] .app:has(.app-body:not([hidden])) #inbox-button { display: none; }
 /* Settings and the reader use the same model-unavailable card. */
 #settings-page-reader .reader-settings-nollm { margin: 0; }
+
+/* 大模型消耗：与设置卡片同宽，窄窗口也不引入横向滚动。 */
+.llm-usage-tabs,.llm-usage-header,.llm-usage-pagination {
+  display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap;
+}
+.llm-usage-tabs {justify-content:flex-start}
+.llm-usage-tabs .nav-pill[aria-selected="true"] {background:var(--chip-hover); font-weight:650}
+#llm-usage-panel:not([hidden]) {display:grid; gap:10px; min-width:0}
+#llm-usage-panel [hidden] {display:none !important}
+#llm-usage-period {
+  min-height:26px; border:1px solid var(--input-border); border-radius:6px;
+  color:var(--text); background:var(--chip); font:inherit; padding:1px 4px;
+}
+.llm-usage-note {font-size:12px; line-height:1.45; color:var(--muted-strong); margin:0; overflow-wrap:anywhere}
+.llm-usage-metrics {display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:5px; margin:0}
+.llm-usage-metrics div {border-radius:7px; background:var(--chip); padding:6px 8px; min-width:0}
+.llm-usage-metrics dt {font-size:12px; color:var(--muted-strong)}
+.llm-usage-metrics dd {font-weight:650; margin:2px 0 0; font-variant-numeric:tabular-nums; overflow-wrap:anywhere}
+.llm-usage-list {list-style:none; padding:0; margin:0}
+.llm-usage-row {padding:7px 0; font-size:12px; overflow-wrap:anywhere}
+.llm-usage-row + .llm-usage-row {border-top:1px solid var(--input-border)}
+.llm-usage-row button {max-width:100%; white-space:normal; text-align:left; height:auto}
+.llm-usage-row button[aria-pressed="true"] {background:var(--chip-hover); font-weight:650}
+.llm-usage-row .llm-usage-note {margin-top:3px}
+.llm-usage-pagination {justify-content:center}
