@@ -67,6 +67,13 @@ function createInboxController(deps) {
   const store = createInboxStore({
     root: deps.root,
     documentFormat: true,
+    validPastedRaster: (bytes, width, height) => {
+      try {
+        const image = nativeImage.createFromBuffer(bytes);
+        const size = image.getSize();
+        return !image.isEmpty() && size.width === width && size.height === height;
+      } catch { return false; }
+    },
     migrateFailAt: E2E ? Number(process.env.LANLI_E2E_MIGRATE_FAIL_AT) || 0 : 0,
     makeThumb: (src, dest) => {
       let img = nativeImage.createFromPath(src);

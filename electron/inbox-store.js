@@ -26,6 +26,30 @@ class InboxError extends Error {
   constructor(code, message) { super(message); this.code = code; }
 }
 
+function rasterSize(bytes, mime) {
+  if (mime === 'png') {
+    if (bytes.length < 45 || !bytes.subarray(0, 8).equals(Buffer.from('89504e470d0a1a0a', 'hex')) ||
+        bytes.readUInt32BE(8) !== 13 || bytes.toString('ascii', 12, 16) !== 'IHDR') return null;
+    return [bytes.readUInt32BE(16), bytes.readUInt32BE(20)];
+  }
+  if (bytes[0] !== 0xff || bytes[1] !== 0xd8) return null;
+  const frameMarkers = [0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf];
+  for (let offset = 2; offset + 3 < bytes.length;) {
+    if (bytes[offset++] !== 0xff) return null;
+    while (bytes[offset] === 0xff) offset++;
+    const marker = bytes[offset++];
+    if (marker === 0xda || marker === 0xd9 || offset + 2 > bytes.length) return null;
+    const length = bytes.readUInt16BE(offset);
+    if (length < 2 || offset + length > bytes.length) return null;
+    if (frameMarkers.includes(marker)) {
+      if (length < 8) return null;
+      return [bytes.readUInt16BE(offset + 5), bytes.readUInt16BE(offset + 3)];
+    }
+    offset += length;
+  }
+  return null;
+}
+
 function extOf(p) { return path.extname(String(p || '')).slice(1).toLowerCase(); }
 function isImagePath(p) { return IMAGE_EXTS.includes(extOf(p)); }
 
@@ -462,13 +486,65 @@ function createInboxStore(opts) {
     if (title) meta.displayTitle = title; else delete meta.displayTitle;
   }
 
+  // Store supported raster bytes as supplied; no remote URL, SVG, or user
+  // path is accepted by this entry point.
+  function prepareDocumentAttachments(dir, document, approved, incoming) {
+    if (incoming == null) return { document, files: [] };
+    const invalid = (text = '粘贴图片格式无效') => new InboxError('invalid-edit', text);
+    if (typeof incoming !== 'object' || Array.isArray(incoming)) throw invalid();
+    const tokens = Object.keys(incoming);
+    const tokenPattern = /^draft-[a-f\d]{8}-(?:[a-f\d]{4}-){3}[a-f\d]{12}$/i;
+    if (tokens.length > 12 || tokens.some(key => !tokenPattern.test(key))) throw invalid('最多可一次粘贴 12 张图片');
+    if (!tokens.length) return { document, files: [] };
+    const used = new Map();
+    const occupied = new Set(approved.map(ref => path.basename(ref).split('.')[0]));
+    let index = 0;
+    let count = 0;
+    let total = 0;
+    function visit(node, depth = 0) {
+      if (!node || depth > 80 || ++count > 25000) throw invalid('富文档结构无法保存');
+      if (node.type === 'image' && tokenPattern.test(node.attrs?.src || '')) {
+        const { src, attachmentId } = node.attrs;
+        if (attachmentId !== src || !Object.hasOwn(incoming, src)) throw invalid('粘贴图片附件丢失');
+        if (!used.has(src)) {
+          const raw = incoming[src];
+          if (typeof raw !== 'string' || raw.length > 12 * 1024 * 1024) throw invalid('粘贴图片过大');
+          const header = /^data:image\/(png|jpeg);base64,/.exec(raw);
+          if (!header) throw invalid('仅支持粘贴 PNG 或 JPEG 图片');
+          const mime = header[1];
+          const encoded = raw.slice(header[0].length);
+          if (!encoded.length || encoded.length % 4 || !/^[A-Za-z0-9+/]+={0,2}$/.test(encoded)) throw invalid();
+          const bytes = Buffer.from(encoded, 'base64');
+          total += bytes.length;
+          if (bytes.length > 8 * 1024 * 1024 || total > 24 * 1024 * 1024) throw invalid('粘贴图片过大');
+          const size = rasterSize(bytes, mime);
+          if (bytes.toString('base64') !== encoded || !size) throw invalid();
+          const [width, height] = size;
+          if (!width || !height || width > 8192 || height > 8192 || width * height > 16_777_216) throw invalid('粘贴图片尺寸过大');
+          if (!o.validPastedRaster?.(bytes, width, height)) throw invalid('无法读取粘贴图片');
+          let stem, ref;
+          do { stem = 'img-' + (++index); ref = 'assets/' + stem + (mime === 'png' ? '.png' : '.jpg'); }
+          while (occupied.has(stem) || fs.existsSync(path.join(dir, ref)));
+          occupied.add(stem);
+          used.set(src, { ref, bytes });
+        }
+        const { ref } = used.get(src);
+        return { ...node, attrs: { ...node.attrs, src: ref, attachmentId: ref } };
+      }
+      return Array.isArray(node.content) ? { ...node, content: node.content.map(child => visit(child, depth + 1)) } : node;
+    }
+    return { document: visit(document), files: [...used.values()] };
+  }
+
   function saveDocument(id, request) {
     const { dir, meta } = readMeta(id);
     if (meta.type !== 'text' || meta.documentFormat !== DOC_FORMAT) throw new InboxError('protected', '此记录为旧格式，保留原文');
     const previous = documentRecord(dir, meta);
     if (!request || request.revision !== previous.revision) throw new InboxError('conflict', '这条收纳已更新，请重新打开后再编辑');
     const codec = Document();
-    const document = codec.normalize(request.document, previous.assets);
+    const prepared = prepareDocumentAttachments(dir, request.document, previous.assets, request.newAttachments);
+    const assets = [...previous.assets, ...prepared.files.map(file => file.ref)];
+    const document = codec.normalize(prepared.document, assets);
     const next = { ...meta };
     applyDisplayTitle(next, request.displayTitle);
     const bodyChanged = JSON.stringify(document) !== JSON.stringify(previous.document);
@@ -478,7 +554,28 @@ function createInboxStore(opts) {
     }
     if (!bodyChanged && next.displayTitle === meta.displayTitle) return { changed: false, revision: previous.revision, title: meta.displayTitle || meta.title };
     fs.rmSync(path.join(root, INDEX), { force: true });
-    writeMetaAtomic(dir, next);
+    const created = [];
+    let createdDirectory = false;
+    const assetsDir = path.join(dir, 'assets');
+    try {
+      if (prepared.files.length) {
+        const existing = fs.mkdirSync(assetsDir, { recursive: true });
+        createdDirectory = Boolean(existing);
+        if (!fs.lstatSync(assetsDir).isDirectory()) throw new InboxError('invalid-edit', '附件目录不可用');
+      }
+      for (const file of prepared.files) {
+        const dest = path.join(dir, file.ref);
+        const fd = fs.openSync(dest, 'wx', 0o600);
+        created.push(dest);
+        try { fs.writeFileSync(fd, file.bytes); } finally { fs.closeSync(fd); }
+      }
+      if (prepared.files.length) next.assets = assets;
+      writeMetaAtomic(dir, next);
+    } catch (error) {
+      for (const file of created) { try { fs.rmSync(file, { force: true }); } catch { /* keep original error */ } }
+      if (createdDirectory) { try { fs.rmdirSync(assetsDir); } catch { /* keep original error */ } }
+      throw error;
+    }
     stale = true;
     try { invalidate(); stale = false; } catch { cache = null; }
     return { changed: true, revision: Edit.revision({ ...next, edit: next.documentEdit }, previous.raw), indexPending: stale, title: next.displayTitle || next.title };

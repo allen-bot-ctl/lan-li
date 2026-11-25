@@ -10,7 +10,7 @@ function fixture(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lanli-wys-store-'));
   t.after(() => fs.rmSync(root, { force: true, recursive: true }));
   let n = 0;
-  const open = (documentFormat, io = fs) => createInboxStore({ root, fs: io, documentFormat, rand: () => String(++n).padStart(4, '0') });
+  const open = (documentFormat, io = fs) => createInboxStore({ root, fs: io, documentFormat, validPastedRaster: (_bytes, width, height) => width === 1 && height === 1, rand: () => String(++n).padStart(4, '0') });
   return { root, open, store: open(true) };
 }
 
@@ -103,4 +103,61 @@ test('标题独立保存不创建正文工作版，清空后恢复原始标题',
   assert.equal(meta.title, '原始首行');
   assert.equal(meta.documentEdit, undefined);
   assert.equal(store.saveDocument(m.id, { revision: renamed.revision, document: before.document, displayTitle:'' }).title, '原始首行');
+});
+
+const pasteToken = 'draft-d3816012-e43c-4dcc-af00-1e8e79c1f200';
+const otherToken = 'draft-d3816012-e43c-4dcc-af00-1e8e79c1f201';
+const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLttAAAAABJRU5ErkJggg==';
+const pastePayload = (old) => {
+  const document = structuredClone(old.document);
+  document.content.push({ type: 'image', attrs: { src: pasteToken, attachmentId: pasteToken, alt: '剪贴板图片' } });
+  return { revision: old.revision, document, newAttachments: { [pasteToken]: 'data:image/png;base64,' + png } };
+};
+
+test('编辑粘贴图片与原始附件独立保存，未使用草稿不落盘，重开只见有效相对引用', (t) => {
+  const { root, store, open } = fixture(t);
+  const m = store.addText({ html: '<p>原文</p><img src="fixture">', images: [{ src: 'fixture', ext: 'jpg', buffer: Buffer.from('original') }] });
+  const dir = path.join(root, m.id);
+  const original = fs.readFileSync(path.join(dir, 'document.json'), 'utf8');
+  const before = store.get(m.id);
+  const req = pastePayload(before);
+  req.newAttachments[otherToken] = 'unused';
+  req.document.content.push(structuredClone(req.document.content.at(-1)));
+  assert.equal(store.saveDocument(m.id, req).changed, true);
+  const reopened = open(true).get(m.id);
+  assert.deepEqual(reopened.meta.assets, ['assets/img-1.jpg', 'assets/img-2.png']);
+  assert.deepEqual(reopened.document.content.filter(n => n.type === 'image').map(n => n.attrs.src),
+    ['assets/img-1.jpg', 'assets/img-2.png', 'assets/img-2.png']);
+  assert.equal(fs.readFileSync(path.join(dir, 'document.json'), 'utf8'), original);
+  assert.equal(fs.readFileSync(path.join(dir, 'assets/img-1.jpg'), 'utf8'), 'original');
+  assert.deepEqual(fs.readFileSync(path.join(dir, 'assets/img-2.png')), Buffer.from(png, 'base64'));
+  assert(!JSON.stringify(reopened.meta).includes('draft-'));
+});
+
+test('编辑粘贴图片拒绝无效 MIME、图片、引用与过时请求；落盘失败清理新附件', (t) => {
+  const { root, store, open } = fixture(t);
+  const m = store.addText('原文');
+  const before = store.get(m.id);
+  const dir = path.join(root, m.id);
+  const meta = fs.readFileSync(path.join(dir, 'meta.json'), 'utf8');
+  const attempt = (modify, error) => {
+    const req = pastePayload(before);
+    modify(req);
+    assert.throws(() => store.saveDocument(m.id, req), error);
+    assert.equal(fs.readFileSync(path.join(dir, 'meta.json'), 'utf8'), meta);
+    assert(!fs.existsSync(path.join(dir, 'assets')));
+  };
+  attempt(req => { req.newAttachments[pasteToken] = 'data:image/svg+xml;base64,' + png; }, /PNG 或 JPEG/);
+  attempt(req => { req.newAttachments[pasteToken] = 'data:image/jpeg;base64,' + png; }, /格式无效/);
+  attempt(req => { req.document.content.at(-1).attrs.attachmentId = otherToken; }, /附件丢失/);
+  attempt(req => { delete req.newAttachments[pasteToken]; }, /不是这条收纳的附件/);
+  attempt(req => { req.revision = 'stale'; }, /重新打开/);
+  const io = Object.assign({}, fs, { renameSync(a, b) {
+    if (String(b).endsWith('meta.json')) throw new Error('模拟正文落盘失败');
+    return fs.renameSync(a, b);
+  } });
+  assert.throws(() => open(true, io).saveDocument(m.id, pastePayload(before)), /模拟正文落盘失败/);
+  assert.equal(fs.readFileSync(path.join(dir, 'meta.json'), 'utf8'), meta);
+  assert(!fs.existsSync(path.join(dir, 'assets')));
+  assert.equal(open(true).get(m.id).text, '原文');
 });

@@ -12,6 +12,6 @@ const Attachment = Image.extend({
       },
     };
   },
-}).configure({ allowBase64: false });
-const extensions = () => [StarterKit.configure({ trailingNode: false, link: { openOnClick: false } }), Attachment];
+});
+const extensions = ({ previewImages = false } = {}) => [StarterKit.configure({ trailingNode: false, link: { openOnClick: false } }), Attachment.configure({ allowBase64: previewImages })];
 module.exports = { extensions };

@@ -2106,7 +2106,8 @@ function requestCloseInboxWriter() {
   if (!writerState) return true;
   if (writerBusy) return false;
   let dirty = true;
-  try { dirty = writerState.title !== wysEl('title').value || (writerState.rich && writerState.initial !== JSON.stringify(inboxWriter.document())); } catch { /* malformed draft is still unsaved */ }
+  try { dirty = writerState.title !== wysEl('title').value || (writerState.rich &&
+    (inboxWriter.hasPendingPaste() || writerState.initial !== JSON.stringify(inboxWriter.document()))); } catch { /* malformed draft is still unsaved */ }
   if (!dirty) { closeInboxWriter(); return true; }
   wysEl('status').textContent = '修改尚未保存。请保存，或选择「放弃修改」。';
   wysEl('discard').hidden = false;
@@ -2119,7 +2120,9 @@ function openInboxWriter() {
   try {
     const rich = Boolean(inboxDetailData.document);
     if (rich) {
-      inboxWriter ||= window.LanliInboxWriter.createWriter(wysEl('body'), wysEl('toolbar'));
+      inboxWriter ||= window.LanliInboxWriter.createWriter(wysEl('body'), wysEl('toolbar'), (message) => {
+        if (writerState?.rich) wysEl('status').textContent = message;
+      });
       inboxWriter.begin(inboxDetailData.document, inboxDetailData.attachments);
     }
     const title = inboxTitle.textContent;
@@ -2143,6 +2146,10 @@ function openInboxWriter() {
 async function saveInboxWriter() {
   if (!writerState || writerBusy) return;
   const { id, revision, rich, title } = writerState;
+  if (rich && inboxWriter.hasPendingPaste()) {
+    wysEl('status').textContent = '正在读入剪贴板图片，请等读入后再保存。';
+    return;
+  }
   const displayTitle = wysEl('title').value;
   writerBusy = true;
   wysEl('title').readOnly = true;
@@ -2150,13 +2157,20 @@ async function saveInboxWriter() {
   for (const b of wysEl('panel').querySelectorAll('button')) b.disabled = true;
   try {
     const draft = { revision, ...(displayTitle !== title ? { displayTitle } : {}) };
-    const result = rich ? await api.saveInboxDocument(id, { ...draft, document: inboxWriter.document() }) :
+    const bodyDraft = rich ? inboxWriter.saveDraft() : null;
+    const result = rich ? await api.saveInboxDocument(id, { ...draft, ...bodyDraft }) :
       (displayTitle === title ? { ok: true } : await api.saveInboxEdit(id, draft));
     if (!result?.ok) { wysEl('status').textContent = result?.text || '保存失败'; return; }
     if (result.changed) {
       const r = await api.openInboxEntry(id).catch(() => null);
       if (writerState?.id !== id) return;
       if (!r?.ok) {
+        if (bodyDraft?.newAttachments) {
+          if (result.title) inboxTitle.textContent = inboxTitle.title = result.title;
+          closeInboxWriter();
+          showToast({ type: 'warning', title: '收纳已保存，重新打开可查看附图' });
+          return;
+        }
         writerState.revision = result.revision;
         wysEl('status').textContent = '收纳已保存；如果预览未刷新，请返回后重新打开。';
         writerState.title = displayTitle;

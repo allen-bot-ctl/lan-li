@@ -210,10 +210,10 @@ test('C5 设置导航（0.1.46）：「‹ 返回」在顶栏一行、导航项�
   await backToCalendar();
 });
 
-test('C6 七个设置页：内容标题 18px/600 左对齐，内容区可见文字 ≥12px', async () => {
+test('C6 八个设置页：内容标题 18px/600 左对齐，内容区可见文字 ≥12px', async () => {
   await openSettings();
-  const tabs = await page.locator('.settings-tab').allTextContents();
-  expect(tabs.length).toBe(7);   // 0.1.56 加「标签」，0.1.60 加「帮阅」
+  const tabs = ['界面设置', '黄历', '天气', '世界时钟', '收纳', '大模型', '帮阅', '升级'];
+  await expect(page.locator('.settings-tab')).toHaveText(tabs);
   for (const tab of tabs) {
     await page.click(`.settings-tab:text-is("${tab}")`);
     await page.waitForTimeout(250);

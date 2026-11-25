@@ -51,9 +51,22 @@ test.beforeAll(async () => {
 });
 test.afterAll(async () => { if (app) await app.close(); if (server) server.close(); });
 
+// Electron's main-process inspector can lose the result when the window
+// changes visibility. Retry only observations and idempotent window actions,
+// not the reader submissions or other state changes.
+async function windowHook(name) {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await hook(name);
+    } catch (error) {
+      if (attempt >= 2 || !/Resulting promise was garbage collected/.test(String(error))) throw error;
+    }
+  }
+}
 async function openReader() {
-  await hook('openReaderPanel');
-  await page.waitForSelector('#reader-view:not([hidden])');
+  await windowHook('openReaderPanel');
+  await expect.poll(() => windowHook('windowVisible')).toBe(true);
+  await expect(page.locator('#reader-view')).toBeVisible();
 }
 async function submit(url) {
   await page.fill('#reader-input', url);
@@ -223,14 +236,19 @@ test('R2b 隐藏窗口提取：去掉导航和评论；脚本延时写入的正�
 });
 
 test('R5 读取进行中收起窗口再打开，状态继续推进；帮阅和收纳互斥', async () => {
-  await hook('readerSetFakeLlm', { points: 5, delayMs: 1500 });
-  await submit(`${base}/slow?t=2`);
-  await expect(page.locator('.reader-row').first().locator('.reader-status')).toHaveText('读取网页…', { timeout: 5000 });
-  await hook('hideWindow');
-  await expect.poll(() => hook('windowVisible')).toBe(false);
-  await page.waitForTimeout(2500);
+  await hook('readerSaveConfig', { apiKey: 'sk-e2e-0160' });
   await openReader();
-  await expect(page.locator('.reader-row').first().locator('.reader-status')).toHaveText('已整理', { timeout: 15000 });
+  await hook('readerSetFakeLlm', { points: 5, delayMs: 1500 });
+  const url = `${base}/slow?t=hide-during-read`;
+  await submit(url);
+  await expect(page.locator('.reader-row').first().locator('.reader-status')).toHaveText('读取网页…', { timeout: 5000 });
+  await windowHook('hideWindow');
+  await expect.poll(() => windowHook('windowVisible')).toBe(false);
+  await expect.poll(async () => (await windowHook('readerList')).find((item) => item.url === url)?.status,
+    { timeout: 15000 }).toBe('done');
+  expect(await windowHook('windowVisible')).toBe(false);
+  await openReader();
+  await expect(rowOf('慢慢读的长文章').first().locator('.reader-status')).toHaveText('已整理');
   // 互斥
   await page.click('#inbox-button');
   await expect(page.locator('#inbox-view')).toBeVisible();
@@ -245,6 +263,12 @@ test('R5 读取进行中收起窗口再打开，状态继续推进；帮阅和�
 });
 
 test('R6c 列表截图：完成、整理中、失败三种行', async () => {
+  // This screenshot supplies each of its three states, independent of R5.
+  await hook('readerSaveConfig', { apiKey: 'sk-e2e-0160' });
+  await openReader();
+  await hook('readerSetFakeLlm', { points: 5 });
+  await submit(`${base}/a?t=${encodeURIComponent('已整理的截图文章')}`);
+  await expect(rowOf('已整理的截图文章').locator('.reader-status')).toHaveText('已整理', { timeout: 15000 });
   await hook('readerSetFakeLlm', { status: 500 });
   await submit(`${base}/a?t=${encodeURIComponent('接口报错的文章')}`);
   await expect(rowOf('接口报错的文章').locator('.reader-status')).toHaveText('整理失败：HTTP 500', { timeout: 15000 });
