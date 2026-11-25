@@ -2091,7 +2091,8 @@ function openInboxWriter() {
     wysEl('status').textContent = '';
     inboxDetailFrame.hidden = rich;
     inboxDetailEdit.hidden = true;
-    wysEl('title').focus({ preventScroll: true });
+    if (rich) inboxWriter.focus();
+    else wysEl('title').focus({ preventScroll: true });
   } catch (e) { showToast({ type: 'warning', title: e.message || '无法打开编辑器' }); }
 }
 async function saveInboxWriter() {

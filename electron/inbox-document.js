@@ -74,9 +74,9 @@ function importHtml(html, assets = [], aliases = Object.create(null)) {
   const { document } = parseHTML('<!doctype html><html><body></body></html>');
   const host = document.createElement('div');
   host.innerHTML = clean;
-  // The schema stores images as blocks. Unwrap an image-only paragraph
-  // before parsing so it doesn't become an extra empty text block.
-  for (const p of host.querySelectorAll('p')) {
+  // The schema stores images as blocks. Unwrap an image-only paragraph or
+  // heading before parsing so it does not leave an empty text block.
+  for (const p of host.querySelectorAll('p,h1,h2,h3,h4,h5,h6')) {
     const nodes = Array.from(p.childNodes).filter(n => n.nodeType !== 3 || !/^[\t\r\n ]*$/.test(n.textContent));
     if (nodes.length === 1 && nodes[0].nodeName === 'IMG') p.replaceWith(nodes[0]);
   }

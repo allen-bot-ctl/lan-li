@@ -1,6 +1,7 @@
 'use strict';
 const { Editor } = require('@tiptap/core');
 const { Fragment, Slice } = require('@tiptap/pm/model');
+const { Selection } = require('@tiptap/pm/state');
 const { extensions } = require('../inbox-document-schema');
 
 function createWriter(element, toolbar) {
@@ -59,7 +60,16 @@ function createWriter(element, toolbar) {
       assets = Object.assign(Object.create(null), attachmentMap || {});
       editor.setEditable(true);
       editor.commands.setContent(rewrite(doc, false), { errorOnInvalidContent: true, emitUpdate: false });
-      editor.commands.setTextSelection(1);
+      // Begin at the first usable body cursor. A leading empty paragraph or
+      // heading before an image is visually collapsed in the read and edit views.
+      // Keep it in the source document, but don't place the cursor there.
+      const current = editor.state.doc;
+      const first = current.firstChild;
+      const skip = first && (first.type.name === 'paragraph' || first.type.name === 'heading') &&
+        first.content.size === 0 && current.childCount > 1 && current.child(1).type.name === 'image';
+      const start = current.resolve(skip ? first.nodeSize : 0);
+      const selection = Selection.findFrom(start, 1, true) || Selection.near(start, 1);
+      editor.view.dispatch(editor.state.tr.setSelection(selection));
       updateToolbar(editor);
     },
     document: () => rewrite(editor.getJSON(), true),

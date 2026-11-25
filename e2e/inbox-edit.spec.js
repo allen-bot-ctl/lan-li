@@ -49,13 +49,18 @@ test('系统剪贴板图文原位编辑，图前后、格式、取消、保存�
     const titleX = (await page.locator('#inbox-title').boundingBox()).x;
     await page.click('#inbox-detail-edit');
     const titleEdit = () => page.getByRole('textbox', {name:'收纳标题'});
-    await expect(titleEdit()).toBeFocused();
+    await expect(titleEdit()).not.toBeFocused();
     expect((await titleEdit().boundingBox()).x).toBe(titleX);
     await expect(page.locator('#inbox-title')).toBeHidden();
     await expect(page.locator('#inbox-detail-frame')).toBeHidden();
     expect((await page.locator('#inbox-wys-panel').boundingBox()).y).toBe(paneTop);
     let writer = page.locator('#inbox-wys-body .tiptap');
     await expect(writer).toHaveAttribute('contenteditable', 'true');
+    await expect(writer).toBeFocused();
+    await expect.poll(() => writer.locator('p').first().evaluate(el => {
+      const selection = el.ownerDocument.getSelection();
+      return selection.isCollapsed && el.contains(selection.anchorNode) && selection.anchorOffset === 0;
+    })).toBe(true);
     await expect(writer.locator('p').filter({ hasText: '图前：' })).toBeVisible();
     await expect(writer.locator('img')).toBeVisible();
     await expect.poll(() => writer.locator('img').evaluate(e => e.complete && e.naturalWidth > 0)).toBe(true);
@@ -122,6 +127,7 @@ test('系统剪贴板图文原位编辑，图前后、格式、取消、保存�
     await page.click('#inbox-detail-edit');
     await expect(frame().locator('p')).toHaveText('旧格式正文内容');
     await expect(page.locator('#inbox-edit-dialog')).toBeHidden();
+    await expect(titleEdit()).toBeFocused();
     await titleEdit().fill('旧格式新标题');
     await page.click('#inbox-wys-save');
     await expect(page.locator('#inbox-title')).toHaveText('旧格式新标题');
@@ -160,8 +166,9 @@ test('首张图片上方不冒出空行，有意的换行仍然保留', async ()
     await page.waitForFunction(() => document.readyState === 'complete' && typeof window.openReaderView === 'function');
     await app.evaluate(() => globalThis.__lanliTest.showWindow());
     await page.click('#inbox-button');
-    const raw = '<p><img src="data:image/png;base64,' + PNG + '"></p>' +
-      '<pre>合成样本首行\n\n末行</pre><p>段首<br><br>段末</p>';
+    const code = '合成样本首行\n\t带缩进   内容\n\n末行';
+    const raw = '<h1><img src="data:image/png;base64,' + PNG + '"></h1>' +
+      '<pre>' + code + '</pre><p><br></p>';
     await app.evaluate(({ clipboard }, html) => { clipboard.clear(); clipboard.write({ html, text: '合成样本首行' }); }, raw);
     await page.click('#inbox-paste');
     const row = page.locator('#inbox-list .inbox-row').filter({ hasText: '合成样本首行' });
@@ -169,38 +176,53 @@ test('首张图片上方不冒出空行，有意的换行仍然保留', async ()
     const disk = path.join(work, 'inbox', id, 'document.json');
     const stored = JSON.parse(fs.readFileSync(disk, 'utf8'));
     expect(stored.content[0].type).toBe('image');
-    // Simulate an already-captured v0.1.73 image wrapper. It could leave an
-    // empty paragraph in the document; the update must also fix that display.
-    stored.content.unshift({ type: 'paragraph' });
-    fs.writeFileSync(disk, JSON.stringify(stored));
-    await row.click();
     const frame = page.frameLocator('#inbox-detail-frame');
-    const readImage = await frame.locator('img').boundingBox();
-    const readFrame = await page.locator('#inbox-detail-frame').boundingBox();
-    await page.click('#inbox-detail-edit');
     const editable = page.locator('#inbox-wys-body .tiptap');
     const realImage = editable.locator('img[data-attachment-id]');
-    await expect(realImage).toBeVisible();
-    const editImage = await realImage.boundingBox();
-    const editBody = await page.locator('#inbox-wys-body').boundingBox();
-    expect(Math.abs((editImage.y - editBody.y) - (readImage.y - readFrame.y))).toBeLessThan(8);
-    expect(await editable.locator('pre').textContent()).toBe('合成样本首行\n\n末行');
-    await expect(editable.locator('p').last().locator('br:not(.ProseMirror-trailingBreak)')).toHaveCount(2);
-    await page.click('#inbox-wys-save');
-    await expect(frame.locator('img')).toBeVisible();
-    expect(await frame.locator('pre').textContent()).toBe('合成样本首行\n\n末行');
-    await expect(frame.locator('p').last().locator('br')).toHaveCount(2);
-    expect(JSON.parse(fs.readFileSync(disk, 'utf8'))).toEqual(stored);
+    let compactTop;
+    const normalized = stored.content;
+    for (const blank of [{ type: 'paragraph' }, { type: 'heading', attrs: { level: 1 } }]) {
+      // Existing rows may contain the old ghost paragraph or the H1 shape
+      // produced when a source page wrapped its leading logo in a heading.
+      stored.content = [blank, ...normalized];
+      fs.writeFileSync(disk, JSON.stringify(stored));
+      await row.click();
+      await expect(frame.locator('img')).toBeVisible();
+      const readImage = await frame.locator('img').boundingBox();
+      const readFrame = await page.locator('#inbox-detail-frame').boundingBox();
+      await page.click('#inbox-detail-edit');
+      await expect(realImage).toBeVisible();
+      await expect(editable).toBeFocused();
+      await expect.poll(() => editable.locator('pre').evaluate(el => {
+        const selection = el.ownerDocument.getSelection();
+        return selection.isCollapsed && el.contains(selection.anchorNode) && selection.anchorOffset === 0;
+      })).toBe(true);
+      const editBodyLocator = page.locator('#inbox-wys-body');
+      await editBodyLocator.evaluate(el => { el.scrollTop = 0; });
+      const editImage = await realImage.boundingBox();
+      const editBody = await editBodyLocator.boundingBox();
+      compactTop = editImage.y - editBody.y;
+      expect(Math.abs(compactTop - (readImage.y - readFrame.y))).toBeLessThan(8);
+      expect(await editable.locator('pre').textContent()).toBe(code);
+      await expect(editable.locator('p').last().locator('br:not(.ProseMirror-trailingBreak)')).toHaveCount(1);
+      await page.click('#inbox-wys-save');
+      await expect(frame.locator('img')).toBeVisible();
+      expect(await frame.locator('pre').textContent()).toBe(code);
+      await expect(frame.locator('p').last().locator('br')).toHaveCount(1);
+      expect(JSON.parse(fs.readFileSync(disk, 'utf8'))).toEqual(stored);
+      await page.click('#inbox-back');
+    }
     // A real leading line break is not the caret-only placeholder.
-    await page.click('#inbox-back');
     stored.content[0] = { type: 'paragraph', content: [{ type: 'hardBreak' }] };
     fs.writeFileSync(disk, JSON.stringify(stored));
     await row.click();
     await expect(frame.locator('img')).toBeVisible();
     await page.click('#inbox-detail-edit');
+    const authoredBodyLocator = page.locator('#inbox-wys-body');
+    await authoredBodyLocator.evaluate(el => { el.scrollTop = 0; });
     const authoredImage = await realImage.boundingBox();
-    const authoredBody = await page.locator('#inbox-wys-body').boundingBox();
-    expect((authoredImage.y - authoredBody.y) - (editImage.y - editBody.y)).toBeGreaterThan(10);
+    const authoredBody = await authoredBodyLocator.boundingBox();
+    expect((authoredImage.y - authoredBody.y) - compactTop).toBeGreaterThan(10);
     await expect(editable.locator('p').first().locator('br:not(.ProseMirror-trailingBreak)')).toHaveCount(1);
   } finally {
     if (app) await app.close();
