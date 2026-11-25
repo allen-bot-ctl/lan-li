@@ -23,6 +23,7 @@
   const qaError = $('reader-qa-error');
   const qaSend = $('reader-qa-send');
   const qaStop = $('reader-qa-stop');
+  const qaWebSearch = $('reader-qa-web-search');
   const qaDrafts = new Map();
   let qa = null;
   const PH = '粘贴网址，回车开始读';
@@ -262,12 +263,50 @@
     qaInput.disabled = !canSend;
     qaSend.disabled = !canSend || !qaInput.value.trim();
     qaStop.hidden = !pending;
+    $('reader-qa-web-search-row').hidden = !(qa.webSearchAvailable && llmReady && qa.available && !qa.loading);
+    qaWebSearch.disabled = !canSend;
     $('reader-qa-hint').textContent = pending ? '正在生成回答…' : (/Mac/i.test(navigator.platform) ? '⌘ Enter 发送' : 'Ctrl+Enter 发送');
     $('reader-qa-model').hidden = qa.loading || llmReady;
     $('reader-qa-state').textContent = qa.loading ? '正在打开问答…' :
       pending || !qa.loaded ? '' :
       !qa.available && llmReady ? '这篇文章没有可用于问答的正文。仍可返回查看原摘要。' :
       qa.turns.length === 0 && llmReady ? '还没有追问。可以先问「文中最关键的结论是什么？」' : '';
+  }
+
+  const qaSearchLabels = {
+    used: '已联网搜索',
+    'not-used': '未使用联网搜索',
+    failed: '联网搜索失败',
+    unknown: '联网状态未确认',
+  };
+  function renderQaSearch(row, search) {
+    if (!Object.hasOwn(qaSearchLabels, search?.status)) return;
+    const meta = document.createElement('div');
+    meta.className = 'reader-qa-search-meta';
+    const badge = document.createElement('span');
+    badge.className = 'reader-qa-search-status' + (search.status === 'used' ? ' is-used' : '');
+    badge.textContent = qaSearchLabels[search.status];
+    meta.append(badge);
+    const sources = document.createElement('ul');
+    sources.className = 'reader-qa-sources';
+    sources.setAttribute('aria-label', '联网搜索来源');
+    for (const source of Array.isArray(search.sources) ? search.sources : []) {
+      let url;
+      try { url = new URL(source?.url); } catch { continue; }
+      if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password) continue;
+      const item = document.createElement('li');
+      const link = document.createElement('a');
+      link.href = url.href;
+      link.textContent = source.title || url.hostname;
+      link.title = url.href;
+      link.addEventListener('click', event => { event.preventDefault(); api.openReaderLink(url.href); });
+      // As with answer links, allow opening only via the app's checked external link IPC.
+      link.addEventListener('auxclick', event => { event.preventDefault(); });
+      item.append(link);
+      sources.append(item);
+    }
+    if (sources.childElementCount > 0) meta.append(sources);
+    row.append(meta);
   }
 
   function renderQaHistory() {
@@ -285,6 +324,7 @@
       answer.setAttribute('aria-label', '模型回答');
       window.MdRender.renderInto(answer, md, turn.answer, document, (href) => api.openReaderLink(href));
       row.append(question, answer);
+      renderQaSearch(row, turn.webSearch);
       qaHistory.append(row);
     }
     qaScroll.scrollTop = qaScroll.scrollHeight;
@@ -320,6 +360,8 @@
       if (!r?.ok) { showQaError(r?.error || '未能读取问答记录，请返回后重试。'); return; }
       current.turns = Array.isArray(r.turns) ? r.turns : [];
       current.available = r.available === true;
+      current.webSearchAvailable = r.webSearchAvailable === true;
+      qaWebSearch.checked = current.webSearchAvailable;
       current.loaded = true;
       renderQaHistory();
     } catch {
@@ -342,7 +384,7 @@
     showQaError('');
     updateQaControls();
     try {
-      const r = await api.sendReaderQa({ id: current.id, question, requestId });
+      const r = await api.sendReaderQa({ id: current.id, question, requestId, webSearch: !!current.webSearchAvailable && qaWebSearch.checked });
       if (qa !== current || current.requestId !== requestId) return;
       if (!r?.ok) {
         if (r?.code === 'no-key') showNoLlm();
@@ -466,6 +508,8 @@
   const baseErr = $('reader-base-err');
   const modelErr = $('reader-model-err');
   const testBtn = $('reader-test');
+  const webSearchInput = $('llm-web-search');
+  const webSearchNote = $('llm-web-search-note');
   function setStatus(text, kind) {
     statusEl.textContent = text;
     statusEl.className = 'reader-key-status' + (kind ? ' is-' + kind : '');
@@ -476,6 +520,18 @@
     } else setStatus(c && c.hasKey ? `已配置 · ${c.model}` : '未配置');
   }
   function formValues() { return { baseURL: baseInput.value, model: modelInput.value, apiKey: keyInput.value }; }
+  function updateWebSearchSettings() {
+    let isDeepSeek = false;
+    try { isDeepSeek = new URL(baseInput.value.trim()).hostname === 'api.deepseek.com'; } catch {}
+    const sameConfig = loadedModel?.baseURL === baseInput.value.trim() && loadedModel?.model === modelInput.value.trim();
+    const supported = sameConfig && loadedModel.webSearchSupported === true;
+    $('llm-web-search-settings').hidden = !(isDeepSeek || supported);
+    $('llm-web-search-row').hidden = !supported;
+    webSearchInput.disabled = !supported;
+    webSearchNote.textContent = supported
+      ? '仅用于帮阅追问。可在发送前逐题关闭；开启不代表模型一定会搜索。更改后点击保存。'
+      : '联网搜索仅支持 DeepSeek 官方接口及 deepseek-flash 模型。保存受支持的配置后可开启。';
+  }
   // 前端先校验一遍（主进程还会再校验）
   function checkForm() {
     const b = baseInput.value.trim();
@@ -505,12 +561,16 @@
       modelInput.value = (c && c.model) || 'deepseek-chat';
       $('reader-key-del').disabled = !(c && c.hasKey);
       statusFrom(c);
+      webSearchInput.checked = c?.webSearchEnabled === true;
+      updateWebSearchSettings();
     });
   }
   function saveForm() {
     if (!checkForm()) return;
     modelMutation += 1;
-    api.saveReaderConfig(formValues()).then((r) => {
+    const values = formValues();
+    if (!webSearchInput.disabled) values.webSearchEnabled = webSearchInput.checked;
+    api.saveReaderConfig(values).then((r) => {
       if (r && r.ok) { modelCheck = null; showToast({ type: 'success', title: '已保存' }); renderModelSettings(); } else showSaveError(r);
     }).catch(() => {});
   }
@@ -518,8 +578,8 @@
   for (const el of [keyInput, baseInput, modelInput]) {
     el.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); saveForm(); } });
   }
-  baseInput.addEventListener('input', () => { if (!baseErr.hidden) checkForm(); });
-  modelInput.addEventListener('input', () => { if (!modelErr.hidden) checkForm(); });
+  baseInput.addEventListener('input', () => { if (!baseErr.hidden) checkForm(); updateWebSearchSettings(); });
+  modelInput.addEventListener('input', () => { if (!modelErr.hidden) checkForm(); updateWebSearchSettings(); });
   testBtn.addEventListener('click', () => {
     if (!checkForm()) return;
     testBtn.disabled = true;

@@ -343,6 +343,7 @@
           <div class="reader-qa-error" id="reader-qa-error" role="status" hidden></div>
           <textarea id="reader-qa-input" rows="2" maxlength="2000" aria-label="追问内容" placeholder="对这篇文章，你还想了解什么？"></textarea>
           <div class="reader-qa-actions">
+            <label class="reader-qa-web-search" id="reader-qa-web-search-row" hidden><input id="reader-qa-web-search" type="checkbox">联网搜索</label>
             <span id="reader-qa-hint" role="status">⌘ Enter 发送</span>
             <button type="button" class="nav-pill" id="reader-qa-stop" hidden>停止</button>
             <button type="submit" class="nav-pill" id="reader-qa-send">发送</button>
@@ -417,6 +418,10 @@
                   <label class="reader-llm-label" for="reader-model">模型</label><input class="reader-llm-input" id="reader-model" type="text" aria-describedby="reader-model-err" placeholder="deepseek-chat" autocomplete="off" spellcheck="false">
                   <div class="reader-base-err" id="reader-model-err" hidden>模型不能为空</div>
                   <label class="reader-llm-label" for="reader-key">API Key</label><input class="reader-llm-input" id="reader-key" type="password" placeholder="sk-…" autocomplete="off" spellcheck="false">
+                </div>
+                <div class="llm-web-search-settings" id="llm-web-search-settings" hidden>
+                  <label class="settings-row" id="llm-web-search-row" hidden><span class="settings-label">允许联网搜索</span><input class="settings-switch" id="llm-web-search" type="checkbox" role="switch" aria-describedby="llm-web-search-note"><span class="switch-track" aria-hidden="true"></span></label>
+                  <p class="llm-usage-note" id="llm-web-search-note"></p>
                 </div>
                 <div class="settings-actions reader-llm-btns"><button class="nav-pill tags-add-btn" id="reader-key-save" type="button">保存</button><button class="nav-pill tags-add-btn" id="reader-test" type="button">测试连接</button><button class="nav-pill tags-add-btn" id="reader-key-del" type="button">删除 Key</button></div>
                 <div class="reader-key-status" id="reader-key-status" role="status">未配置</div>

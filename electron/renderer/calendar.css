@@ -1793,3 +1793,16 @@ html[data-calendar-inbox-unlinked] .app:has(.app-body:not([hidden])) #inbox-butt
 .reader-qa-actions span {margin-right:auto;font-size:11px;color:var(--muted-strong)}
 #reader-qa-send:not(:disabled) {background:var(--accent);color:#111;font-weight:650}
 .reader-qa-view button:disabled {opacity:.55;cursor:default}
+
+/* DeepSeek capability in configuration, and a per-question choice in Help Reader. */
+.llm-web-search-settings {margin-top:8px}
+.llm-web-search-settings[hidden],.llm-web-search-settings [hidden] {display:none !important}
+.llm-web-search-settings .settings-row:not([hidden]) {padding-inline:0}
+.llm-web-search-settings .llm-usage-note {margin:3px 0 7px}
+.reader-qa-web-search:not([hidden]) {display:inline-flex;align-items:center;gap:4px;flex:none;font-size:11px;color:var(--muted-strong);white-space:nowrap;cursor:pointer}
+.reader-qa-web-search input {margin:0;accent-color:var(--accent)}
+.reader-qa-search-meta {margin-top:6px}
+.reader-qa-search-status {display:inline-block;padding:1px 6px;border:1px solid currentColor;border-radius:6px;color:var(--muted-strong);font-size:10px}
+.reader-qa-search-status.is-used {color:var(--accent-strong,var(--text))}
+.reader-qa-sources {margin:5px 0 0;padding-inline-start:17px;font-size:11px;overflow-wrap:anywhere}
+.reader-qa-sources a {color:var(--accent-strong,var(--text));text-decoration:underline}

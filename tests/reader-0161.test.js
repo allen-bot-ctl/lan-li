@@ -54,11 +54,11 @@ test('R1 保存：地址不合法、模型为空都不能保存；合法时地�
   assert.equal(k.config().apiKey, null, '校验失败时不写 Key');
   r = k.save({ baseURL: 'https://api.moonshot.cn/v1/', model: 'kimi-k2', apiKey: 'sk-secret-61' });
   assert.equal(r.ok, true);
-  assert.deepEqual(prefs.peek(), { other: 1, reader: { baseURL: 'https://api.moonshot.cn/v1', model: 'kimi-k2' } });
+  assert.deepEqual(prefs.peek(), { other: 1, reader: { baseURL: 'https://api.moonshot.cn/v1', model: 'kimi-k2', webSearchEnabled:false } });
   assert.ok(!JSON.stringify(prefs.peek()).includes('sk-secret'));
   assert.equal(fs.statSync(path.join(d, 'reader-api-key')).mode & 0o777, 0o600);
   const pub = k.getPublic();
-  assert.deepEqual(pub, { baseURL: 'https://api.moonshot.cn/v1', model: 'kimi-k2', hasKey: true, ready: true });
+  assert.deepEqual(pub, { baseURL: 'https://api.moonshot.cn/v1', model: 'kimi-k2', hasKey: true, ready: true, webSearchSupported:false, webSearchEnabled:false });
   assert.ok(!JSON.stringify(r).includes('sk-secret'));
   k.save({ baseURL: 'https://api.moonshot.cn/v1', model: 'kimi-k2', apiKey: '' });
   assert.equal(k.config().apiKey, 'sk-secret-61', 'Key 留空不修改');
@@ -69,7 +69,7 @@ test('R1 保存：地址不合法、模型为空都不能保存；合法时地�
 
 test('R1 没有设置时用默认值；preferences 里是坏值时回到默认', () => {
   const d = tmp();
-  assert.deepEqual(C.createKeyStore({ file: path.join(d, 'k'), prefs: memPrefs() }).getPublic(), { baseURL: 'https://api.deepseek.com', model: 'deepseek-chat', hasKey: false, ready: false });
+  assert.deepEqual(C.createKeyStore({ file: path.join(d, 'k'), prefs: memPrefs() }).getPublic(), { baseURL: 'https://api.deepseek.com', model: 'deepseek-chat', hasKey: false, ready: false, webSearchSupported:false, webSearchEnabled:false });
   const k = C.createKeyStore({ file: path.join(d, 'k'), prefs: memPrefs({ reader: { baseURL: 'http://evil', model: '' } }) });
   assert.equal(k.config().baseURL, 'https://api.deepseek.com');
   assert.equal(k.config().model, 'deepseek-chat');
@@ -134,4 +134,22 @@ test('PM：没有 Key 时提交不读取、不建记录', async () => {
   assert.equal(windows, 0);
   const t = await handlers['reader:testConfig'](null, { baseURL: 'http://a', model: 'm', apiKey: 'k' });
   assert.equal(t.ok, false); assert.equal(t.code, 'bad-url');
+});
+
+test('联网默认关且偏好限 DeepSeek 官方生产 Chat Completions 的 flash 模型', (t) => {
+  const d=fs.mkdtempSync(path.join(os.tmpdir(),'lanli-web-prefs-'));
+  t.after(()=>fs.rmSync(d,{recursive:true,force:true}));
+  const prefs=memPrefs();
+  const create=()=>C.createKeyStore({file:path.join(d,'key'),prefs});
+  const k=create();
+  assert.equal(k.getPublic().webSearchEnabled,false);
+  assert.equal(k.save({baseURL:'https://api.deepseek.com/v1',model:'deepseek-flash',apiKey:'fake',webSearchEnabled:true}).webSearchEnabled,true);
+  assert.equal(create().getPublic().webSearchEnabled,true);
+  for (const baseURL of ['https://api.deepseek.com.evil.test/v1','https://user@api.deepseek.com','https://api.deepseek.com/v1?query=x','https://api.deepseek.com/v1/x','https://api.deepseek.com:443']) {
+    assert.equal(k.save({baseURL,webSearchEnabled:true}).code,'web-search-unsupported');
+  }
+  assert.equal(k.save({model:'deepseek-chat',webSearchEnabled:true}).code,'web-search-unsupported');
+  assert.equal(k.getPublic().webSearchEnabled,true);
+  assert.equal(k.save({model:'deepseek-chat'}).webSearchEnabled,false);
+  assert.equal(k.save({model:'deepseek-flash'}).webSearchEnabled,false);
 });

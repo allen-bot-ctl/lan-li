@@ -10,8 +10,9 @@ function endpointFor(baseURL) {
 }
 
 const { parseUsage } = require('./llm-usage');
+const {TOOL,isDeepSeekWebSearchSupported,searchMetadata} = require('./reader-web-search');
 
-async function request({ configuration, body, fetchImpl, timeoutMs, signal, pingOnly, reportUsage, kind }) {
+async function request({ configuration, body, fetchImpl, timeoutMs, signal, pingOnly, reportUsage, kind, webSearch }) {
   const endpoint = endpointFor(configuration.baseURL);
   const controller = new AbortController();
   const onAbort = () => controller.abort();
@@ -28,7 +29,8 @@ async function request({ configuration, body, fetchImpl, timeoutMs, signal, ping
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${configuration.apiKey}` },
         body: JSON.stringify(body),
-        signal: controller.signal
+        signal: controller.signal,
+        ...(webSearch ? {redirect:'error'} : {})
       });
     } catch (error) {
       if (error?.name === 'AbortError') throw new LlmError(signal?.aborted ? 'canceled' : 'timeout', signal?.aborted ? '请求已取消' : '请求超时');
@@ -49,7 +51,7 @@ async function request({ configuration, body, fetchImpl, timeoutMs, signal, ping
       const trimmed = content.trim();
       if (!trimmed) throw new LlmError('empty', '空返回');
       status = 'success';
-      return trimmed;
+      return webSearch ? {answer:trimmed, webSearch:searchMetadata(payload.choices[0].message, configuration.apiKey)} : trimmed;
     }
     status = 'success';
     return true;
@@ -64,10 +66,14 @@ async function request({ configuration, body, fetchImpl, timeoutMs, signal, ping
   }
 }
 
-function complete({ system, user, messages, configuration, fetchImpl = globalThis.fetch, timeoutMs = 90_000, signal = null, reportUsage, kind = 'summarize' }) {
-  return request({ configuration, fetchImpl, timeoutMs, signal, reportUsage, kind, body:{
+function complete({ system, user, messages, configuration, fetchImpl = globalThis.fetch, timeoutMs = 90_000, signal = null, reportUsage, kind = 'summarize', webSearch = false }) {
+  if (webSearch && (kind !== 'followup' || !isDeepSeekWebSearchSupported(configuration.baseURL,configuration.model))) {
+    throw new LlmError('web-search-unsupported','联网搜索仅支持 DeepSeek 官方接口与 deepseek-flash');
+  }
+  return request({ configuration, fetchImpl, timeoutMs, signal, reportUsage, kind, webSearch, body:{
     model: configuration.model, messages: messages || [{ role:'system', content:system }, { role:'user', content:user }],
-    max_tokens:4096, thinking:{type:'disabled'}, stream:false
+    max_tokens:4096, thinking:{type:'disabled'}, stream:false,
+    ...(webSearch ? {tools:[{type:TOOL}]} : {})
   }});
 }
 

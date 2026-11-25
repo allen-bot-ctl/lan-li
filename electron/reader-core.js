@@ -2,6 +2,7 @@
 // 0.1.60 帮阅：纯逻辑（网址校验、去重键、提示词、JSON 解析、存储、Key 文件）。fs 可注入，便于单测。
 // 契约 docs/changes/0.1.60-reader.md。
 const path = require('node:path');
+const {isDeepSeekWebSearchSupported} = require('./reader-web-search');
 const nodeFs = require('node:fs');
 
 // PM 04:30 定稿：超过 3 万字按段落截断，开头约 80%、结尾约 15%
@@ -304,15 +305,15 @@ function createKeyStore({ file, prefs = null, fs = nodeFs }) {
   }
   function config() {
     const r = prefsReader();
-    return {
-      baseURL: validateBaseURL(r.baseURL) || DEFAULT_BASE_URL,
-      model: String(r.model == null ? '' : r.model).trim() || DEFAULT_MODEL,
-      apiKey: readFileKey(file)
-    };
+    const baseURL = validateBaseURL(r.baseURL) || DEFAULT_BASE_URL;
+    const model = String(r.model == null ? '' : r.model).trim() || DEFAULT_MODEL;
+    const webSearchSupported = isDeepSeekWebSearchSupported(baseURL, model);
+    return {baseURL, model, apiKey:readFileKey(file), webSearchSupported,
+      webSearchEnabled:webSearchSupported && r.webSearchEnabled === true};
   }
   function getPublic() {
     const c = config();
-    return { baseURL: c.baseURL, model: c.model, hasKey: !!c.apiKey, ready: !!c.apiKey };
+    return { baseURL: c.baseURL, model: c.model, hasKey: !!c.apiKey, ready: !!c.apiKey, webSearchSupported:c.webSearchSupported, webSearchEnabled:c.webSearchEnabled };
   }
   // 校验要保存/测试的三项；Key 留空就用已保存的
   function resolve({ baseURL, apiKey, model } = {}) {
@@ -327,10 +328,13 @@ function createKeyStore({ file, prefs = null, fs = nodeFs }) {
   function save(input = {}) {
     const r = resolve(input);
     if (!r.ok) return r;
+    const supported = isDeepSeekWebSearchSupported(r.baseURL,r.model);
+    if (input.webSearchEnabled === true && !supported) return {ok:false,code:'web-search-unsupported',error:'联网搜索仅支持 DeepSeek 官方接口与 deepseek-flash'};
     if (r.newKey) writeKey(r.newKey);
     if (prefs && prefs.read && prefs.write) {
       const p = prefs.read() || {};
       const reader = { ...(p.reader && typeof p.reader === 'object' ? p.reader : {}), baseURL: r.baseURL, model: r.model };
+      reader.webSearchEnabled = supported && (typeof input.webSearchEnabled === 'boolean' ? input.webSearchEnabled : reader.webSearchEnabled === true);
       prefs.write({ ...p, reader });
     }
     return { ok: true, ...getPublic() };
