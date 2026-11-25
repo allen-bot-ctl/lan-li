@@ -64,9 +64,9 @@ async function request({ configuration, body, fetchImpl, timeoutMs, signal, ping
   }
 }
 
-function complete({ system, user, configuration, fetchImpl = globalThis.fetch, timeoutMs = 90_000, signal = null, reportUsage, kind = 'summarize' }) {
+function complete({ system, user, messages, configuration, fetchImpl = globalThis.fetch, timeoutMs = 90_000, signal = null, reportUsage, kind = 'summarize' }) {
   return request({ configuration, fetchImpl, timeoutMs, signal, reportUsage, kind, body:{
-    model: configuration.model, messages: [{ role:'system', content:system }, { role:'user', content:user }],
+    model: configuration.model, messages: messages || [{ role:'system', content:system }, { role:'user', content:user }],
     max_tokens:4096, thinking:{type:'disabled'}, stream:false
   }});
 }

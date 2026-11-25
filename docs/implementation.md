@@ -228,6 +228,10 @@ main.setupUpdates()
 
 以 `electron/preload.js` 与 `electron/main.js` 的 `registerIpc()` 为准：
 
+### 帮阅追问
+
+三个追问频道只接受栏历日历窗口的主 frame。成功问答按文章写在本机 `read/<id>/qa.json`，保留最近 50 对；失败和取消不改变已保存的历史或原摘要。请求复用既有模型配置，带文章上下文以及最多 8 对近期问答（总对话上下文不超过 12,000 字）；「消耗」只记独立的追问请求元数据，不记问答内容。
+
 **invoke（渲染 → 主，返回 Promise）**
 
 | 频道 | preload API | 作用 |
@@ -248,6 +252,8 @@ main.setupUpdates()
 | `clocks:setMenuBar` | `setMenuBarClock` | `{ id }`（省略时取当前显示时钟）；校验后将其设为菜单栏显示时区，持久化并刷新托盘标题，返回快照；无效/不在列表中为无操作 |
 | `clocks:search` | `searchClocks` | `{ query }`；返回目录 + IANA 回退结果，已添加项带 `added`，由渲染层过滤 |
 | `pin:toggle` | `togglePin` | 无参数；在内存中切换钉住。取消钉住（或点 ×）时立即隐藏窗口并清回 false，返回 `{ pinned }` |
+| `reader:getQa` | `getReaderQa` | 读取指定文章的本地追问记录，不发起模型请求 |
+| `reader:sendQa` | `sendReaderQa` | 向已配置的模型服务发送该文章的追问；成功后将问答保存到该文章 |
 
 **send（渲染 → 主）**
 
@@ -259,6 +265,7 @@ main.setupUpdates()
 | `update:check` | `checkUpdate` | 顶栏右上角的检查更新图标；主进程复用 `requestUpdateCheck()`，结果仍经 `update:status` |
 | `update:restart` | `restartToUpdate` | 就绪后重启更新（自更新） |
 | `update:openLatest` | `openLatestRelease` | 打开手动下载地址 |
+| `reader:cancelQa` | `cancelReaderQa` | 取消当前追问，不写入未完成的问答 |
 
 **send（主 → 渲染）**
 

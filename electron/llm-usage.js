@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const MAX_ROWS = 10000;
 const PAGE_SIZE = 25;
-const KINDS = new Set(['summarize','retry','rewrite','test']);
+const KINDS = new Set(['summarize','retry','rewrite','test','followup']);
 const STATUSES = new Set(['success','failed','canceled']);
 
 function providerOf(value) {

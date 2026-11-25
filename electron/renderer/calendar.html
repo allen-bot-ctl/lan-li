@@ -321,10 +321,34 @@
           </div>
         </div>
         <div class="reader-d-actions">
+          <button type="button" class="nav-pill" id="reader-d-qa">追问</button>
           <button type="button" class="nav-pill" id="reader-d-resum">重新整理</button>
           <button type="button" class="nav-pill" id="reader-d-copy">复制全部</button>
         </div>
       </div>
+      <section id="reader-qa-view" class="reader-qa-view" hidden aria-label="文章问答">
+        <div class="reader-qa-scroll" id="reader-qa-scroll">
+          <div class="reader-qa-intro">
+            <h2>文章问答</h2>
+            <p>围绕这篇文章继续问，可接着上一轮追问。</p>
+          </div>
+          <div id="reader-qa-state" class="reader-qa-state" role="status"></div>
+          <div class="reader-qa-model" id="reader-qa-model" hidden>
+            <span>先配置可用的大模型，才能发送追问。已有问答仍可查看。</span>
+            <button type="button" class="nav-pill" id="reader-qa-settings">前往大模型</button>
+          </div>
+          <div id="reader-qa-history" class="reader-qa-history" role="list" aria-label="问答记录"></div>
+        </div>
+        <form id="reader-qa-form" class="reader-qa-form">
+          <div class="reader-qa-error" id="reader-qa-error" role="status" hidden></div>
+          <textarea id="reader-qa-input" rows="2" maxlength="2000" aria-label="追问内容" placeholder="对这篇文章，你还想了解什么？"></textarea>
+          <div class="reader-qa-actions">
+            <span id="reader-qa-hint" role="status">⌘ Enter 发送</span>
+            <button type="button" class="nav-pill" id="reader-qa-stop" hidden>停止</button>
+            <button type="submit" class="nav-pill" id="reader-qa-send">发送</button>
+          </div>
+        </form>
+      </section>
     </div>
 
     <div class="settings-view" id="settings-view" hidden>

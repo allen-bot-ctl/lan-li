@@ -16,6 +16,15 @@
   const detail = $('reader-detail');
   const countEl = $('reader-count');
   const nollm = $('reader-nollm');
+  const qaView = $('reader-qa-view');
+  const qaInput = $('reader-qa-input');
+  const qaHistory = $('reader-qa-history');
+  const qaScroll = $('reader-qa-scroll');
+  const qaError = $('reader-qa-error');
+  const qaSend = $('reader-qa-send');
+  const qaStop = $('reader-qa-stop');
+  const qaDrafts = new Map();
+  let qa = null;
   const PH = '粘贴网址，回车开始读';
   const PH_OFF = '先配置大模型才能用帮阅';
   const md = window.MdRender.createMd(window.markdownit);
@@ -75,6 +84,7 @@
     nollm.classList.toggle('is-center', !llmReady && items.length === 0);
     empty.hidden = !llmReady ? true : items.length > 0;
     if (!llmReady) list.before(nollm);
+    if (qa) updateQaControls();
   }
   function showNoLlm() { llmReady = false; applyLlm(); }
   function syncLlmHint() {
@@ -233,7 +243,153 @@
     }).catch(() => {});
   }
 
+  function rememberQaDraft(id, value) {
+    qaDrafts.delete(id);
+    if (!value.trim()) return;
+    qaDrafts.set(id, value);
+    if (qaDrafts.size > 20) qaDrafts.delete(qaDrafts.keys().next().value);
+  }
+
+  function showQaError(text) {
+    qaError.textContent = text || '';
+    qaError.hidden = !text;
+  }
+
+  function updateQaControls() {
+    if (!qa) return;
+    const pending = !!qa.requestId;
+    const canSend = llmReady && qa.available && !qa.loading && !pending;
+    qaInput.disabled = !canSend;
+    qaSend.disabled = !canSend || !qaInput.value.trim();
+    qaStop.hidden = !pending;
+    $('reader-qa-hint').textContent = pending ? '正在生成回答…' : (/Mac/i.test(navigator.platform) ? '⌘ Enter 发送' : 'Ctrl+Enter 发送');
+    $('reader-qa-model').hidden = qa.loading || llmReady;
+    $('reader-qa-state').textContent = qa.loading ? '正在打开问答…' :
+      pending || !qa.loaded ? '' :
+      !qa.available && llmReady ? '这篇文章没有可用于问答的正文。仍可返回查看原摘要。' :
+      qa.turns.length === 0 && llmReady ? '还没有追问。可以先问「文中最关键的结论是什么？」' : '';
+  }
+
+  function renderQaHistory() {
+    qaHistory.replaceChildren();
+    for (const turn of qa.turns) {
+      const row = document.createElement('div');
+      row.className = 'reader-qa-turn';
+      row.setAttribute('role', 'listitem');
+      const question = document.createElement('div');
+      question.className = 'reader-qa-question';
+      question.setAttribute('aria-label', '你的问题');
+      question.textContent = turn.question;
+      const answer = document.createElement('div');
+      answer.className = 'reader-qa-answer reader-d-md';
+      answer.setAttribute('aria-label', '模型回答');
+      window.MdRender.renderInto(answer, md, turn.answer, document, (href) => api.openReaderLink(href));
+      row.append(question, answer);
+      qaHistory.append(row);
+    }
+    qaScroll.scrollTop = qaScroll.scrollHeight;
+  }
+
+  function closeQa(restoreArticle = true) {
+    if (!qa) return;
+    const current = qa;
+    rememberQaDraft(current.id, qaInput.value);
+    qa = null;
+    if (current.requestId) api.cancelReaderQa({ id: current.id, requestId: current.requestId });
+    qaView.hidden = true;
+    if (restoreArticle && detailId === current.id && !view.hidden) {
+      detail.hidden = false;
+      back.textContent = '‹ 帮阅';
+      $('reader-d-qa').focus({ preventScroll: true });
+    }
+  }
+
+  async function openQa() {
+    if (!detailId || detail.hidden || qa) return;
+    const current = qa = { id: detailId, loading: true, loaded: false, available: false, turns: [], requestId: null };
+    qaInput.value = qaDrafts.get(current.id) || '';
+    showQaError('');
+    renderQaHistory();
+    detail.hidden = true;
+    qaView.hidden = false;
+    back.textContent = '‹ 文章摘要';
+    updateQaControls();
+    try {
+      const [r] = await Promise.all([api.getReaderQa(current.id), syncLlmHint()]);
+      if (qa !== current) return;
+      if (!r?.ok) { showQaError(r?.error || '未能读取问答记录，请返回后重试。'); return; }
+      current.turns = Array.isArray(r.turns) ? r.turns : [];
+      current.available = r.available === true;
+      current.loaded = true;
+      renderQaHistory();
+    } catch {
+      if (qa === current) showQaError('未能读取问答记录，请返回后重试。');
+    } finally {
+      if (qa === current) {
+        current.loading = false;
+        updateQaControls();
+        if (!qaInput.disabled) qaInput.focus({ preventScroll: true });
+      }
+    }
+  }
+
+  async function submitQa() {
+    if (!qa || qaSend.disabled) return;
+    const question = qaInput.value.trim();
+    if (!question) return;
+    const current = qa;
+    const requestId = current.requestId = crypto.randomUUID();
+    showQaError('');
+    updateQaControls();
+    try {
+      const r = await api.sendReaderQa({ id: current.id, question, requestId });
+      if (qa !== current || current.requestId !== requestId) return;
+      if (!r?.ok) {
+        if (r?.code === 'no-key') showNoLlm();
+        showQaError(r?.error || '未能生成回答。问题已保留，可重试。');
+        return;
+      }
+      current.turns = Array.isArray(r.turns) ? r.turns : [];
+      qaInput.value = '';
+      rememberQaDraft(current.id, '');
+      renderQaHistory();
+    } catch {
+      if (qa === current && current.requestId === requestId) showQaError('未能生成回答。问题已保留，可重试。');
+    } finally {
+      if (qa === current && current.requestId === requestId) {
+        current.requestId = null;
+        updateQaControls();
+        if (!qaInput.disabled) qaInput.focus({ preventScroll: true });
+      }
+    }
+  }
+
+  $('reader-d-qa').addEventListener('click', openQa);
+  $('reader-qa-settings').addEventListener('click', toKeySettings);
+  $('reader-qa-form').addEventListener('submit', (event) => { event.preventDefault(); submitQa(); });
+  qaInput.addEventListener('input', () => {
+    if (qa) rememberQaDraft(qa.id, qaInput.value);
+    showQaError('');
+    updateQaControls();
+  });
+  qaInput.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' && (event.metaKey || event.ctrlKey) && !event.isComposing) {
+      event.preventDefault();
+      submitQa();
+    }
+  });
+  qaStop.addEventListener('click', () => {
+    if (!qa?.requestId) return;
+    const requestId = qa.requestId;
+    qa.requestId = null;
+    api.cancelReaderQa({ id: qa.id, requestId });
+    showQaError('已停止回答。问题已保留，可重试。');
+    updateQaControls();
+    qaInput.focus({ preventScroll: true });
+  });
+
   function showList() {
+    closeQa(false);
     detailId = null;
     detail.hidden = true;
     mainEl.hidden = false;
@@ -268,7 +424,7 @@
   }
 
   btn.addEventListener('click', () => { if (view.hidden) openReaderView(); else closeReaderView(); });
-  back.addEventListener('click', () => { if (!detail.hidden) { showList(); refresh(); return; } closeReaderView(); });
+  back.addEventListener('click', () => { if (qa) { closeQa(); return; } if (!detail.hidden) { showList(); refresh(); return; } closeReaderView(); });
   go.addEventListener('click', submit);
   $('reader-nollm-go').addEventListener('click', toKeySettings);
   $('reader-settings-llm-go').addEventListener('click', toKeySettings);
@@ -290,6 +446,7 @@
     showToast({ type: 'success', title: `已读完 · ${[...t].slice(0, 12).join('')}` });
   });
   function onEscape() {
+    if (qa) { closeQa(); return; }
     if (!detail.hidden) { showList(); refresh(); return; }
     closeReaderView();
   }

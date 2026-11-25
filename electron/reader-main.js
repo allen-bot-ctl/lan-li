@@ -6,6 +6,7 @@ const fs = require('node:fs');
 const C = require('./reader-core');
 const { complete, ping } = require('./reader-llm');
 const { createLlmUsageStore } = require('./llm-usage');
+const { createReaderQa } = require('./reader-qa');
 
 const READ_TIMEOUT_MS = 20_000; // 整个读取 20 秒
 const LOAD_WAIT_MS = 8_000; // did-finish-load 最多等 8 秒
@@ -68,6 +69,7 @@ function createReaderController(deps) {
   const keys = C.createKeyStore({ file: keyFile, prefs });
   const prompts = C.createPromptStore({ file: promptFile });
   const usage = createLlmUsageStore({file:deps.usageFile});
+  const qa = createReaderQa({store,keys,complete,llmFetch,reportUsage:usage.record});
   const queue = [];
   let running = null; // { id, abort }
   let fakeLlm = null; // e2e：{ status, points, delayMs, raw }
@@ -213,7 +215,7 @@ function createReaderController(deps) {
     if (!fakeLlm) return globalThis.fetch;
     return async (url, opts) => {
       const f = fakeLlm;
-      try { const b = JSON.parse(opts.body); e2eLlmCalls.push({ url: String(url), model: b.model, ping: b.max_tokens === 1, system: (b.messages.find((x) => x.role === 'system') || {}).content, user: (b.messages.find((x) => x.role === 'user') || {}).content, maxTokens: b.max_tokens, hasResponseFormat: 'response_format' in b }); } catch { /* ignore */ }
+      try { const b = JSON.parse(opts.body); e2eLlmCalls.push({ url: String(url), model: b.model, ping: b.max_tokens === 1, system: (b.messages.find((x) => x.role === 'system') || {}).content, user: (b.messages.find((x) => x.role === 'user') || {}).content, messages: b.messages, maxTokens: b.max_tokens, hasResponseFormat: 'response_format' in b }); } catch { /* ignore */ }
       if (f.delayMs) await new Promise((r) => setTimeout(r, f.delayMs));
       if (opts && opts.signal && opts.signal.aborted) { const e = new Error('aborted'); e.name = 'AbortError'; throw e; }
       if (f.networkError) throw new Error('synthetic unavailable');
@@ -353,6 +355,7 @@ function createReaderController(deps) {
   }
 
   function remove(id) {
+    qa.remove(id);
     const qi = queue.findIndex((j) => j.id === id);
     if (qi >= 0) queue.splice(qi, 1);
     if (running && running.id === id) running.abort();
@@ -378,6 +381,11 @@ function createReaderController(deps) {
     store.recover();
     ipcMain.handle('reader:list', () => store.list());
     ipcMain.handle('reader:get', (_e, id) => store.get(id));
+    const qaAllowed = (e) => Boolean(deps.allowQaSender?.(e));
+    const denied = () => ({ok:false,code:'forbidden',error:'无法访问追问'});
+    ipcMain.handle('reader:getQa', (e, id) => qaAllowed(e) ? qa.get(id) : denied());
+    ipcMain.handle('reader:sendQa', (e, input) => qaAllowed(e) ? qa.send(input, e.sender.id) : denied());
+    ipcMain.on('reader:cancelQa', (e, input) => { if (qaAllowed(e)) qa.cancel(input,e.sender.id); });
     ipcMain.handle('reader:submit', (_e, url) => submit(url));
     ipcMain.handle('reader:retry', (_e, id) => retry(id, false));
     ipcMain.handle('reader:resummarize', (_e, id) => retry(id, true));

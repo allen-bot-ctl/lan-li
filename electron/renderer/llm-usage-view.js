@@ -21,7 +21,7 @@
   const next = id('llm-usage-next');
   const number = new Intl.NumberFormat('zh-CN');
   const date = new Intl.DateTimeFormat('zh-CN', {year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit', hourCycle:'h23'});
-  const kinds = {summarize:'帮阅整理',retry:'帮阅重试',rewrite:'AI 改提示词',test:'测试连接'};
+  const kinds = {summarize:'帮阅整理',followup:'帮阅追问',retry:'帮阅重试',rewrite:'AI 改提示词',test:'测试连接'};
   const statuses = {success:'成功',failed:'失败',canceled:'已取消'};
   let active = 0, page = 1, generation = 0, modelFilter = null;
   const visible = () => !settings.hidden && !modelPage.hidden && active === 1;

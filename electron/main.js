@@ -21,6 +21,7 @@ const {
   session
 } = require('electron');
 const path = require('node:path');
+const { pathToFileURL } = require('node:url');
 const os = require('node:os');
 const fs = require('node:fs');
 // Electron patches Node's fs so paths inside app.asar look like virtual
@@ -1387,6 +1388,9 @@ function setupReader() {
     keyFile: path.join(base, 'reader-api-key'),
     promptFile: path.join(base, 'reader-prompt.txt'),
     usageFile: path.join(base, 'llm-usage.jsonl'),
+    allowQaSender: (event) => Boolean(calendarWindow && !calendarWindow.isDestroyed() &&
+      event.sender === calendarWindow.webContents && event.senderFrame && event.senderFrame === event.sender.mainFrame &&
+      event.senderFrame.url === pathToFileURL(path.join(__dirname, 'renderer', 'calendar.html')).href),
     prefs: { read: readPreferences, write: writePreferences },
     onChanged: () => sendWin('reader:changed'),
     onDone: (m) => { if (calendarWindow && !calendarWindow.isDestroyed() && calendarWindow.isVisible()) sendWin('reader:done', { id: m.id, title: m.title }); }

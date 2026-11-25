@@ -85,6 +85,9 @@ contextBridge.exposeInMainWorld('lanli', {
   // 0.1.60 帮阅
   listReader: () => ipcRenderer.invoke('reader:list'),
   getReader: (id) => ipcRenderer.invoke('reader:get', id),
+  getReaderQa: (id) => ipcRenderer.invoke('reader:getQa', id),
+  sendReaderQa: (input) => ipcRenderer.invoke('reader:sendQa', input),
+  cancelReaderQa: (input) => ipcRenderer.send('reader:cancelQa', input),
   submitReader: (url) => ipcRenderer.invoke('reader:submit', url),
   retryReader: (id) => ipcRenderer.invoke('reader:retry', id),
   resummarizeReader: (id) => ipcRenderer.invoke('reader:resummarize', id),
