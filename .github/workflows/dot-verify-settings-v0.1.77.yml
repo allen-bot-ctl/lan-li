@@ -1,0 +1,36 @@
+name: Verify LanLi module settings v0.1.77
+on:
+  push:
+    branches: [integration/verify-v0.1.77]
+permissions:
+  contents: read
+jobs:
+  native:
+    if: github.repository == 'allen-bot-ctl/lan-li' && github.actor_id == '352863755'
+    runs-on: macos-15-intel
+    timeout-minutes: 14
+    env:
+      EXPECTED: e5161a5fa41f3fb88881b1844dc9aeff73e6d720
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.EXPECTED }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - name: Verify settings, independent inbox and editor via Electron
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED"
+          test "$(uname -m)" = x86_64
+          npm run e2e -- e2e/inbox-date-link.spec.js e2e/day-inbox-0155.spec.js e2e/inbox-edit.spec.js e2e/settings-layout.spec.js e2e/settings-0134.spec.js e2e/tags-0156.spec.js e2e/prompt-0164.spec.js e2e/reader-0160.spec.js e2e/reader-0161.spec.js e2e/reader-0162.spec.js
+      - name: Keep synthetic failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: synthetic-module-settings-failure
+          path: test-results/
+          retention-days: 3
+          if-no-files-found: ignore
