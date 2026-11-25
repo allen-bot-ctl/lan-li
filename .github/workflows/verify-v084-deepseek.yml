@@ -1,0 +1,33 @@
+name: Verify LanLi 0.1.84
+on:
+  push:
+    branches: [integration/verify-v0.1.84]
+permissions:
+  contents: read
+jobs:
+  reader:
+    runs-on: macos-15-intel
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: d954b2d117ee87feb44d67b814f3bb6556a29bc0
+      - name: Check exact tree and architecture
+        run: |
+          test "$(git rev-parse HEAD^{tree})" = "53086bf63d165b6dc891c8a582869f7ba9e3c0a9"
+          test "$(uname -m)" = x86_64
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run e2e -- e2e/reader-deepseek-search.spec.js --workers=1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: reader-deepseek-evidence
+          if-no-files-found: warn
+          path: |
+            e2e/screenshots/
+            test-results/
