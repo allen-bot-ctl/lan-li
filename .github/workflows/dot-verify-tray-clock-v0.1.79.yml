@@ -1,0 +1,48 @@
+name: Verify LanLi menu-bar clock v0.1.79
+on:
+  push:
+    branches: [integration/verify-v0.1.79]
+    paths: [.github/workflows/dot-verify-tray-clock-v0.1.79.yml]
+permissions:
+  contents: read
+jobs:
+  native:
+    if: github.repository == 'allen-bot-ctl/lan-li' && github.actor_id == '352863755'
+    runs-on: macos-15-intel
+    timeout-minutes: 14
+    env:
+      EXPECTED: 79c63d962445db8d3c45ba2529cbf2c7ca9d2028
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.EXPECTED }}
+          persist-credentials: false
+      - name: Verify exact checked-out source and Intel runner
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED"
+          test "$(uname -m)" = x86_64
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npm test
+      - name: Verify actual Electron Tray image and settings interaction
+        run: npm run e2e -- e2e/tray-compact-clock.spec.js e2e/settings-layout.spec.js e2e/polish-0135.spec.js e2e/settings-0134.spec.js e2e/tray-menu-0140.spec.js
+      - name: Keep exact Tray image pixels and synthetic settings
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: synthetic-tray-bitmap
+          path: |
+            test-results/**/tray-compact-*.png
+            test-results/**/settings-layout*/*.png
+          retention-days: 3
+          if-no-files-found: warn
+      - name: Keep synthetic failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: synthetic-tray-failure
+          path: test-results/
+          retention-days: 3
+          if-no-files-found: ignore
