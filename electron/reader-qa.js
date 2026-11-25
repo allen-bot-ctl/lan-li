@@ -76,7 +76,7 @@ function createReaderQa({store, keys, complete, llmFetch, reportUsage, io = fs})
       return failure('storage','无法读取本机追问记录，已有记录未修改');
     }
   }
-  async function send(input, owner) {
+  async function send(input, owner, emitDelta) {
     const {id, question:raw, requestId} = input || {};
     if (!validId(id) || !validRequest(requestId)) return failure('invalid','无法发送这个问题');
     if (typeof raw !== 'string' || raw.length > QUESTION * 2) return failure('invalid','问题最多 2000 字');
@@ -98,10 +98,13 @@ function createReaderQa({store, keys, complete, llmFetch, reportUsage, io = fs})
       try {
         result = await complete({
           configuration, messages:makeMessages({source,turns,question,webSearch}), webSearch,
-          fetchImpl:llmFetch(), signal:controller.signal, reportUsage, kind:'followup'
+          fetchImpl:llmFetch(), signal:controller.signal, reportUsage, kind:'followup',
+          onDelta:(delta) => { if (!controller.signal.aborted) emitDelta?.({id,requestId,delta}); }
         });
       } catch (e) {
         if (controller.signal.aborted) return failure('canceled','追问已停止');
+        if (e?.code === 'answer-limit') return failure('answer-limit','回答太长，未保存。请试试更具体的问题');
+        if (e?.code === 'incomplete') return failure('incomplete','回答没有完整结束，可以重试');
         if (e?.code === 'timeout') return failure('timeout','回答超时，可以重试');
         if (e?.code === 'http' && [401,403].includes(e.status)) return failure('authorization','大模型拒绝了连接，请检查配置后重试');
         return failure('provider','暂时无法取得回答，可以重试');

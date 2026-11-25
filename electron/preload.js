@@ -88,6 +88,11 @@ contextBridge.exposeInMainWorld('lanli', {
   getReaderQa: (id) => ipcRenderer.invoke('reader:getQa', id),
   sendReaderQa: (input) => ipcRenderer.invoke('reader:sendQa', input),
   cancelReaderQa: (input) => ipcRenderer.send('reader:cancelQa', input),
+  onReaderQaDelta: (callback) => {
+    const handler = (_event,payload) => callback(payload);
+    ipcRenderer.on('reader:qaDelta',handler);
+    return () => ipcRenderer.removeListener('reader:qaDelta',handler);
+  },
   submitReader: (url) => ipcRenderer.invoke('reader:submit', url),
   retryReader: (id) => ipcRenderer.invoke('reader:retry', id),
   resummarizeReader: (id) => ipcRenderer.invoke('reader:resummarize', id),

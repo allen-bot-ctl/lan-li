@@ -1806,3 +1806,6 @@ html[data-calendar-inbox-unlinked] .app:has(.app-body:not([hidden])) #inbox-butt
 .reader-qa-search-status.is-used {color:var(--accent-strong,var(--text))}
 .reader-qa-sources {margin:5px 0 0;padding-inline-start:17px;font-size:11px;overflow-wrap:anywhere}
 .reader-qa-sources a {color:var(--accent-strong,var(--text));text-decoration:underline}
+
+/* Render incomplete answer text literally; final answers use the existing Markdown renderer. */
+.reader-qa-plain {white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;line-height:1.55;user-select:text}

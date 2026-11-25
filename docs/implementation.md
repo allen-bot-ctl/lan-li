@@ -234,6 +234,8 @@ main.setupUpdates()
 
 追问可选用 [DeepSeek 官方 Web Tools](https://api-docs.deepseek.com/guides/web_tools/)：只有已保存的官方 HTTPS 主机、`deepseek-flash`、全局授权与当次追问允许同时满足时，才通过现有 Chat Completions 请求声明 `deepseek_web_search`。工具由 DeepSeek 执行；应用不直接抓取来源。历史只保留追问结果、实际搜索状态和可安全打开的来源，不保存供应商原始工具数据。未请求搜索时沿用原有请求路径。
 
+追问发送使用 [Chat Completions 流式响应](https://api-docs.deepseek.com/api/create-chat-completion/)：SSE 只把模型正文增量按文章和请求 ID 传给当前视图，不转发推理文本。仅正常结束（`finish_reason: stop` 与 `[DONE]`）且有有效正文的流才写成功历史；取消、截断或意外断开不写。兼容服务若对同一请求直接返回明确结束的完整 JSON，只显示一次完整答案，不做动画或二次请求。用量仍按一次实际请求统计；DeepSeek 的联网调用与来源取 [流最后一帧中的完整字段](https://api-docs.deepseek.com/guides/web_tools/#chat-completions-api)，不能从正文猜测。
+
 **invoke（渲染 → 主，返回 Promise）**
 
 | 频道 | preload API | 作用 |
@@ -279,6 +281,7 @@ main.setupUpdates()
 | `update:notice` | `onUpdateNotice` | `ready` / `manual` 通用提示；打开窗口与加载完成时重发 |
 | `update:status` | `onUpdateStatus` | 短状态；**仅手动检查**时发送 |
 | `pin:state` | `onPinState` | 主进程钉住状态变化（取消钉住、隐藏）时发送 `{ pinned }` |
+| `reader:qaDelta` | `onReaderQaDelta` | 本轮追问收到的纯文字增量 `{ id, requestId, delta }`；只在等待中的视图显示，最终结果仍由 `reader:sendQa` 返回 |
 
 **preload API 全量（27 个）**：`getVersion`、`getState`、`setView`、`goToday`、`addClock`、`removeClock`、`setMenuBarClock`、`searchClocks`、`getWeather`、`searchCity`、`getQuickCities`、`setCity`、`getAlmanacStyles`、`setAlmanacStyle`、`onWeatherUpdate`、`onTick`、`pointerEnter`、`pointerLeave`、`togglePin`、`onPinState`、`openSettings`、`onOpenPanel`、`onUpdateNotice`、`onUpdateStatus`、`checkUpdate`、`restartToUpdate`、`openLatestRelease`。
 

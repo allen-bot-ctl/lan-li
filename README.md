@@ -1,4 +1,4 @@
-# 栏历 0.1.84
+# 栏历 0.1.85
 
 > 开发与协作文档：入口见 [AGENTS.md](AGENTS.md)，完整索引见 [docs/README.md](docs/README.md)。
 
@@ -7,6 +7,8 @@
 **帮阅追问（0.1.83）**：从「帮阅」打开已有摘要的文章，再点「追问」。追问在同一窗口的对话页进行，不替换原摘要；发送时会把文章上下文和该文章近期问答交给你在「设置 → 大模型」配置的服务。仅打开对话页不会发起模型请求。
 
 **追问联网搜索（0.1.84）**：使用官方 DeepSeek API（HTTPS `api.deepseek.com`）和 `deepseek-flash` 时，可在「设置 → 大模型 → 配置」开启「允许联网搜索」，默认关闭。开启后可在每道追问中关闭「联网搜索」；是否实际使用搜索由模型决定，返回的来源可以在回答中查看。原有接口地址、模型和 Key 不会自动更改。
+
+**追问实时回答（0.1.85）**：发送后，回复文字随模型实际返回逐段显示，无需等完整回答。停止或断流不会把未完成的内容算作一轮成功问答；仍可用原问题重试。既有模型和联网搜索设置不变。
 
 ## 下载与主页
 
@@ -56,11 +58,11 @@ npm run dist
 
 `electron-builder` 会生成未签名的 dmg 与 zip，包含 x64 和 arm64：
 
-- `dist/LanLi-0.1.84-mac-x64.dmg`
-- `dist/LanLi-0.1.84-mac-x64.zip`
-- `dist/LanLi-0.1.84-mac-x64.zip.sha256`（由发布工作流生成）
-- `dist/LanLi-0.1.84-mac-arm64.dmg`
-- `dist/LanLi-0.1.84-mac-arm64.zip`
+- `dist/LanLi-0.1.85-mac-x64.dmg`
+- `dist/LanLi-0.1.85-mac-x64.zip`
+- `dist/LanLi-0.1.85-mac-x64.zip.sha256`（由发布工作流生成）
+- `dist/LanLi-0.1.85-mac-arm64.dmg`
+- `dist/LanLi-0.1.85-mac-arm64.zip`
 
 本轮 `build.mac.identity` 为 `null`，不做代码签名与公证。GitHub Actions 的 Release 工作流只构建并发布 macOS Intel（x64）的 dmg、zip 与 zip 的 sha256 校验文件；本地执行 `npm run dist` 仍可能同时打出 x64 和 arm64。自动更新服务读取 Release 里的 `LanLi-<version>-mac-x64.zip`，不需要额外上传 `latest-mac.yml`。
 

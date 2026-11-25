@@ -265,7 +265,7 @@
     qaStop.hidden = !pending;
     $('reader-qa-web-search-row').hidden = !(qa.webSearchAvailable && llmReady && qa.available && !qa.loading);
     qaWebSearch.disabled = !canSend;
-    $('reader-qa-hint').textContent = pending ? '正在生成回答…' : (/Mac/i.test(navigator.platform) ? '⌘ Enter 发送' : 'Ctrl+Enter 发送');
+    $('reader-qa-hint').textContent = pending ? (qa.stream?.started ? '正在接收回答…' : '正在生成回答…') : (/Mac/i.test(navigator.platform) ? '⌘ Enter 发送' : 'Ctrl+Enter 发送');
     $('reader-qa-model').hidden = qa.loading || llmReady;
     $('reader-qa-state').textContent = qa.loading ? '正在打开问答…' :
       pending || !qa.loaded ? '' :
@@ -309,7 +309,54 @@
     row.append(meta);
   }
 
-  function renderQaHistory() {
+  function qaAtBottom() {
+    return qaScroll.scrollHeight - qaScroll.clientHeight - qaScroll.scrollTop <= 32;
+  }
+
+  function startQaStream(current, requestId, question) {
+    const following = qaAtBottom();
+    const row = document.createElement('div');
+    row.id = 'reader-qa-stream-turn';
+    row.className = 'reader-qa-turn reader-qa-stream';
+    row.setAttribute('role', 'listitem');
+    const prompt = document.createElement('div');
+    prompt.className = 'reader-qa-question';
+    prompt.setAttribute('aria-label', '你的问题');
+    prompt.textContent = question;
+    const answer = document.createElement('div');
+    answer.id = 'reader-qa-stream-answer';
+    answer.className = 'reader-qa-answer reader-qa-plain';
+    answer.setAttribute('aria-label', '正在生成的模型回答');
+    answer.textContent = '等待模型回复…';
+    row.append(prompt, answer);
+    qaHistory.append(row);
+    if (following) qaScroll.scrollTop = qaScroll.scrollHeight;
+    const stream = current.stream = { row, started: false, unsubscribe: null };
+    stream.unsubscribe = api.onReaderQaDelta?.((payload) => {
+      if (qa !== current || current.stream !== stream || current.requestId !== requestId ||
+          payload?.id !== current.id || payload.requestId !== requestId ||
+          typeof payload.delta !== 'string' || !payload.delta) return;
+      const followDelta = qaAtBottom();
+      if (!stream.started) {
+        stream.started = true;
+        answer.replaceChildren();
+        updateQaControls();
+      }
+      // A partial response is plain text, never unfinished Markdown/HTML.
+      answer.append(document.createTextNode(payload.delta));
+      if (followDelta) qaScroll.scrollTop = qaScroll.scrollHeight;
+    });
+  }
+
+  function clearQaStream(current) {
+    const stream = current.stream;
+    if (!stream) return;
+    current.stream = null;
+    if (typeof stream.unsubscribe === 'function') stream.unsubscribe();
+    stream.row.remove();
+  }
+
+  function renderQaHistory(follow = true) {
     qaHistory.replaceChildren();
     for (const turn of qa.turns) {
       const row = document.createElement('div');
@@ -327,7 +374,7 @@
       renderQaSearch(row, turn.webSearch);
       qaHistory.append(row);
     }
-    qaScroll.scrollTop = qaScroll.scrollHeight;
+    if (follow) qaScroll.scrollTop = qaScroll.scrollHeight;
   }
 
   function closeQa(restoreArticle = true) {
@@ -335,6 +382,7 @@
     const current = qa;
     rememberQaDraft(current.id, qaInput.value);
     qa = null;
+    clearQaStream(current);
     if (current.requestId) api.cancelReaderQa({ id: current.id, requestId: current.requestId });
     qaView.hidden = true;
     if (restoreArticle && detailId === current.id && !view.hidden) {
@@ -382,8 +430,11 @@
     const current = qa;
     const requestId = current.requestId = crypto.randomUUID();
     showQaError('');
+    const composerFocused = document.activeElement === qaInput || document.activeElement === qaSend;
     updateQaControls();
+    if (composerFocused) qaStop.focus({ preventScroll: true });
     try {
+      startQaStream(current, requestId, question);
       const r = await api.sendReaderQa({ id: current.id, question, requestId, webSearch: !!current.webSearchAvailable && qaWebSearch.checked });
       if (qa !== current || current.requestId !== requestId) return;
       if (!r?.ok) {
@@ -394,14 +445,20 @@
       current.turns = Array.isArray(r.turns) ? r.turns : [];
       qaInput.value = '';
       rememberQaDraft(current.id, '');
-      renderQaHistory();
+      const following = qaAtBottom();
+      const scrollTop = qaScroll.scrollTop;
+      clearQaStream(current);
+      renderQaHistory(following);
+      if (!following) qaScroll.scrollTop = scrollTop;
     } catch {
       if (qa === current && current.requestId === requestId) showQaError('未能生成回答。问题已保留，可重试。');
     } finally {
       if (qa === current && current.requestId === requestId) {
+        const restoreComposer = document.activeElement === qaStop;
         current.requestId = null;
+        clearQaStream(current);
         updateQaControls();
-        if (!qaInput.disabled) qaInput.focus({ preventScroll: true });
+        if (restoreComposer && !qaInput.disabled) qaInput.focus({ preventScroll: true });
       }
     }
   }
@@ -415,7 +472,7 @@
     updateQaControls();
   });
   qaInput.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter' && (event.metaKey || event.ctrlKey) && !event.isComposing) {
+    if (event.key === 'Enter' && (event.metaKey || event.ctrlKey) && !event.isComposing && event.keyCode !== 229) {
       event.preventDefault();
       submitQa();
     }
@@ -424,6 +481,7 @@
     if (!qa?.requestId) return;
     const requestId = qa.requestId;
     qa.requestId = null;
+    clearQaStream(qa);
     api.cancelReaderQa({ id: qa.id, requestId });
     showQaError('已停止回答。问题已保留，可重试。');
     updateQaControls();

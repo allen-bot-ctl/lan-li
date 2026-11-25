@@ -4,7 +4,7 @@
 const path = require('node:path');
 const fs = require('node:fs');
 const C = require('./reader-core');
-const { complete, ping } = require('./reader-llm');
+const { complete, completeStream, ping } = require('./reader-llm');
 const { createLlmUsageStore } = require('./llm-usage');
 const { createReaderQa } = require('./reader-qa');
 
@@ -69,7 +69,7 @@ function createReaderController(deps) {
   const keys = C.createKeyStore({ file: keyFile, prefs });
   const prompts = C.createPromptStore({ file: promptFile });
   const usage = createLlmUsageStore({file:deps.usageFile});
-  const qa = createReaderQa({store,keys,complete,llmFetch,reportUsage:usage.record});
+  const qa = createReaderQa({store,keys,complete:completeStream,llmFetch,reportUsage:usage.record});
   const queue = [];
   let running = null; // { id, abort }
   let fakeLlm = null; // e2e：{ status, points, delayMs, raw }
@@ -215,7 +215,8 @@ function createReaderController(deps) {
     if (!fakeLlm) return globalThis.fetch;
     return async (url, opts) => {
       const f = fakeLlm;
-      try { const b = JSON.parse(opts.body); e2eLlmCalls.push({ url: String(url), model: b.model, ping: b.max_tokens === 1, system: (b.messages.find((x) => x.role === 'system') || {}).content, user: (b.messages.find((x) => x.role === 'user') || {}).content, messages: b.messages, tools:b.tools, maxTokens: b.max_tokens, hasResponseFormat: 'response_format' in b }); } catch { /* ignore */ }
+      let b;
+      try { b = JSON.parse(opts.body); e2eLlmCalls.push({ url: String(url), model: b.model, ping: b.max_tokens === 1, system: (b.messages.find((x) => x.role === 'system') || {}).content, user: (b.messages.find((x) => x.role === 'user') || {}).content, messages: b.messages, tools:b.tools, stream:b.stream, streamOptions:b.stream_options, maxTokens: b.max_tokens, hasResponseFormat: 'response_format' in b }); } catch { /* ignore */ }
       if (f.delayMs) await new Promise((r) => setTimeout(r, f.delayMs));
       if (opts && opts.signal && opts.signal.aborted) { const e = new Error('aborted'); e.name = 'AbortError'; throw e; }
       if (f.networkError) throw new Error('synthetic unavailable');
@@ -223,6 +224,23 @@ function createReaderController(deps) {
       const n = f.points || 5;
       const content = f.raw != null ? f.raw : `## 一句话总结\n这是一句话总结。\n\n## 核心要点\n${Array.from({ length: n }, (_, i) => `${i + 1}. 要点 ${i + 1}`).join('\n')}`;
       if (f.once) fakeLlm = f.once;
+      if (b?.stream) {
+        const encode = new TextEncoder();
+        const packed = (obj) => encode.encode(`data: ${typeof obj === 'string' ? obj : JSON.stringify(obj)}\n\n`);
+        const delta = (d,finish_reason = null) => packed({model:f.model,choices:[{index:0,delta:d,finish_reason}]});
+        const body = (async function* () {
+          if (f.reasoning) yield delta({reasoning_content:f.reasoning});
+          for (const part of f.deltas || [content]) {
+            if (f.deltaDelayMs) await new Promise(r => setTimeout(r,f.deltaDelayMs));
+            if (opts.signal?.aborted) return;
+            yield delta({content:part});
+          }
+          yield delta({server_tool_calls:f.serverToolCalls,annotations:f.annotations},f.finishReason || 'stop');
+          if (f.usage) yield packed({model:f.model,choices:[],usage:f.usage});
+          if (!f.dropDone) yield packed('[DONE]');
+        })();
+        return {ok:true,status:200,body};
+      }
       return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content, server_tool_calls:f.serverToolCalls, annotations:f.annotations } }], usage:f.usage, model:f.model }) };
     };
   }
@@ -384,7 +402,13 @@ function createReaderController(deps) {
     const qaAllowed = (e) => Boolean(deps.allowQaSender?.(e));
     const denied = () => ({ok:false,code:'forbidden',error:'无法访问追问'});
     ipcMain.handle('reader:getQa', (e, id) => qaAllowed(e) ? qa.get(id) : denied());
-    ipcMain.handle('reader:sendQa', (e, input) => qaAllowed(e) ? qa.send(input, e.sender.id) : denied());
+    ipcMain.handle('reader:sendQa', (e, input) => {
+      if (!qaAllowed(e)) return denied();
+      const frame = e.senderFrame;
+      return qa.send(input, e.sender.id, (payload) => {
+        if (!frame.detached && qaAllowed(e)) frame.send('reader:qaDelta',payload);
+      });
+    });
     ipcMain.on('reader:cancelQa', (e, input) => { if (qaAllowed(e)) qa.cancel(input,e.sender.id); });
     ipcMain.handle('reader:submit', (_e, url) => submit(url));
     ipcMain.handle('reader:retry', (_e, id) => retry(id, false));
