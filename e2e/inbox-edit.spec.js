@@ -48,9 +48,9 @@ test('系统剪贴板图文原位编辑，图前后、格式、取消、保存�
     await expect(page.locator('#inbox-detail-edit')).toHaveText('编辑');
     const titleX = (await page.locator('#inbox-title').boundingBox()).x;
     await page.click('#inbox-detail-edit');
-    const titleEdit = page.getByRole('textbox', {name:'收纳标题'});
-    await expect(titleEdit).toBeFocused();
-    expect((await titleEdit.boundingBox()).x).toBe(titleX);
+    const titleEdit = () => page.getByRole('textbox', {name:'收纳标题'});
+    await expect(titleEdit()).toBeFocused();
+    expect((await titleEdit().boundingBox()).x).toBe(titleX);
     await expect(page.locator('#inbox-title')).toBeHidden();
     await expect(page.locator('#inbox-detail-frame')).toBeHidden();
     expect((await page.locator('#inbox-wys-panel').boundingBox()).y).toBe(paneTop);
@@ -73,7 +73,7 @@ test('系统剪贴板图文原位编辑，图前后、格式、取消、保存�
       });
       await page.keyboard.insertText(text);
     };
-    await titleEdit.fill('不应被保存的标题');
+    await titleEdit().fill('不应被保存的标题');
     await replace('图前：','图前：不应被保存');
     await expect(writer.locator('p').filter({ hasText: '图前：不应被保存' })).toBeVisible();
     await page.click('#inbox-wys-cancel');
@@ -83,14 +83,14 @@ test('系统剪贴板图文原位编辑，图前后、格式、取消、保存�
     await expect(frame().locator('p').filter({hasText:'图后：待修改'})).toBeVisible();
     await expect(frame().locator('p').filter({hasText:'图前：不应被保存'})).toHaveCount(0);
     await page.click('#inbox-detail-edit');
-    await titleEdit.fill('只改标题');
+    await titleEdit().fill('只改标题');
     await page.click('#inbox-wys-save');
     await expect(page.locator('#inbox-title')).toHaveText('只改标题');
     const titleOnly = JSON.parse(fs.readFileSync(path.join(work,'inbox',id,'meta.json'),'utf8'));
     expect(titleOnly.displayTitle).toBe('只改标题');
     expect(titleOnly.documentEdit).toBeUndefined();
     await page.click('#inbox-detail-edit');
-    await titleEdit.fill('已保存的新标题');
+    await titleEdit().fill('已保存的新标题');
     await replace('图后：待修改','图后：修改已保存');
     await page.click('#inbox-wys-save');
     await expect(frame().locator('p').filter({hasText:'图后：修改已保存'})).toBeVisible();
@@ -122,7 +122,7 @@ test('系统剪贴板图文原位编辑，图前后、格式、取消、保存�
     await page.click('#inbox-detail-edit');
     await expect(frame().locator('p')).toHaveText('旧格式正文内容');
     await expect(page.locator('#inbox-edit-dialog')).toBeHidden();
-    await titleEdit.fill('旧格式新标题');
+    await titleEdit().fill('旧格式新标题');
     await page.click('#inbox-wys-save');
     await expect(page.locator('#inbox-title')).toHaveText('旧格式新标题');
     assert.equal(fs.readFileSync(legacyPath,'utf8'),legacyOriginal);
@@ -179,7 +179,9 @@ test('首张图片上方不冒出空行，有意的换行仍然保留', async ()
     const readFrame = await page.locator('#inbox-detail-frame').boundingBox();
     await page.click('#inbox-detail-edit');
     const editable = page.locator('#inbox-wys-body .tiptap');
-    const editImage = await editable.locator('img').boundingBox();
+    const realImage = editable.locator('img[data-attachment-id]');
+    await expect(realImage).toBeVisible();
+    const editImage = await realImage.boundingBox();
     const editBody = await page.locator('#inbox-wys-body').boundingBox();
     expect(Math.abs((editImage.y - editBody.y) - (readImage.y - readFrame.y))).toBeLessThan(8);
     expect(await editable.locator('pre').textContent()).toBe('合成样本首行\n\n末行');
@@ -196,7 +198,7 @@ test('首张图片上方不冒出空行，有意的换行仍然保留', async ()
     await row.click();
     await expect(frame.locator('img')).toBeVisible();
     await page.click('#inbox-detail-edit');
-    const authoredImage = await editable.locator('img').boundingBox();
+    const authoredImage = await realImage.boundingBox();
     const authoredBody = await page.locator('#inbox-wys-body').boundingBox();
     expect((authoredImage.y - authoredBody.y) - (editImage.y - editBody.y)).toBeGreaterThan(10);
     await expect(editable.locator('p').first().locator('br:not(.ProseMirror-trailingBreak)')).toHaveCount(1);
