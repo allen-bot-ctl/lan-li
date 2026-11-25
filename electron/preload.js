@@ -13,6 +13,8 @@ contextBridge.exposeInMainWorld('lanli', {
   getSettings: () => ipcRenderer.invoke('settings:get'),
   setOpenAtLogin: (value) => ipcRenderer.invoke('settings:setOpenAtLogin', value),
   setMenuBarShowDate: (value) => ipcRenderer.invoke('settings:setMenuBarShowDate', value),
+  setInboxDateLinkEnabled: (value) => ipcRenderer.invoke('settings:setInboxDateLinkEnabled', value),
+  onInboxDateLinkChanged: (callback) => ipcRenderer.on('settings:inboxDateLinkChanged', (_event, value) => callback(value)),
   setCaptureHotkey: (value) => ipcRenderer.invoke('settings:setCaptureHotkey', value),
   setHotkey: (kind, accelerator) => ipcRenderer.invoke('settings:setHotkey', { kind, accelerator }),
   setSettingsView: (open) => ipcRenderer.send('settings:viewState', open),

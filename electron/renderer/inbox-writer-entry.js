@@ -74,6 +74,12 @@ function createWriter(element, toolbar) {
     },
     document: () => rewrite(editor.getJSON(), true),
     focus: () => editor.commands.focus(),
+    focusForOpen() {
+      // Focus as part of opening, not in a later animation frame that could
+      // take focus back from a title the user has already clicked.
+      editor.view.focus();
+      editor.view.dispatch(editor.state.tr.scrollIntoView());
+    },
     setEditable: value => editor.setEditable(value),
     getLink: () => editor.getAttributes('link').href || '',
     applyLink(href) {

@@ -62,43 +62,65 @@ test.beforeEach(async ({}, info) => {
 });
 
 
-test('R1 没有 Key：提示词只读、三个按钮置灰、显示锁定提示；保存 Key 立即解锁；删除 Key 立即锁定', async () => {
+test('R1 无大模型仍可手动改提示词，只锁 AI；入口、保存和删除 Key 立即更新应用状态', async () => {
   await openReaderSettings();
-  const ta = page.locator('#reader-prompt');
-  const lock = page.locator('#reader-prompt-lock');
-  await expect(page.locator('#reader-key-status')).toHaveText('未配置');
-  await expect(ta).toHaveJSProperty('readOnly', true);
-  for (const id of ['reader-prompt-save', 'reader-prompt-reset', 'reader-prompt-ai']) await expect(page.locator('#' + id)).toBeDisabled();
-  await expect(lock).toBeVisible();
-  await expect(lock).toHaveText('先在上面配置大模型，才能修改提示词。');
-  expect(await ta.evaluate((e) => getComputedStyle(e).opacity)).toBe('0.45');
-  expect((await ta.inputValue()).startsWith('你是阅读助手')).toBe(true);
+  const editor = page.locator('#reader-prompt');
+  const warning = page.locator('#reader-prompt-lock');
+  const modelCta = page.locator('#reader-settings-llm-go');
+  const ai = page.locator('#reader-prompt-ai');
+  const localSave = page.locator('#reader-prompt-save');
+  const localReset = page.locator('#reader-prompt-reset');
+  const model = page.locator('#settings-page-llm');
+  await expect(model).toBeHidden();
+  await expect(warning).toBeVisible();
+  await expect(warning.getByRole('button')).toHaveCount(1);
+  await expect(modelCta).toHaveText('前往大模型');
+  await expect(ai).toBeDisabled();
+  await expect(editor).toBeEditable();
+  await expect(localSave).toBeEnabled();
+  await expect(localReset).toBeEnabled();
+  await expect(editor).toHaveValue(/^你是阅读助手/);
   await expect(page.locator('.reader-prompt-hint')).toBeVisible();
   await shots('64-prompt-locked', page.locator('#settings-view'));
-  // 保存 Key → 不切页立即解锁
+
+  await editor.fill('没有大模型也能手动保存的提示词');
+  await localSave.click();
+  await expect(page.locator('#toast-title')).toHaveText('提示词已保存');
+  expect(fileText()).toBe('没有大模型也能手动保存的提示词');
+
+  await modelCta.click();
+  await expect(model).toBeVisible();
+  await expect(page.locator('#settings-page-reader')).toBeHidden();
+  await expect(page.locator('#reader-key-status')).toHaveText('未配置');
   await page.fill('#reader-key', 'sk-e2e-0164');
   await page.click('#reader-key-save');
   await expect(page.locator('#reader-key-status')).toHaveText('已配置 · deepseek-chat');
-  await expect(ta).toHaveJSProperty('readOnly', false);
-  for (const id of ['reader-prompt-save', 'reader-prompt-reset', 'reader-prompt-ai']) await expect(page.locator('#' + id)).toBeEnabled();
-  await expect(lock).toBeHidden();
-  // 删除 Key → 立即锁定，未保存的改动丢弃
-  await ta.fill('没保存的改动');
+  await page.locator('.settings-tab[data-tab="reader"]').click();
+  await expect(ai).toBeEnabled();
+  await expect(warning).toBeHidden();
+  await expect(editor).toHaveValue('没有大模型也能手动保存的提示词');
+
+  await page.locator('.settings-tab[data-tab="llm"]').click();
   await page.click('#reader-key-del');
   await expect(page.locator('#reader-key-status')).toHaveText('未配置');
-  await expect(ta).toHaveJSProperty('readOnly', true);
-  await expect(page.locator('#reader-prompt-ai')).toBeDisabled();
-  await expect(lock).toBeVisible();
-  await expect(ta).not.toHaveValue('没保存的改动');
-  // 测试连接失败不锁：重新配置，假接口 401
+  await page.locator('.settings-tab[data-tab="reader"]').click();
+  await expect(warning).toBeVisible();
+  await expect(ai).toBeDisabled();
+  await expect(editor).toBeEditable();
+  await localReset.click();
+  await expect(page.locator('#toast-title')).toHaveText('已恢复默认');
+  expect(fileText()).toBeNull();
+
+  // A fake 401 from Test Connection does not invalidate saved model fields.
+  await modelCta.click();
   await page.fill('#reader-key', 'sk-e2e-0164');
   await page.click('#reader-key-save');
-  await expect(ta).toHaveJSProperty('readOnly', false);
+  await expect(page.locator('#reader-key-status')).toHaveText('已配置 · deepseek-chat');
   await hook('readerSetFakeLlm', { status: 401 });
   await page.click('#reader-test');
   await expect(page.locator('#reader-key-status')).toContainText('测试失败');
-  await expect(ta).toHaveJSProperty('readOnly', false);
-  await expect(page.locator('#reader-prompt-ai')).toBeEnabled();
+  await page.locator('.settings-tab[data-tab="reader"]').click();
+  await expect(ai).toBeEnabled();
   await hook('readerSetFakeLlm', null);
 });
 

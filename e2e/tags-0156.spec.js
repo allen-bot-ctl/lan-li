@@ -180,13 +180,13 @@ test.describe.serial('main', () => {
     expect((await libNames()).length).toBe(n0);
   });
 
-  test('T6b 弹层「管理标签…」→ 打开设置页「标签」tab', async () => {
+  test('T6b 弹层「管理标签…」→ 打开设置页「收纳」', async () => {
     await openTagPopFor('真实条目 05');
     await page.click('#inbox-tagpop-manage');
     await expect(page.locator('#settings-view')).toBeVisible();
     await expect(page.locator('#settings-page-tags')).toBeVisible();
     await expect(page.locator('.settings-tab[data-tab="tags"]')).toHaveClass(/is-selected/);
-    await expect(page.locator('#settings-page-title')).toHaveText('标签');
+    await expect(page.locator('#settings-page-title')).toHaveText('收纳');
     await expect(page.locator('#tags-list .tag-row')).toHaveCount(4);
     await expect(page.locator('#tags-list .tag-row[data-name="test"] .tag-row-count')).toHaveText(`${testIdsBefore.length} 项`);
     for (const scheme of ['dark', 'light']) {

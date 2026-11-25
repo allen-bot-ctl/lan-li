@@ -48,6 +48,7 @@ async function openReader() {
   await page.waitForSelector('#reader-view:not([hidden])');
 }
 const openReaderSettings = async () => { await page.evaluate(() => window.openSettingsView('reader')); await page.waitForSelector('#settings-page-reader:not([hidden])'); };
+const openModelSettings = async () => { await page.evaluate(() => window.openSettingsView('llm')); await page.waitForSelector('#settings-page-llm:not([hidden])'); };
 async function submit(url) {
   await page.fill('#reader-input', url);
   await page.press('#reader-input', 'Enter');
@@ -91,7 +92,8 @@ test('R2 没配置：输入框和「帮我读」disabled、提示卡、去设置
   const card = page.locator('#reader-nollm');
   await expect(card).toBeVisible();
   await expect(card.locator('.reader-nollm-title')).toHaveText('先配置大模型才能用帮阅');
-  await expect(card.locator('.reader-nollm-desc')).toHaveText('在 设置 › 帮阅 填好接口地址、模型和 API Key 就能用。');
+  await expect(card.locator('.reader-nollm-desc')).toContainText('大模型');
+  await expect(card.locator('#reader-nollm-go')).toHaveText('前往大模型');
   const fs15 = await card.locator('.reader-nollm-title').evaluate((e) => { const c = getComputedStyle(e); return [c.fontSize, c.fontWeight]; });
   expect(fs15[0]).toBe('15px');
   expect(Number(fs15[1])).toBeGreaterThanOrEqual(600);
@@ -116,9 +118,9 @@ test('R2 没配置：输入框和「帮我读」disabled、提示卡、去设置
   await expect(page.locator('#reader-d-points li')).toHaveCount(2);
   expect(fs.readFileSync(path.join(legacyDir, 'meta.json'), 'utf8')).toBe(legacyJson);
   await page.click('#reader-back');
-  // 去设置
+  // 前往大模型
   await page.click('#reader-nollm-go');
-  await page.waitForSelector('#settings-page-reader:not([hidden])');
+  await page.waitForSelector('#settings-page-llm:not([hidden])');
   await expect(page.locator('#reader-view')).toBeHidden();
   // 保存后回帮阅，立刻可用
   await page.fill('#reader-key', 'sk-e2e-0162');
@@ -130,14 +132,14 @@ test('R2 没配置：输入框和「帮我读」disabled、提示卡、去设置
   await expect(page.locator('#reader-input')).toHaveAttribute('placeholder', '粘贴网址，回车开始读');
   await expect(page.locator('#reader-go')).toBeEnabled();
   // 删除 Key 后回来恢复禁用
-  await openReaderSettings();
+  await openModelSettings();
   await page.click('#reader-key-del');
   await expect(page.locator('#reader-key-status')).toHaveText('未配置');
   await openReader();
   await expect(page.locator('#reader-nollm')).toBeVisible();
   await expect(page.locator('#reader-input')).toBeDisabled();
   await expect(page.locator('#reader-go')).toBeDisabled();
-  await openReaderSettings();
+  await openModelSettings();
   await page.fill('#reader-key', 'sk-e2e-0162');
   await page.click('#reader-key-save');
   await expect(page.locator('#reader-key-status')).toHaveText('已配置 · deepseek-chat');
@@ -199,7 +201,7 @@ test('R5 提示词：默认预填逐字一致；保存、重开仍在；空不�
 test('R6 详情页 Markdown：标题、列表、粗体、引用、代码块；<script>/<img onerror> 当文字；链接只开 http/https；复制格式；meta 只有 markdown', async () => {
   // R6 validates Markdown independent of earlier tests configuring the fake model.
   seedLegacyReaderRecord();
-  await openReaderSettings();
+  await openModelSettings();
   await expect(page.locator('#reader-base')).toHaveValue('https://api.deepseek.com');
   await expect(page.locator('#reader-model')).toHaveValue('deepseek-chat');
   await page.fill('#reader-key', 'sk-e2e-0162');

@@ -67,7 +67,7 @@ test.beforeAll(async () => {
 });
 test.afterAll(async () => { if (app) await app.close(); if (server) server.close(); });
 
-test('R3a 没有 Key：输入框禁用、提示卡；不能提交、不读取、不建记录；「去设置」进设置帮阅 tab（0.1.62 改）', async () => {
+test('R3a 没有 Key：输入框禁用、提示卡；不能提交、不读取、不建记录；「前往大模型」进大模型设置', async () => {
   await hook('setClipboardText', 'not a url');
   await openReader();
   await expect(page.locator('#reader-nollm')).toBeVisible();
@@ -84,10 +84,10 @@ test('R3a 没有 Key：输入框禁用、提示卡；不能提交、不读取、
   await expect(page.locator('.reader-row')).toHaveCount(0);
   await page.click('#reader-nollm-go');
   await page.waitForSelector('#settings-view:not([hidden])');
-  await expect(page.locator('#settings-page-reader')).toBeVisible();
+  await expect(page.locator('#settings-page-llm')).toBeVisible();
   await expect(page.locator('#reader-view')).toBeHidden();
   await expect(page.locator('#reader-key-status')).toHaveText('未配置');
-  await expect(page.locator('#settings-page-reader')).not.toContainText(/easylens/i);
+  await expect(page.locator('#settings-page-llm')).not.toContainText(/easylens/i);
   await expect(page.locator('#reader-base')).toHaveValue('https://api.deepseek.com');
   await expect(page.locator('#reader-model')).toHaveValue('deepseek-chat');
   await expect(page.locator('#reader-key')).toHaveAttribute('type', 'password');
@@ -96,7 +96,7 @@ test('R3a 没有 Key：输入框禁用、提示卡；不能提交、不读取、
 
 test('R3b 设置页：校验、保存后「已配置 · deepseek-chat」、测试连接 401 / 404 / 200', async () => {
   // 文字不小于 12px；三个输入框同宽
-  const sizes = await page.locator('#settings-page-reader').evaluate((root) => [...root.querySelectorAll('*')].filter((e) => e.offsetParent && [...e.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim())).map((e) => parseFloat(getComputedStyle(e).fontSize)));
+  const sizes = await page.locator('#settings-page-llm').evaluate((root) => [...root.querySelectorAll('*')].filter((e) => e.offsetParent && [...e.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim())).map((e) => parseFloat(getComputedStyle(e).fontSize)));
   expect(Math.min(...sizes)).toBeGreaterThanOrEqual(12);
   const widths = await Promise.all(['#reader-base', '#reader-model', '#reader-key'].map(async (s) => Math.round((await page.locator(s).boundingBox()).width)));
   expect(new Set(widths).size).toBe(1);
@@ -179,8 +179,8 @@ test('R3d 删除 Key：状态行变「未配置」，帮阅页又出现提示', 
   await page.keyboard.press('Escape');
   await openReader();
   await expect(page.locator('#reader-msg')).toBeHidden();
-  await page.evaluate(() => window.openSettingsView('reader'));
-  await page.waitForSelector('#settings-page-reader:not([hidden])');
+  await page.evaluate(() => window.openSettingsView('llm'));
+  await page.waitForSelector('#settings-page-llm:not([hidden])');
   await page.click('#reader-key-del');
   await expect(page.locator('#reader-key-status')).toHaveText('未配置');
   await openReader();

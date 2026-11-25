@@ -81,7 +81,7 @@ test('C1 settings view open', async () => {
 
 test('C2 default tab is ui', async () => {
   const tabs = await page.locator('.settings-tab').allTextContents();
-  expect(tabs).toEqual(['界面设置', '黄历', '天气', '世界时钟', '标签', '帮阅', '升级']);
+  expect(tabs).toEqual(['界面设置', '黄历', '天气', '世界时钟', '收纳', '大模型', '帮阅', '升级']);
   const selected = await page.locator('.settings-tab.is-selected').allTextContents();
   expect(selected).toEqual(['界面设置']);
   await expect(page.locator('#settings-page-ui')).toBeVisible();

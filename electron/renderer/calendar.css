@@ -1732,3 +1732,8 @@ mark.inbox-hit{background:rgba(255,200,0,.45);color:inherit;border-radius:2px;}
 #inbox-detail:has(#inbox-wys-panel[data-title-only]:not([hidden])) { flex-direction: column; }
 #inbox-wys-panel[data-title-only] { flex: 0 0 auto; order: 1; }
 #inbox-detail:has(#inbox-wys-panel[data-title-only]:not([hidden])) #inbox-detail-frame { min-height: 0; }
+
+/* The shared archive button remains available off the calendar homepage. */
+html[data-calendar-inbox-unlinked] .app:has(.app-body:not([hidden])) #inbox-button { display: none; }
+/* Settings and the reader use the same model-unavailable card. */
+#settings-page-reader .reader-settings-nollm { margin: 0; }

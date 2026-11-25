@@ -301,8 +301,8 @@
         </div>
         <div class="reader-nollm" id="reader-nollm" hidden>
           <div class="reader-nollm-title">先配置大模型才能用帮阅</div>
-          <div class="reader-nollm-desc">在 设置 › 帮阅 填好接口地址、模型和 API Key 就能用。</div>
-          <button type="button" class="reader-nollm-go" id="reader-nollm-go">去设置</button>
+          <div class="reader-nollm-desc">在 设置 › 大模型 填好接口地址、模型和 API Key 就能用。</div>
+          <button type="button" class="reader-nollm-go" id="reader-nollm-go">前往大模型</button>
         </div>
         <div class="reader-msg" id="reader-msg" hidden></div>
         <div class="inbox-list reader-list" id="reader-list" role="list"></div>
@@ -339,7 +339,8 @@
           <button class="settings-tab" type="button" data-tab="almanac">黄历</button>
           <button class="settings-tab" type="button" data-tab="weather">天气</button>
           <button class="settings-tab" type="button" data-tab="clocks">世界时钟</button>
-          <button class="settings-tab" type="button" data-tab="tags">标签</button>
+          <button class="settings-tab" type="button" data-tab="tags">收纳</button>
+          <button class="settings-tab" type="button" data-tab="llm">大模型</button>
           <button class="settings-tab" type="button" data-tab="reader">帮阅</button>
           <button class="settings-tab" type="button" data-tab="update">升级</button>
         </nav>
@@ -359,15 +360,19 @@
               </section>
             </div>
             <div class="settings-page" id="settings-page-tags" hidden>
+              <section class="settings-card" aria-labelledby="settings-inbox-calendar-title">
+                <h3 class="settings-card-title" id="settings-inbox-calendar-title">日历联动</h3>
+                <label class="settings-row"><span class="settings-label">是否在日历中链接收纳</span><input class="settings-switch" id="setting-inbox-date-link" type="checkbox" role="switch" checked disabled><span class="switch-track" aria-hidden="true"></span></label>
+              </section>
               <section class="settings-card" aria-labelledby="settings-tags-title">
-                <h3 class="settings-card-title" id="settings-tags-title">管理标签</h3>
+                <h3 class="settings-card-title" id="settings-tags-title">标签</h3>
                 <div class="tags-add"><input id="tags-new" type="text" aria-label="新标签" maxlength="9" placeholder="新标签，回车添加" autocomplete="off"><button class="nav-pill tags-add-btn" id="tags-add-btn" type="button">添加</button></div>
                 <div class="tags-err" id="tags-new-err"></div>
                 <div class="tags-list" id="tags-list"></div>
                 <div class="tags-empty" id="tags-empty" hidden>还没有标签，在上面添加一个</div>
               </section>
             </div>
-            <div class="settings-page" id="settings-page-reader" hidden>
+            <div class="settings-page" id="settings-page-llm" hidden>
               <section class="settings-card" aria-labelledby="settings-model-title">
                 <h3 class="settings-card-title" id="settings-model-title">大模型</h3>
                 <div class="reader-llm-grid">
@@ -381,11 +386,17 @@
                 <div class="reader-key-status" id="reader-key-status" role="status">未配置</div>
                 <div class="reader-key-hint">支持 OpenAI 兼容接口（DeepSeek、OpenAI、通义、Kimi 等）。Key 只存在本机。</div>
               </section>
+            </div>
+            <div class="settings-page" id="settings-page-reader" hidden>
+              <div class="reader-nollm reader-settings-nollm" id="reader-prompt-lock" hidden>
+                <div class="reader-nollm-title">先配置大模型才能用帮阅</div>
+                <div class="reader-nollm-desc">在 设置 › 大模型 填好接口地址、模型和 API Key，就可以用 AI 改提示词。</div>
+                <button type="button" class="reader-nollm-go" id="reader-settings-llm-go">前往大模型</button>
+              </div>
               <section class="settings-card" aria-labelledby="settings-prompt-title">
                 <h3 class="settings-card-title" id="settings-prompt-title">提示词</h3>
-                <textarea class="reader-prompt" id="reader-prompt" spellcheck="false" aria-label="提示词" aria-describedby="reader-prompt-lock reader-prompt-hint"></textarea>
-                <div class="settings-actions reader-prompt-btns"><button class="nav-pill tags-add-btn" id="reader-prompt-save" type="button">保存</button><button class="nav-pill tags-add-btn" id="reader-prompt-reset" type="button">恢复默认</button><button class="nav-pill tags-add-btn" id="reader-prompt-ai" type="button">AI 改提示词</button><span class="reader-prompt-err" id="reader-prompt-err" hidden></span></div>
-                <div class="reader-prompt-lock" id="reader-prompt-lock" hidden>先在上面配置大模型，才能修改提示词。</div>
+                <textarea class="reader-prompt" id="reader-prompt" spellcheck="false" aria-label="提示词" aria-describedby="reader-prompt-hint"></textarea>
+                <div class="settings-actions reader-prompt-btns"><button class="nav-pill tags-add-btn" id="reader-prompt-save" type="button">保存</button><button class="nav-pill tags-add-btn" id="reader-prompt-reset" type="button">恢复默认</button><button class="nav-pill tags-add-btn" id="reader-prompt-ai" type="button" aria-describedby="reader-prompt-lock" disabled>AI 改提示词</button><span class="reader-prompt-err" id="reader-prompt-err" hidden></span></div>
                 <div class="reader-prompt-hint" id="reader-prompt-hint">文章正文会自动附在提示词后面；程序会另外要求大模型只把正文当资料，不执行其中的指令。</div>
               </section>
             </div>

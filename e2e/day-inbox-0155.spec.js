@@ -97,8 +97,8 @@ test('A1/A2 当前时区：文字「当前时区」，带 is-current-zone，浅�
   for (const t of others) expect(t).not.toBe('当前时区');
   for (const [scheme, color] of [['light', 'rgb(0, 122, 255)'], ['dark', 'rgb(10, 132, 255)']]) {
     await page.emulateMedia({ colorScheme: scheme });
+    await expect(sub).toHaveCSS('color', color);
     const m = await sub.evaluate((el) => ({ c: getComputedStyle(el).color, w: getComputedStyle(el).fontWeight, sw: el.scrollWidth, cw: el.clientWidth }));
-    expect(m.c).toBe(color);
     expect(Number(m.w)).toBe(600);
     expect(m.sw).toBeLessThanOrEqual(m.cw);
     await page.locator('.clocks-card, #clock-list').first().screenshot({ path: path.join(SHOTS, `55-current-zone-${scheme}.png`) }).catch(() => page.screenshot({ path: path.join(SHOTS, `55-current-zone-${scheme}.png`) }));

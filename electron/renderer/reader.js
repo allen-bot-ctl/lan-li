@@ -19,7 +19,9 @@
   const PH = '粘贴网址，回车开始读';
   const PH_OFF = '先配置大模型才能用帮阅';
   const md = window.MdRender.createMd(window.markdownit);
-  let llmReady = true;
+  let llmReady = false;
+  let modelCheck = null;
+  let configRevision = 0;
   let items = [];
   let detailId = null;
 
@@ -49,11 +51,25 @@
     }
     msg.hidden = false;
   }
-  const toKeySettings = () => openSettingsView('reader');
+  const toKeySettings = () => openSettingsView('llm');
+  const configId = c => c && c.ready ? JSON.stringify([c.baseURL, c.model]) : null;
+  function applyModelConfig(c) {
+    const failed = !!configId(c) && modelCheck?.config === configId(c) && !modelCheck.ok;
+    llmReady = !!(c && c.ready) && !failed;
+    for (const banner of [nollm, $('reader-prompt-lock')]) {
+      banner.querySelector('.reader-nollm-title').textContent = failed ? '大模型连接测试未通过' : PH_OFF;
+      banner.querySelector('.reader-nollm-desc').textContent = failed ? '请在设置中检查接口地址、模型和 API Key，再测试连接。' : '在 设置 › 大模型 填好接口地址、模型和 API Key 就能用。';
+    }
+    applyLlm();
+  }
   // 没配置大模型：输入框和「帮我读」disabled，显示提示卡；配置好后立刻恢复
   function applyLlm() {
     input.disabled = !llmReady;
     go.disabled = !llmReady;
+    $('reader-d-resum').disabled = !llmReady;
+    for (const retryBtn of list.querySelectorAll('.reader-act-retry')) retryBtn.disabled = !llmReady;
+    $('reader-prompt-ai').disabled = !llmReady;
+    $('reader-prompt-lock').hidden = llmReady;
     input.placeholder = llmReady ? PH : PH_OFF;
     nollm.hidden = llmReady;
     nollm.classList.toggle('is-center', !llmReady && items.length === 0);
@@ -62,10 +78,11 @@
   }
   function showNoLlm() { llmReady = false; applyLlm(); }
   function syncLlmHint() {
+    const id = ++configRevision;
     return api.getReaderConfig().then((c) => {
-      llmReady = !!(c && c.ready);
-      applyLlm();
-    }).catch(() => {});
+      if (id === configRevision) applyModelConfig(c);
+      return c;
+    }).catch(() => { if (id === configRevision) applyModelConfig(null); return null; });
   }
 
   function buildRow(m) {
@@ -100,7 +117,9 @@
       acts.appendChild(rowAction('打开原文', 'reader-act-open', () => api.openReaderOriginal(m.id)));
       acts.appendChild(rowAction('复制', 'reader-act-copy', () => copy(m.id)));
     } else if (m.status === 'error') {
-      acts.appendChild(rowAction('重试', 'reader-act-retry', () => retry(m.id)));
+      const retryBtn = rowAction('重试', 'reader-act-retry', () => retry(m.id));
+      retryBtn.disabled = !llmReady;
+      acts.appendChild(retryBtn);
     }
     acts.appendChild(rowAction('×', 'reader-act-delete', () => remove(m.id)));
     row.append(icon, body, time, acts);
@@ -145,6 +164,7 @@
     api.copyReader(id).then((ok) => { if (ok) showToast({ type: 'success', title: '已复制' }); }).catch(() => {});
   }
   function retry(id) {
+    if (!llmReady) return;
     api.retryReader(id).then((r) => {
       if (r && r.code === 'no-key') showNoLlm();
       refresh();
@@ -160,6 +180,7 @@
   }
 
   function submit() {
+    if (!llmReady) return;
     const url = input.value.trim();
     api.submitReader(url).then((r) => {
       if (!r) return;
@@ -250,13 +271,14 @@
   back.addEventListener('click', () => { if (!detail.hidden) { showList(); refresh(); return; } closeReaderView(); });
   go.addEventListener('click', submit);
   $('reader-nollm-go').addEventListener('click', toKeySettings);
+  $('reader-settings-llm-go').addEventListener('click', toKeySettings);
   input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); submit(); } });
   input.addEventListener('input', () => { if (msg.classList.contains('is-error')) setMsg(''); });
   $('reader-d-open').addEventListener('click', () => { if (detailId) api.openReaderOriginal(detailId); });
   $('reader-d-copy').addEventListener('click', () => { if (detailId) copy(detailId); });
   $('reader-d-resum').addEventListener('click', () => {
     const id = detailId;
-    if (!id) return;
+    if (!id || !llmReady) return;
     api.resummarizeReader(id).then((r) => {
       if (r && r.code === 'no-key') { showList(); showNoLlm(); return; }
       showList(); refresh();
@@ -279,7 +301,7 @@
     onEscape();
   });
 
-  // 设置页「帮阅」tab：接口地址、模型、API Key（OpenAI 兼容）
+  // 设置页「大模型」：继续使用现有全局配置与密钥存储。
   const keyInput = $('reader-key');
   const baseInput = $('reader-base');
   const modelInput = $('reader-model');
@@ -291,7 +313,11 @@
     statusEl.textContent = text;
     statusEl.className = 'reader-key-status' + (kind ? ' is-' + kind : '');
   }
-  function statusFrom(c) { setStatus(c && c.hasKey ? `已配置 · ${c.model}` : '未配置'); }
+  function statusFrom(c) {
+    if (configId(c) && modelCheck?.config === configId(c)) {
+      setStatus(modelCheck.ok ? '测试通过' : '已配置 · 连接测试未通过', modelCheck.ok ? 'ok' : 'error');
+    } else setStatus(c && c.hasKey ? `已配置 · ${c.model}` : '未配置');
+  }
   function formValues() { return { baseURL: baseInput.value, model: modelInput.value, apiKey: keyInput.value }; }
   // 前端先校验一遍（主进程还会再校验）
   function checkForm() {
@@ -307,26 +333,28 @@
     if (r && r.code === 'no-model') modelErr.hidden = false;
   }
   function renderReaderSettings() {
-    baseErr.hidden = true; modelErr.hidden = true;
     if (!promptDirty) loadPrompt();
-    return api.getReaderConfig().then((c) => {
+    return syncLlmHint();
+  }
+  let loadedModel = null;
+  let modelMutation = 0;
+  function renderModelSettings() {
+    baseErr.hidden = true; modelErr.hidden = true;
+    return syncLlmHint().then((c) => {
+      loadedModel = c;
       keyInput.value = '';
       keyInput.placeholder = c && c.hasKey ? '已保存，留空不修改' : 'sk-…';
       baseInput.value = (c && c.baseURL) || 'https://api.deepseek.com';
       modelInput.value = (c && c.model) || 'deepseek-chat';
       $('reader-key-del').disabled = !(c && c.hasKey);
       statusFrom(c);
-      const wasLocked = promptEl.readOnly;
-      const nowLocked = !(c && c.ready);
-      setPromptLocked(nowLocked);
-      if (nowLocked && !wasLocked) { promptDirty = false; loadPrompt(); }
-      if (!view.hidden) syncLlmHint();
-    }).catch(() => {});
+    });
   }
   function saveForm() {
     if (!checkForm()) return;
+    modelMutation += 1;
     api.saveReaderConfig(formValues()).then((r) => {
-      if (r && r.ok) { showToast({ type: 'success', title: '已保存' }); renderReaderSettings(); } else showSaveError(r);
+      if (r && r.ok) { modelCheck = null; showToast({ type: 'success', title: '已保存' }); renderModelSettings(); } else showSaveError(r);
     }).catch(() => {});
   }
   $('reader-key-save').addEventListener('click', saveForm);
@@ -339,34 +367,41 @@
     if (!checkForm()) return;
     testBtn.disabled = true;
     testBtn.textContent = '测试中…';
-    api.testReaderConfig(formValues()).then((r) => {
+    const values = formValues();
+    const checkedModel = loadedModel;
+    const revision = modelMutation;
+    const saved = configId(checkedModel);
+    const sameAsSaved = saved && !values.apiKey.trim() &&
+      values.baseURL.trim() === checkedModel.baseURL && values.model.trim() === checkedModel.model;
+    const applyTest = (ok) => {
+      if (sameAsSaved && loadedModel === checkedModel && revision === modelMutation) {
+        modelCheck = { config: saved, ok };
+        applyModelConfig(checkedModel);
+      }
+    };
+    api.testReaderConfig(values).then((r) => {
+      applyTest(!!r?.ok);
       if (r && r.ok) setStatus('测试通过', 'ok');
       else if (r && (r.code === 'bad-url' || r.code === 'no-model')) showSaveError(r);
       else setStatus((r && r.error) || '测试失败：连不上接口', 'error');
-    }).catch(() => setStatus('测试失败：连不上接口', 'error')).finally(() => {
+    }).catch(() => { applyTest(false); setStatus('测试失败：连不上接口', 'error'); }).finally(() => {
       testBtn.disabled = false;
       testBtn.textContent = '测试连接';
     });
   });
   $('reader-key-del').addEventListener('click', () => {
-    api.removeReaderKey().then(() => { showToast({ type: 'success', title: '已删除 Key' }); renderReaderSettings(); }).catch(() => {});
+    modelMutation += 1;
+    api.removeReaderKey().then(() => { modelCheck = null; showToast({ type: 'success', title: '已删除 Key' }); renderModelSettings(); }).catch(() => {});
   });
 
   // 设置页「整理提示词」
   const promptEl = $('reader-prompt');
   const promptErr = $('reader-prompt-err');
   let promptDirty = false;
-  // 0.1.64：没配置大模型时，提示词输入框和三个按钮整体禁用，旁边一句话说明
-  function setPromptLocked(locked) {
-    promptEl.readOnly = locked;
-    if (locked) { promptEl.blur(); }
-    for (const id of ['reader-prompt-save', 'reader-prompt-reset', 'reader-prompt-ai']) $(id).disabled = locked;
-    $('reader-prompt-lock').hidden = !locked;
-  }
   function promptMsg(text) { promptErr.textContent = text || ''; promptErr.hidden = !text; }
   function loadPrompt() {
     promptMsg('');
-    return api.getReaderPrompt().then((r) => { if (r) { promptEl.value = r.prompt; promptDirty = false; } }).catch(() => {});
+    return api.getReaderPrompt().then((r) => { if (r && !promptDirty) { promptEl.value = r.prompt; } }).catch(() => {});
   }
   $('reader-prompt-save').addEventListener('click', () => {
     api.saveReaderPrompt(promptEl.value).then((r) => {
@@ -413,7 +448,7 @@
   }
   function aiError(text) { aiErr.textContent = text || ''; aiErr.hidden = !text; }
   function openPromptAi() {
-    if (promptEl.readOnly) return;
+    if (!llmReady) return;
     aiBase = promptEl.value;
     aiNew = null; aiBusy = false;
     aiInput.value = '';
@@ -431,7 +466,7 @@
     api.setPromptAiOpen(false);
   }
   function aiGenerate() {
-    if (aiBusy || !aiInput.value.trim()) return;
+    if (!llmReady || aiBusy || !aiInput.value.trim()) return;
     aiRid += 1;
     const rid = aiRid;
     aiBusy = true;
@@ -478,4 +513,5 @@
   window.openReaderView = openReaderView;
   window.closeReaderView = closeReaderView;
   window.renderReaderSettings = renderReaderSettings;
+  window.renderModelSettings = renderModelSettings;
 })();

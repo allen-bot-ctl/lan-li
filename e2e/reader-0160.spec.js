@@ -81,7 +81,7 @@ test('R6a 空状态 + 顶栏图标顺序', async () => {
   await page.emulateMedia({ colorScheme: null });
 });
 
-test('R4a 无 Key：输入框禁用、不能提交、不入列，提示卡「去设置」打开设置的帮阅 tab（0.1.62 改）', async () => {
+test('R4a 无 Key：输入框禁用、不能提交、不入列，提示卡「前往大模型」打开大模型设置', async () => {
   await hook('readerRemoveKey');
   await page.keyboard.press('Escape');
   await openReader();
@@ -90,20 +90,20 @@ test('R4a 无 Key：输入框禁用、不能提交、不入列，提示卡「去
   expect((await hook('readerList')).length).toBe(0);
   await page.click('#reader-nollm-go');
   await page.waitForSelector('#settings-view:not([hidden])');
-  await expect(page.locator('#settings-page-reader')).toBeVisible();
+  await expect(page.locator('#settings-page-llm')).toBeVisible();
   await expect(page.locator('#reader-key-status')).toHaveText('未配置');
   await expect(page.locator('#reader-view')).toBeHidden();
 });
 
 test('R6b 设置页：填 Key 保存后状态行「已配置」；网址不合法提示红字', async () => {
   await page.click('.settings-tab[data-tab="ui"]');
-  await page.click('.settings-tab[data-tab="reader"]');
+  await page.click('.settings-tab[data-tab="llm"]');
   await page.fill('#reader-base', 'https://api.deepseek.com');
   await page.fill('#reader-model', 'deepseek-chat');
   await page.fill('#reader-key', 'sk-e2e-0160');
   await page.click('#reader-key-save');
   await expect(page.locator('#reader-key-status')).toHaveText('已配置 · deepseek-chat');
-  expect(await page.locator('.settings-tab').allTextContents()).toEqual(['界面设置', '黄历', '天气', '世界时钟', '标签', '帮阅', '升级']);
+  expect(await page.locator('.settings-tab').allTextContents()).toEqual(['界面设置', '黄历', '天气', '世界时钟', '收纳', '大模型', '帮阅', '升级']);
   for (const scheme of ['dark', 'light']) {
     await page.emulateMedia({ colorScheme: scheme });
     await page.waitForTimeout(100);

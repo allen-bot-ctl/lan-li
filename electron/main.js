@@ -89,6 +89,7 @@ const { createInboxController, frontAppName } = require('./inbox-main');
 const { createRegionController } = require('./region-capture');
 const { createReaderController } = require('./reader-main');
 const { normalizeAccelerator } = require('./region-helpers');
+const { readInboxDateLinkEnabled, writeInboxDateLinkEnabled } = require('./inbox-date-link');
 
 const WINDOW_WIDTH = 580;
 // 0.1.24's 400px content plus the 32px full-width top bar.
@@ -97,6 +98,11 @@ const WINDOW_HEIGHT = 432;
 // Playwright drives a real Electron process on Linux and macOS CI. Only this
 // explicit opt-in exposes the tray/window test hooks; packaged runs never do.
 const E2E = process.env.LANLI_E2E === '1';
+if (E2E && process.env.LANLI_E2E_USER_DATA_DIR) {
+  const dir = path.resolve(process.env.LANLI_E2E_USER_DATA_DIR);
+  fs.mkdirSync(dir, { recursive: true });
+  app.setPath('userData', dir);
+}
 
 let tray = null;
 let menuBarShowDate = true;
@@ -279,8 +285,10 @@ function writePreferences(preferences) {
   try {
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, JSON.stringify(preferences, null, 2) + '\n', 'utf8');
+    return true;
   } catch (error) {
     console.warn('[栏历] 写入偏好文件失败：' + (error && error.message ? error.message : error));
+    return false;
   }
 }
 
@@ -323,6 +331,15 @@ function loadWorldClocks() {
     }
     writePreferences(next);
   }
+}
+
+function setInboxDateLinkEnabled(value) {
+  const preferences = readPreferences();
+  const result = writeInboxDateLinkEnabled(preferences, value, writePreferences);
+  if (result.ok && value !== readInboxDateLinkEnabled(preferences) && calendarWindow && !calendarWindow.isDestroyed()) {
+    calendarWindow.webContents.send('settings:inboxDateLinkChanged', value);
+  }
+  return result;
 }
 
 function readMenuBarShowDate(preferences) {
@@ -885,11 +902,12 @@ function applyViewPayload(payload) {
 function registerIpc() {
   ipcMain.handle('app:version', () => formatVersionLabel(app.getVersion()));
 
-  ipcMain.handle('settings:get', () => ({ openAtLogin: getOpenAtLogin(), menuBarShowDate, captureHotkey: captureHotkeyEnabled(), captureHotkeyBusy: hotkeyState('capture').busy, hotkeys: { capture: hotkeyState('capture'), region: hotkeyState('region') }, version: app.getVersion() }));
+  ipcMain.handle('settings:get', () => ({ openAtLogin: getOpenAtLogin(), menuBarShowDate, inboxDateLinkEnabled: readInboxDateLinkEnabled(readPreferences()), captureHotkey: captureHotkeyEnabled(), captureHotkeyBusy: hotkeyState('capture').busy, hotkeys: { capture: hotkeyState('capture'), region: hotkeyState('region') }, version: app.getVersion() }));
   ipcMain.handle('settings:setCaptureHotkey', (_e, value) => setCaptureHotkey(value));
   ipcMain.handle('settings:setHotkey', (_e, a) => setHotkey(a && a.kind, a && a.accelerator));
   ipcMain.handle('settings:setOpenAtLogin', (_e, value) => applyLoginItem(Boolean(value)));
   ipcMain.handle('settings:setMenuBarShowDate', (_e, value) => setMenuBarShowDate(value));
+  ipcMain.handle('settings:setInboxDateLinkEnabled', (_e, value) => setInboxDateLinkEnabled(value));
   ipcMain.on('promptai:state', (_e, open) => { promptAiOpen = Boolean(open); });
   ipcMain.on('quit:confirmState', (_e, open) => { quitConfirmOpen = Boolean(open); });
   ipcMain.on('app:quit', () => { quitApp(); });

@@ -1,6 +1,7 @@
 'use strict';
 
 const api = window.lanli;
+let inboxDateLinkEnabled = true;
 
 const MIN_YEAR = 1900;
 const MAX_YEAR = 2100;
@@ -58,6 +59,8 @@ const settingsPageUpdate = document.getElementById('settings-page-update');
 const settingsPageTags = document.getElementById('settings-page-tags');
 const settingOpenAtLogin = document.getElementById('setting-open-at-login');
 const settingShowDate = document.getElementById('setting-show-date');
+const settingInboxDateLink = document.getElementById('setting-inbox-date-link');
+let inboxDateLinkWrite = 0;
 const settingCaptureHint = document.getElementById('setting-capture-hint');
 const settingsVersion = document.getElementById('settings-version');
 const settingsPageTitle = document.getElementById('settings-page-title');
@@ -434,7 +437,7 @@ function renderCells(next) {
     button.append(dayText, secondaryText);
     // 0.1.44：有收纳的日期在数字下方画灰色 4px 圆点
     button.dataset.day = `${cell.year}-${cell.month}-${cell.day}`;
-    if (typeof inboxDaySet !== 'undefined' && inboxDaySet.has(button.dataset.day)) {
+    if (inboxDateLinkEnabled && inboxDaySet?.has(button.dataset.day)) {
       button.classList.add('has-inbox');
       const dot = document.createElement('span');
       dot.className = 'cell-inbox-dot';
@@ -445,7 +448,7 @@ function renderCells(next) {
     watchIconTooltip(button);
     // 0.1.55：有圆点且已选中（未选其它日期时今天算已选中）→ 再点打开收纳并按这天筛选
     button.addEventListener('click', () => {
-      if (button.classList.contains('has-inbox') && isCellSelected(cell)) {
+      if (inboxDateLinkEnabled && button.classList.contains('has-inbox') && isCellSelected(cell)) {
         hideIconTooltip();
         openInboxForDay(button.dataset.day);
         return;
@@ -493,7 +496,7 @@ function isCellSelected(cell) {
 
 // 0.1.55：有圆点的日期悬停气泡「收纳 N 项」（0.1.56 条→项），已选中加「 · 点击查看」并显示手型。
 function decorateInboxCell(button) {
-  const has = button.classList.contains('has-inbox');
+  const has = inboxDateLinkEnabled && button.classList.contains('has-inbox');
   const n = (typeof inboxDayCounts !== 'undefined' && inboxDayCounts[button.dataset.day]) || 0;
   const selected = button.dataset.selected === '1';
   if (has && n > 0) {
@@ -501,6 +504,7 @@ function decorateInboxCell(button) {
     button.dataset.tooltipPlace = 'above';
   } else {
     delete button.dataset.tooltip;
+    delete button.dataset.tooltipPlace;
   }
   button.classList.toggle('inbox-openable', has && selected);
 }
@@ -1157,6 +1161,8 @@ function selectSettingsTab(tab) {
   const readerPage = document.getElementById('settings-page-reader');
   if (readerPage) readerPage.hidden = tab !== 'reader';
   if (tab === 'reader' && typeof renderReaderSettings === 'function') renderReaderSettings();
+  document.getElementById('settings-page-llm').hidden = tab !== 'llm';
+  if (tab === 'llm' && typeof renderModelSettings === 'function') renderModelSettings();
   const embedded = EMBEDDED[tab];
   if (embedded) {
     embedded[0].classList.add('is-embedded');
@@ -1173,9 +1179,14 @@ function openSettingsView(tab = 'ui') {
   settingsView.hidden = false;
   api.setSettingsView(true);
   selectSettingsTab(tab);
+  const dateLinkSnapshot = inboxDateLinkWrite;
   api.getSettings().then((s) => {
     settingOpenAtLogin.checked = s.openAtLogin === true;
     settingShowDate.checked = s.menuBarShowDate !== false;
+    if (dateLinkSnapshot === inboxDateLinkWrite) {
+      settingInboxDateLink.checked = s.inboxDateLinkEnabled !== false;
+      settingInboxDateLink.disabled = false;
+    }
     renderHotkeys(s.hotkeys);
     settingsVersion.textContent = s.version;
   }).catch(() => {});
@@ -1277,6 +1288,24 @@ Object.keys(hotkeyUi).forEach((kind) => {
 });
 settingShowDate.addEventListener('change', () => {
   api.setMenuBarShowDate(settingShowDate.checked);
+});
+settingInboxDateLink.addEventListener('change', async () => {
+  inboxDateLinkWrite += 1;
+  const enabled = settingInboxDateLink.checked;
+  settingInboxDateLink.disabled = true;
+  let previous = !enabled;
+  try {
+    const result = await api.setInboxDateLinkEnabled(enabled);
+    if (typeof result?.inboxDateLinkEnabled === 'boolean') previous = result.inboxDateLinkEnabled;
+    if (!result?.ok) throw new Error('Unable to save the inbox calendar setting');
+    settingInboxDateLink.checked = previous;
+  } catch {
+    settingInboxDateLink.checked = previous;
+    showToast({ type: 'warning', title: '未能保存日历联动设置' });
+  } finally {
+    settingInboxDateLink.disabled = false;
+    inboxDateLinkWrite += 1;
+  }
 });
 settingsCheckUpdate.addEventListener('click', () => {
   if (pendingNotice) {
@@ -1836,20 +1865,35 @@ document.addEventListener('keydown', (e) => {
 document.getElementById('inbox-minical-prev').addEventListener('click', (ev) => { ev.stopPropagation(); const d = new Date(miniMonth.y, miniMonth.m - 1, 1); miniMonth = { y: d.getFullYear(), m: d.getMonth() }; renderMiniCal(); });
 document.getElementById('inbox-minical-next').addEventListener('click', (ev) => { ev.stopPropagation(); const d = new Date(miniMonth.y, miniMonth.m + 1, 1); miniMonth = { y: d.getFullYear(), m: d.getMonth() }; renderMiniCal(); });
 
+function paintCalendarInboxDays() {
+  for (const cell of grid.querySelectorAll('.cell')) {
+    const has = inboxDateLinkEnabled && inboxDaySet.has(cell.dataset.day);
+    cell.classList.toggle('has-inbox', has);
+    let dot = cell.querySelector('.cell-inbox-dot');
+    if (has && !dot) { dot = document.createElement('span'); dot.className = 'cell-inbox-dot'; cell.appendChild(dot); }
+    if (!has && dot) dot.remove();
+    decorateInboxCell(cell);
+  }
+}
 function refreshInboxDays() {
+  // The independent inbox's own date filter keeps its markers while unlinked.
+  if (!inboxDateLinkEnabled && inboxView.hidden) return Promise.resolve();
   return Promise.all([api.inboxDays(), api.inboxDayCounts ? api.inboxDayCounts().catch(() => ({})) : Promise.resolve({})]).then(([keys, counts]) => {
     inboxDaySet = new Set(keys || []);
     inboxDayCounts = counts || {};
-    for (const cell of grid.querySelectorAll('.cell')) {
-      const has = inboxDaySet.has(cell.dataset.day);
-      cell.classList.toggle('has-inbox', has);
-      let dot = cell.querySelector('.cell-inbox-dot');
-      if (has && !dot) { dot = document.createElement('span'); dot.className = 'cell-inbox-dot'; cell.appendChild(dot); }
-      if (!has && dot) dot.remove();
-      decorateInboxCell(cell);
-    }
+    paintCalendarInboxDays();
     if (!inboxMiniCal.hidden) renderMiniCal();
   }).catch(() => {});
+}
+function applyInboxDateLinkEnabled(value) {
+  const enabled = value !== false;
+  if (inboxDateLinkEnabled !== enabled) {
+    inboxDateLinkEnabled = enabled;
+    hideIconTooltip();
+  }
+  document.documentElement.toggleAttribute('data-calendar-inbox-unlinked', !enabled);
+  paintCalendarInboxDays();
+  if (enabled) refreshInboxDays();
 }
 
 function findInboxRow(id) {
@@ -1931,7 +1975,7 @@ function openInboxView() {
 }
 
 function openInboxForDay(key) {
-  if (!key) return;
+  if (!inboxDateLinkEnabled || !key) return;
   clearInboxFilters();
   setInboxDay(key);
   inboxOpenedFromDay = true;
@@ -1960,6 +2004,7 @@ inboxBack.addEventListener('click', () => {
   closeInboxView();
 });
 inboxButton.addEventListener('click', () => {
+  if (!inboxDateLinkEnabled && !appBody.hidden) return;
   if (inboxView.hidden) openInboxView(); else closeInboxView();
 });
 const inboxEditEl = (id) => document.getElementById('inbox-edit-' + id);
@@ -2091,7 +2136,7 @@ function openInboxWriter() {
     wysEl('status').textContent = '';
     inboxDetailFrame.hidden = rich;
     inboxDetailEdit.hidden = true;
-    if (rich) inboxWriter.focus();
+    if (rich) inboxWriter.focusForOpen();
     else wysEl('title').focus({ preventScroll: true });
   } catch (e) { showToast({ type: 'warning', title: e.message || '无法打开编辑器' }); }
 }
@@ -2169,7 +2214,14 @@ api.onInboxEscape(() => {
   if (inboxSearch.value) { inboxSearch.value = ''; inboxFilter.query = ''; renderInbox(); return; }
   closeInboxView();
 });
-refreshInboxDays();
+let inboxDateLinkPreferenceChanged = false;
+api.onInboxDateLinkChanged?.((value) => {
+  inboxDateLinkPreferenceChanged = true;
+  applyInboxDateLinkEnabled(value);
+});
+api.getSettings().then((settings) => {
+  if (!inboxDateLinkPreferenceChanged) applyInboxDateLinkEnabled(settings?.inboxDateLinkEnabled);
+}).catch(() => { if (!inboxDateLinkPreferenceChanged) applyInboxDateLinkEnabled(true); });
 
 api.onOpenPanel((panel) => {
   if (!requestCloseInboxWriter() || (inboxEditDialog.open && !requestCloseInboxEditor())) { api.setSettingsView(true); api.setInboxView(true); return; }
