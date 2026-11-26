@@ -112,3 +112,19 @@ test('0.1.48 classifyDrop：路径为空时用 uri-list 里的 file:// 兜底（
   assert.deepStrictEqual(r, [{ kind: 'file', path: '/Users/a/下载/a b.md' }, { kind: 'file', path: '/Users/a/dir' }]);
   assert.deepStrictEqual(classifyDrop({ files: ['/x/y.png'], uriList: ['file:///z'] }).map((x) => x.path), ['/x/y.png']);
 });
+
+test('收纳后追加多标签：保留已有、同名不重复、超限时不写入任何新标签', () => {
+  const root = tmp();
+  try {
+    const s = store(root);
+    const [entry, other] = s.saveAll([{ kind: 'text', text: '一' }, { kind: 'text', text: '二' }]);
+    s.addTag(entry.id, 'VC');
+    assert.deepEqual(s.addTags(entry.id, ['vc', '#项目', '待查']).tags, ['VC', '项目', '待查']);
+    assert.deepEqual(s.addTags(entry.id, ['项目', '待查']).tags, ['VC', '项目', '待查']);
+    assert.throws(() => s.addTags(entry.id, ['新标签甲', '新标签乙', '新标签丙']), { code: 'tag-limit' });
+    assert.deepEqual(s.get(entry.id).meta.tags, ['VC', '项目', '待查']);
+    assert.deepEqual(s.get(other.id).meta.tags, []);
+    assert.ok(!s.listTags().some((t) => t.name.startsWith('新标签')));
+    assert.deepEqual(store(root).get(entry.id).meta.tags, ['VC', '项目', '待查']);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});

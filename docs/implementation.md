@@ -348,3 +348,10 @@ main.setupUpdates()
 - 更新当前行为：[updater.md](updater.md)
 - 测试与真机项：[testing.md](testing.md)
 - 踩坑经过：[lessons-learned.md](lessons-learned.md)
+
+
+### 收纳成功后添加标签
+
+收纳页点击「录入」保存或「粘贴收纳」（包括收纳页的 ⌘V）成功后，使用该次返回的条目 ID 在原窗口打开多选模态框。失败、重复剪贴板与其他收纳入口不弹框。标签先在弹窗暂存，「保存标签」才写入，「跳过」或 Esc 只关弹窗，已保存的内容不变。批量粘贴只弹一次，所选标签应用到本批新条目；部分失败时，仅重试未成功的条目。原有列表筛选不会作为自动标签。
+
+新增受限 IPC `inbox:addCaptureTags(id, names)`：向指定收纳追加不超过五个预校验标签，保留已存在的标签，返回 `{ ok, text? }`。标签库仍通过 `inbox:tags` 读取。

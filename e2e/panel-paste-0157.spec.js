@@ -23,9 +23,10 @@ test.beforeAll(async () => {
 });
 test.afterAll(async () => { if (app) await app.close(); });
 
-async function pasteAndCheck(clipData) {
+async function pasteAndCheck(clipData, opensTagDialog = false) {
   if (clipData) await hook('setClipboardData', clipData);
   await page.click('#inbox-paste');
+  if (opensTagDialog) await page.locator('#capture-tags-skip').click();
   await page.waitForTimeout(1500);
   expect(await hook('isPinned')).toBe(true);   // 0.1.62：收纳页自动钉住
   expect(await hook('isVisible')).toBe(true);
@@ -35,7 +36,7 @@ async function pasteAndCheck(clipData) {
 
 test('P1 未钉住点「粘贴收纳」：窗口仍可见、无托盘提示框、窗口内 success toast、条数 +1', async () => {
   const n = await count();
-  await pasteAndCheck({ text: '面板粘贴一段文字' });
+  await pasteAndCheck({ text: '面板粘贴一段文字' }, true);
   await expect(toastTitle()).toHaveText('已收纳 · 文字');
   expect(await count()).toBe(n + 1);
   await expect(page.locator('.inbox-row').first()).toContainText('面板粘贴一段文字');
@@ -49,7 +50,7 @@ test('P1 未钉住点「粘贴收纳」：窗口仍可见、无托盘提示框�
 
 test('P3 连点两次同一内容：第二次 info toast「已经收过了」，条数只 +1', async () => {
   const n = await count();
-  await pasteAndCheck({ text: '重复的内容' });
+  await pasteAndCheck({ text: '重复的内容' }, true);
   await pasteAndCheck(null);
   await expect(toastTitle()).toHaveText('已经收过了');
   expect(await count()).toBe(n + 1);

@@ -1715,22 +1715,149 @@ inboxMore.addEventListener('click', (e) => { e.stopPropagation(); inboxMoreMenu.
 document.getElementById('inbox-day-chip-x').addEventListener('click', () => setInboxDay(null));
 document.getElementById('inbox-clear').addEventListener('click', () => clearInboxFilters());
 document.addEventListener('keydown', (e) => {
-  if (inboxView.hidden || inboxEditDialog.open || writerState) return;
+  if (inboxView.hidden || inboxEditDialog.open || captureTags.open || writerState) return;
   if (inboxDetail.hidden && (e.metaKey || e.ctrlKey) && (e.key === 'f' || e.key === 'F')) { e.preventDefault(); inboxSearch.focus(); inboxSearch.select(); }
   // 0.1.49：焦点不在输入框时 ⌘V 收纳剪贴板
   const typing = e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable);
   if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && (e.key === 'v' || e.key === 'V') && !typing) { e.preventDefault(); captureFromPanel(); }
 });
-// 0.1.57：收纳页粘贴的结果在窗口内提示，不弹托盘提示框
-function captureFromPanel() {
-  api.captureClipboard().then((r) => {
+// 录入与面板粘贴共用同一个保存后标签框。只认本次成功返回的 ID。
+const capEl = (id) => document.getElementById('capture-tags-' + id);
+const captureTags = document.getElementById('inbox-capture-tags');
+let captureRequestPending = false;
+let captureTagState = null;
+
+function renderCaptureTags() {
+  const state = captureTagState;
+  if (!state) return;
+  const raw = IQ.normalizeTag(capEl('input').value);
+  const q = raw.toLowerCase();
+  const has = (name) => state.tags.some((tag) => tag.toLowerCase() === name.toLowerCase());
+  capEl('count').textContent = state.tags.length + ' / ' + IQ.MAX_TAGS;
+  capEl('input').disabled = state.saving;
+  capEl('add').disabled = state.saving || !raw;
+  capEl('skip').disabled = state.saving;
+  capEl('save').disabled = state.saving || (!state.tags.length && !raw);
+  const chip = (name, picked) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = '#' + name + (picked ? ' ×' : '');
+    b.disabled = state.saving || (!picked && state.tags.length >= IQ.MAX_TAGS);
+    if (picked) b.setAttribute('aria-label', '移除标签 ' + name);
+    b.addEventListener('click', () => {
+      if (picked) {
+        state.tags = state.tags.filter((n) => n !== name);
+        capEl('status').textContent = '';
+        renderCaptureTags();
+        capEl('input').focus();
+      } else {
+        stageCaptureTag(name);
+      }
+    });
+    return b;
+  };
+  capEl('picked').replaceChildren(...state.tags.map((n) => chip(n, true)));
+  capEl('options').replaceChildren(...state.library.filter((n) => !has(n) && (!q || n.toLowerCase().includes(q))).map((n) => chip(n, false)));
+}
+
+function openCaptureTags(result) {
+  if (inboxView.hidden || !inboxDetail.hidden || captureTags.open ||
+      !result?.ok || result.dup || !result.ids?.length) return;
+  const state = { ids: [...result.ids], tags: [], library: [], saving: false };
+  captureTagState = state;
+  capEl('input').value = '';
+  capEl('status').textContent = '';
+  capEl('desc').textContent = state.ids.length === 1 ? '内容已收纳，可以为它选多个标签。' :
+    '已收纳 ' + state.ids.length + ' 项，所选标签将应用到这批条目。';
+  renderCaptureTags();
+  captureTags.showModal();
+  api.inboxTags().then((list) => {
+    if (captureTagState !== state) return;
+    state.library = (list || []).map((t) => t.name).sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'));
+    renderCaptureTags();
+  }).catch(() => { /* 输入新标签仍然可用 */ });
+}
+
+function stageCaptureTag(value) {
+  const state = captureTagState;
+  if (!state || state.saving) return false;
+  const name = IQ.normalizeTag(value);
+  try {
+    const known = state.library.find((n) => n.toLowerCase() === name.toLowerCase()) || name;
+    if (!state.tags.some((n) => n.toLowerCase() === known.toLowerCase())) state.tags = IQ.addTag(state.tags, known);
+    capEl('status').textContent = '';
+    capEl('input').value = '';
+    renderCaptureTags();
+    capEl('input').focus();
+    return true;
+  } catch (error) {
+    capEl('status').textContent = error.message;
+    return false;
+  }
+}
+
+function closeCaptureTags() {
+  if (captureTagState?.saving) return;
+  captureTagState = null;
+  if (captureTags.open) captureTags.close();
+}
+
+async function saveCaptureTags() {
+  const state = captureTagState;
+  if (!state || state.saving) return;
+  if (IQ.normalizeTag(capEl('input').value) && !stageCaptureTag(capEl('input').value)) return;
+  if (!state.tags.length) return;
+  state.saving = true;
+  renderCaptureTags();
+  const results = await Promise.all(state.ids.map(async (id) => {
+    try { return await api.addInboxCaptureTags(id, state.tags); }
+    catch { return { ok: false, text: '保存失败，请再试一次' }; }
+  }));
+  const remaining = state.ids.filter((_id, i) => !results[i]?.ok);
+  state.saving = false;
+  refreshInbox();
+  if (!remaining.length) {
+    closeCaptureTags();
+    showToast({ type: 'success', title: '标签已保存' });
+    return;
+  }
+  const saved = state.ids.length - remaining.length;
+  state.ids = remaining;
+  capEl('status').textContent = saved ? ('已保存 ' + saved + ' 项，剩余 ' + remaining.length + ' 项可重试。') :
+    (results.find((r) => !r?.ok)?.text || '没能保存标签，请重试。');
+  renderCaptureTags();
+  capEl('save').focus();
+}
+
+capEl('input').addEventListener('input', () => { capEl('status').textContent = ''; renderCaptureTags(); });
+capEl('input').addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter' || e.isComposing) return;
+  e.preventDefault();
+  stageCaptureTag(capEl('input').value);
+});
+capEl('add').addEventListener('click', () => stageCaptureTag(capEl('input').value));
+capEl('save').addEventListener('click', saveCaptureTags);
+capEl('skip').addEventListener('click', closeCaptureTags);
+captureTags.addEventListener('cancel', (e) => { e.preventDefault(); closeCaptureTags(); });
+
+async function captureFromPanel() {
+  if (captureRequestPending || captureTags.open) return;
+  captureRequestPending = true;
+  const generation = inboxOpenGeneration;
+  try {
+    const r = await api.captureClipboard();
     refreshInbox();
-    if (!r || !r.text) return;
-    let type = 'success';
-    if (r.dup) type = 'info';
-    else if (!r.ok) type = r.kind === 'empty' ? 'warning' : 'error';
-    showToast({ type, title: r.text });
-  }).catch(() => {});
+    if (!r) return;
+    if (r.text) {
+      const type = r.dup ? 'info' : r.ok ? 'success' : r.kind === 'empty' ? 'warning' : 'error';
+      showToast({ type, title: r.text });
+    }
+    if (inboxOpenGeneration === generation) openCaptureTags(r);
+  } catch {
+    showToast({ type: 'error', title: '收纳失败' });
+  } finally {
+    captureRequestPending = false;
+  }
 }
 document.getElementById('inbox-paste').addEventListener('click', () => captureFromPanel());
 
@@ -1761,18 +1888,26 @@ function closeCompose(clear) {
   composeBtn.classList.remove('inbox-compose-btn-on');
   if (clear) { composeText.value = ''; composeSync(); }
 }
-function saveCompose() {
-  if (composeSave.disabled) return;
+async function saveCompose() {
+  if (composeSave.disabled || captureRequestPending || captureTags.open) return;
+  captureRequestPending = true;
+  const generation = inboxOpenGeneration;
   const text = composeText.value;
-  api.addInboxManual(text).then((r) => {
-    if (r && r.ok) {
+  try {
+    const r = await api.addInboxManual(text);
+    if (r?.ok) {
       closeCompose(true);
       refreshInbox();
       showToast({ type: 'success', title: r.text || '已收纳' });
+      if (inboxOpenGeneration === generation) openCaptureTags(r);
     } else {
-      showToast({ type: r && r.kind === 'empty' ? 'warning' : 'error', title: (r && r.text) || '收纳失败' });
+      showToast({ type: r?.kind === 'empty' ? 'warning' : 'error', title: r?.text || '收纳失败' });
     }
-  }).catch(() => {});
+  } catch {
+    showToast({ type: 'error', title: '收纳失败' });
+  } finally {
+    captureRequestPending = false;
+  }
 }
 composeBtn.addEventListener('click', () => { if (composeBox.hidden) openCompose(); else closeCompose(false); });
 composeText.addEventListener('input', composeSync);
@@ -1998,7 +2133,7 @@ function openInboxForDay(key) {
 }
 
 function closeInboxView() {
-  if (inboxView.hidden || !requestCloseInboxWriter() || !requestCloseInboxEditor()) return;
+  if (inboxView.hidden || captureTags.open || !requestCloseInboxWriter() || !requestCloseInboxEditor()) return;
   if (inboxOpenedFromDay) { inboxOpenedFromDay = false; setInboxDay(null); }
   inboxOpenGeneration += 1;
   inboxListOrigin = null;
@@ -2234,6 +2369,7 @@ api.onInboxChanged(() => { refreshInbox(); });
 // 右键「删除这条」和悬停 × 走同一条可撤销删除
 if (api.onInboxRequestDelete) api.onInboxRequestDelete((id) => deleteInboxEntry(id));
 api.onInboxEscape(() => {
+  if (captureTags.open) { closeCaptureTags(); return; }
   if (writerState) { requestCloseInboxWriter(); return; }
   if (inboxEditDialog.open) { requestCloseInboxEditor(); return; }
   if (!inboxDetail.hidden) { showInboxList(); return; }

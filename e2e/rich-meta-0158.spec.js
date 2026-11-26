@@ -15,18 +15,21 @@ test.beforeAll(async () => {
   const args = process.platform === 'linux' ? ['--no-sandbox', '.'] : ['.'];
   app = await electron.launch({ args, env: { ...process.env, LANLI_E2E: '1', LANLI_INBOX_DIR: path.join(work, 'inbox') } });
   page = await app.firstWindow();
-  await page.waitForSelector('#grid');
+  await page.waitForFunction(() => typeof openInboxView === 'function' && !!document.getElementById('capture-tags-skip'));
 });
 test.afterAll(async () => { if (app) await app.close(); });
 
 test('R2 带 meta 的富文本粘贴收纳：标题是正文开头，详情里能看到文字和链接；R4 深浅截图无白块', async () => {
-  await hook('openInboxPanel');
-  await page.waitForSelector('#inbox-view:not([hidden])');
+  await expect(async () => {
+    await hook('openInboxPanel');
+    await expect(page.locator('#inbox-view')).toBeVisible({ timeout: 500 });
+  }).toPass({ timeout: 5000 });
   await hook('setClipboardData', {
     html: "<meta charset='utf-8'><p>栏历 v0.1.57 已出包，<a href=\"https://example.com\">安装包</a></p>",
     text: '栏历 v0.1.57 已出包，安装包'
   });
   await page.click('#inbox-paste');
+  await page.locator('#capture-tags-skip').click();
   await expect(page.locator('#toast-title')).toHaveText('已收纳 · 图文');
   const [m] = await hook('inboxList');
   expect(m.title.startsWith('栏历 v0.1.57 已出包，安装包')).toBe(true);
@@ -49,8 +52,13 @@ test('R2 带 meta 的富文本粘贴收纳：标题是正文开头，详情里�
 });
 
 test('R3 清洗后为空、text 有字：存成「文字」条目，内容是「备用文字」', async () => {
+  await expect(async () => {
+    await hook('openInboxPanel');
+    await expect(page.locator('#inbox-view')).toBeVisible({ timeout: 500 });
+  }).toPass({ timeout: 5000 });
   await hook('setClipboardData', { html: '<style>p{}</style>', text: '备用文字' });
   await page.click('#inbox-paste');
+  await page.locator('#capture-tags-skip').click();
   await expect(page.locator('#toast-title')).toHaveText(/已收纳/);
   await expect.poll(async () => (await hook('inboxList'))[0].title).toBe('备用文字');
   const [m] = await hook('inboxList');

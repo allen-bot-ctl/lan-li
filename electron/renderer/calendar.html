@@ -242,6 +242,24 @@
       <div class="inbox-noresult" id="inbox-noresult" hidden><span>没有符合条件的收纳</span><button type="button" class="inbox-clear" id="inbox-clear">清除筛选</button></div>
       <div class="inbox-undo" id="inbox-undo" hidden><span>已删除&nbsp;·&nbsp;</span><button type="button" id="inbox-undo-btn">撤销</button></div>
       <div class="inbox-tagpop" id="inbox-tagpop" hidden><input id="inbox-tag-input" type="text" maxlength="8" placeholder="加标签，回车" autocomplete="off"><span class="inbox-tag-suggest" id="inbox-tag-suggest"></span><span class="inbox-tagpop-err" id="inbox-tagpop-err"></span><button type="button" class="inbox-tagpop-manage" id="inbox-tagpop-manage">管理标签…</button></div>
+      <dialog id="inbox-capture-tags" aria-labelledby="capture-tags-title" aria-describedby="capture-tags-desc">
+        <div class="capture-tags-card">
+          <header><h2 id="capture-tags-title">添加标签</h2><span id="capture-tags-count"></span></header>
+          <p id="capture-tags-desc"></p>
+          <div id="capture-tags-picked" aria-label="已选标签"></div>
+          <label for="capture-tags-input">搜索或输入新标签</label>
+          <div class="capture-tags-input-row">
+            <input id="capture-tags-input" type="text" autocomplete="off" placeholder="搜索或输入，回车添加" autofocus>
+            <button id="capture-tags-add" type="button">添加</button>
+          </div>
+          <div id="capture-tags-options" aria-label="已有标签"></div>
+          <p id="capture-tags-status" role="alert"></p>
+          <footer class="inbox-edit-actions">
+            <button id="capture-tags-skip" type="button">跳过</button>
+            <button id="capture-tags-save" type="button">保存标签</button>
+          </footer>
+        </div>
+      </dialog>
       <dialog id="inbox-edit-dialog" aria-labelledby="inbox-edit-title">
         <form id="inbox-edit-form">
           <h2 id="inbox-edit-title">编辑收纳</h2>

@@ -69,6 +69,7 @@ contextBridge.exposeInMainWorld('lanli', {
   inboxContextMenu: (id) => ipcRenderer.send('inbox:contextMenu', id),
   undoRemoveInboxEntry: (id) => ipcRenderer.invoke('inbox:undo', id),
   addInboxTag: (id, tag) => ipcRenderer.invoke('inbox:addTag', id, tag),
+  addInboxCaptureTags: (id, names) => ipcRenderer.invoke('inbox:addCaptureTags', id, names),
   inboxTags: () => ipcRenderer.invoke('inbox:tags'),
   onInboxRequestTagDelete: (callback) => { ipcRenderer.on('inbox:requestTagDelete', (_e, name) => callback(name)); },
   inboxTagCreate: (name) => ipcRenderer.invoke('inbox:tagCreate', name),

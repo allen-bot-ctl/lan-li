@@ -508,6 +508,14 @@ function createInboxController(deps) {
     ipcMain.handle('inbox:remove', (_e, id) => removeWithUndo(id));
     ipcMain.handle('inbox:undo', (_e, id) => undoRemove(id));
     ipcMain.handle('inbox:addTag', (_e, id, tag) => addTag(id, tag));
+    ipcMain.handle('inbox:addCaptureTags', (_e, id, names) => {
+      if (typeof id !== 'string' || !Array.isArray(names) || names.length > Q.MAX_TAGS ||
+          names.some((name) => typeof name !== 'string' || name.length > 64)) {
+        return { ok: false, text: '标签无效' };
+      }
+      try { store.addTags(id, names); changed(); return { ok: true }; }
+      catch (error) { return { ok: false, text: String(error.code || '').startsWith('tag-') ? error.message : errorText(error) }; }
+    });
     ipcMain.handle('inbox:copy', (_e, id) => copyEntry(id));
     ipcMain.handle('inbox:relink', (e, id) => relink(id, e));
     ipcMain.handle('inbox:days', () => days());

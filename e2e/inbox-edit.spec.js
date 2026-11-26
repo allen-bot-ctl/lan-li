@@ -30,6 +30,7 @@ test('系统剪贴板图文原位编辑，图前后、格式、取消、保存�
     await app.evaluate(({ clipboard }, html) => { clipboard.clear(); clipboard.write({ html, text: '图前、图后与列表' }); }, raw);
     expect(await app.evaluate(({ clipboard }) => clipboard.readHTML())).toContain('合成测试图');
     await page.click('#inbox-paste');
+    await page.locator('#capture-tags-skip').click();
     const row = page.locator('.inbox-row').filter({ hasText: '图前：' });
     await expect(row).toBeVisible();
     const id = await row.getAttribute('data-id');
@@ -137,6 +138,7 @@ test('系统剪贴板图文原位编辑，图前后、格式、取消、保存�
     await app.evaluate(({ clipboard }, value) => { clipboard.clear(); clipboard.writeText(value); }, plainText);
     expect(await app.evaluate(({clipboard}) => clipboard.readText())).toEqual(plainText);
     await page.click('#inbox-paste');
+    await page.locator('#capture-tags-skip').click();
     const textRow = page.locator('.inbox-row').filter({hasText:'纯文字第一行'});
     await expect(textRow).toBeVisible();
     const plainId = await textRow.getAttribute('data-id');
@@ -171,6 +173,7 @@ test('首张图片上方不冒出空行，有意的换行仍然保留', async ()
       '<pre>' + code + '</pre><p><br></p>';
     await app.evaluate(({ clipboard }, html) => { clipboard.clear(); clipboard.write({ html, text: '合成样本首行' }); }, raw);
     await page.click('#inbox-paste');
+    await page.locator('#capture-tags-skip').click();
     const row = page.locator('#inbox-list .inbox-row').filter({ hasText: '合成样本首行' });
     const id = await row.getAttribute('data-id');
     const disk = path.join(work, 'inbox', id, 'document.json');

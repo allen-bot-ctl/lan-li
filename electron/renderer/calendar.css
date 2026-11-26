@@ -1684,10 +1684,28 @@ mark.inbox-hit{background:rgba(255,200,0,.45);color:inherit;border-radius:2px;}
 #inbox-view .inbox-detail { min-height: 0; }
 
 #inbox-detail-edit:not([hidden]) { margin-left: auto; padding: 0 12px; }
-#inbox-edit-dialog { width: min(480px, calc(100% - 32px)); max-height: calc(100% - 32px);
+#inbox-edit-dialog, #inbox-capture-tags { width: min(480px, calc(100% - 32px)); max-height: calc(100% - 32px);
   padding: 15px; color: var(--text); background: var(--card-bg); border: 1px solid var(--sheet-border);
   border-radius: 14px; overflow: auto; box-shadow: 0 12px 36px #0005; backdrop-filter: blur(36px); }
-#inbox-edit-dialog::backdrop { background: #0006; }
+#inbox-edit-dialog::backdrop, #inbox-capture-tags::backdrop { background: #0007; }
+#inbox-capture-tags { width: min(400px, calc(100% - 48px)); padding: 18px; }
+.capture-tags-card { display:grid; gap:8px; }
+.capture-tags-card :is(h2,p) { margin:0; }
+.capture-tags-card h2 { font-size:17px; }
+.capture-tags-card header { display:flex; align-items:center; justify-content:space-between; }
+.capture-tags-card :is(p,label), #capture-tags-count { font-size:12px; color:var(--muted); }
+#capture-tags-picked, #capture-tags-options { display:flex; flex-wrap:wrap; gap:5px; max-height:80px; overflow:auto; }
+#capture-tags-picked:empty, #capture-tags-options:empty, #capture-tags-status:empty { display:none; }
+.capture-tags-input-row { display:flex; gap:6px; }
+.capture-tags-input-row input { min-width:0; flex:1; user-select:text; cursor:text; font:inherit; color:inherit; background:var(--chip); border:1px solid var(--sheet-border); border-radius:7px; padding:7px 9px; }
+.capture-tags-card button { font:inherit; color:inherit; background:var(--chip); border:1px solid var(--sheet-border); border-radius:7px; padding:4px 9px; cursor:pointer; }
+.capture-tags-card button:enabled:hover { background:var(--chip-hover); }
+.capture-tags-card :is(button,input):focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+.capture-tags-card button:disabled { opacity:.48; cursor:default; }
+#capture-tags-picked button { color:var(--accent); }
+#capture-tags-status { color:#ff625d; }
+.capture-tags-card footer { border-top:1px solid var(--sheet-border); padding-top:9px; }
+#capture-tags-save:enabled { background:var(--accent); color:#1c1510; font-weight:650; }
 #inbox-edit-form { display: grid; gap: 10px; }
 #inbox-edit-form h2, #inbox-edit-form p { margin: 0; }
 #inbox-edit-form h2 { font-size: 16px; }

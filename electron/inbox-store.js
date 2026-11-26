@@ -676,6 +676,18 @@ function createInboxStore(opts) {
     return resolveTags(writeMeta(dir, meta));
   }
 
+  // 合并后一次写入条目，保留同时由其他入口添加的标签。
+  function addTags(id, names) {
+    const { dir, meta } = readMeta(id);
+    const old = resolveTags({ ...meta }).tags;
+    const next = new Map(old.map((name) => [name.toLowerCase(), name]));
+    for (const name of Q.cleanTags(names)) {
+      if (!next.has(name.toLowerCase())) next.set(name.toLowerCase(), name);
+    }
+    const merged = Q.cleanTags([...next.values()]);
+    return resolveTags(writeMeta(dir, { ...meta, tags: idsForNames(merged) }));
+  }
+
   // 弹层输入：按查重规则复用已有标签，没有才新建。
   function addTag(id, name) {
     const { dir, meta } = readMeta(id);
@@ -846,7 +858,7 @@ function createInboxStore(opts) {
     purge();
   }
 
-  return { root, tags, save, saveAll, addFile, addImage, addText, addLink, list, get, readEdit, saveEdit, saveDocument, remove, setTags, addTag, removeTagFromItem, removeTagEverywhere,
+  return { root, tags, save, saveAll, addFile, addImage, addText, addLink, list, get, readEdit, saveEdit, saveDocument, remove, setTags, addTag, addTags, removeTagFromItem, removeTagEverywhere,
     listTags, createTag, renameTag, deleteTag, tagUsage, migrateTags, trash, restore, purge, relink, cleanup, rebuildIndex, readIndex };
 }
 

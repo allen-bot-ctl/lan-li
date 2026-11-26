@@ -110,12 +110,14 @@ test('K-C3/K-C5/K-C6 面板 ⌘V、顶栏按钮、托盘菜单三个入口；图
   await page.waitForSelector('#inbox-view:not([hidden])');
   await clip({ text: '来自按钮' });
   await page.click('#inbox-paste');
+  await page.locator('#capture-tags-skip').click();
   await expect.poll(async () => (await entries())[0].title).toBe('来自按钮');
   await clip({ text: '来自快捷键 ⌘V' });
   await page.evaluate(() => document.activeElement && document.activeElement.blur());
   await page.keyboard.press('Meta+V');
   await page.keyboard.press('Control+V');
   await expect.poll(async () => (await entries()).filter((e) => e.title === '来自快捷键 ⌘V').length).toBe(1);
+  await page.locator('#capture-tags-skip').click();
   // 搜索框里 ⌘V 是普通粘贴，不收纳
   const n = (await entries()).length;
   await page.focus('#inbox-search');

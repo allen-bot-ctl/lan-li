@@ -39,6 +39,7 @@ test('已有收纳正文按光标粘贴系统图片、链接和混合图文，�
     });
     await writeHtml('首段原文 尾段原文', '<p>首段原文</p><img src="data:image/png;base64,' + PNG + '"><p>尾段原文</p>');
     await page.click('#inbox-paste');
+    await page.locator('#capture-tags-skip').click();
     const entry = page.locator('#inbox-list .inbox-row').filter({ hasText: '首段原文' });
     await expect(entry).toBeVisible();
     const id = await entry.getAttribute('data-id');
