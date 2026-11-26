@@ -1733,7 +1733,8 @@ function renderCaptureTags() {
   const raw = IQ.normalizeTag(capEl('input').value);
   const q = raw.toLowerCase();
   const has = (name) => state.tags.some((tag) => tag.toLowerCase() === name.toLowerCase());
-  capEl('count').textContent = state.tags.length + ' / ' + IQ.MAX_TAGS;
+  capEl('count').textContent = state.tags.length ? state.tags.length + ' / ' + IQ.MAX_TAGS : '';
+  capEl('toggle').disabled = state.saving;
   capEl('input').disabled = state.saving;
   capEl('add').disabled = state.saving || !raw;
   capEl('skip').disabled = state.saving;
@@ -1749,7 +1750,7 @@ function renderCaptureTags() {
         state.tags = state.tags.filter((n) => n !== name);
         capEl('status').textContent = '';
         renderCaptureTags();
-        capEl('input').focus();
+        (capEl('picker').hidden ? capEl('toggle') : capEl('input')).focus();
       } else {
         stageCaptureTag(name);
       }
@@ -1760,6 +1761,13 @@ function renderCaptureTags() {
   capEl('options').replaceChildren(...state.library.filter((n) => !has(n) && (!q || n.toLowerCase().includes(q))).map((n) => chip(n, false)));
 }
 
+function setCapturePicker(open, focus = true) {
+  capEl('picker').hidden = !open;
+  capEl('toggle').setAttribute('aria-expanded', String(open));
+  capEl('toggle').textContent = open ? '− 收起标签' : '＋ 添加标签';
+  if (focus) (open ? capEl('input') : capEl('toggle')).focus();
+}
+
 function openCaptureTags(result, source) {
   if (inboxView.hidden || !inboxDetail.hidden || captureTags.open ||
       !result?.ok || result.dup || !result.ids?.length) return false;
@@ -1768,18 +1776,24 @@ function openCaptureTags(result, source) {
   capEl('input').value = '';
   capEl('status').textContent = '';
   capEl('title').textContent = source === 'manual' ? '录入成功' : '粘贴收纳成功';
-  capEl('desc').textContent = state.ids.length === 1 ? '已保存到收纳，不添加标签也可以。' :
-    '本次保存了 ' + state.ids.length + ' 项，标签将应用到全部条目。';
+  const batch = state.ids.length > 1;
+  capEl('desc').textContent = batch ? '本次保存了 ' + state.ids.length + ' 项，标签将应用到全部条目。' : '';
+  capEl('saved').classList.toggle('capture-tags-single', !batch && result.items?.[0]?.type === 'text');
+  setCapturePicker(false, false);
   const labels = { file: '文件', image: '图片', link: '链接', text: '文字' };
   capEl('items').replaceChildren(...(result.items || []).slice(0, 2).map((item) => {
     const row = document.createElement('li');
     const kind = document.createElement('span');
     kind.className = 'capture-tags-item-type';
-    kind.textContent = item.type === 'text' && item.rich ? '图文' : (labels[item.type] || '收纳');
+    kind.textContent = item.type === 'text' && item.rich ? '富文本' : (labels[item.type] || '收纳');
     const name = document.createElement('span');
     name.className = 'capture-tags-item-title';
-    name.textContent = typeof item.title === 'string' && item.title.trim() ? item.title : '（无标题）';
-    name.title = name.textContent;
+    if (item.preview) {
+      name.textContent = item.preview;
+    } else {
+      name.textContent = batch ? kind.textContent : '已收纳 1 条' + kind.textContent;
+      kind.hidden = true;
+    }
     row.append(kind, name);
     return row;
   }));
@@ -1790,7 +1804,10 @@ function openCaptureTags(result, source) {
     capEl('items').append(more);
   }
   renderCaptureTags();
+  // A new successful receipt replaces transient notices from earlier actions.
+  if (toastState && toastState.type !== 'progress' && !toastState.sticky) hideToast();
   captureTags.showModal();
+  capEl('title').focus({ preventScroll: true });
   api.inboxTags().then((list) => {
     if (captureTagState !== state) return;
     state.library = (list || []).map((t) => t.name).sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'));
@@ -1850,6 +1867,13 @@ async function saveCaptureTags() {
   capEl('save').focus();
 }
 
+function escapeCaptureTags() {
+  if (!captureTagState || captureTagState.saving) return;
+  if (!capEl('picker').hidden) setCapturePicker(false);
+  else closeCaptureTags();
+}
+
+capEl('toggle').addEventListener('click', () => setCapturePicker(capEl('picker').hidden));
 capEl('input').addEventListener('input', () => { capEl('status').textContent = ''; renderCaptureTags(); });
 capEl('input').addEventListener('keydown', (e) => {
   if (e.key !== 'Enter' || e.isComposing) return;
@@ -1859,7 +1883,7 @@ capEl('input').addEventListener('keydown', (e) => {
 capEl('add').addEventListener('click', () => stageCaptureTag(capEl('input').value));
 capEl('save').addEventListener('click', saveCaptureTags);
 capEl('skip').addEventListener('click', closeCaptureTags);
-captureTags.addEventListener('cancel', (e) => { e.preventDefault(); closeCaptureTags(); });
+captureTags.addEventListener('cancel', (e) => { e.preventDefault(); escapeCaptureTags(); });
 
 async function captureFromPanel() {
   if (captureRequestPending || captureTags.open) return;
@@ -2390,7 +2414,7 @@ api.onInboxChanged(() => { refreshInbox(); });
 // 右键「删除这条」和悬停 × 走同一条可撤销删除
 if (api.onInboxRequestDelete) api.onInboxRequestDelete((id) => deleteInboxEntry(id));
 api.onInboxEscape(() => {
-  if (captureTags.open) { closeCaptureTags(); return; }
+  if (captureTags.open) { escapeCaptureTags(); return; }
   if (writerState) { requestCloseInboxWriter(); return; }
   if (inboxEditDialog.open) { requestCloseInboxEditor(); return; }
   if (!inboxDetail.hidden) { showInboxList(); return; }
