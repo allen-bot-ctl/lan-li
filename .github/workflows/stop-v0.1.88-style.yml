@@ -1,0 +1,21 @@
+name: Stop v0.1.88 draft with native window styling issue
+on:
+  push:
+    branches: [release/v0.1.88-compact-polished]
+    paths: [.github/workflows/stop-v0.1.88-style.yml]
+permissions:
+  actions: write
+jobs:
+  stop:
+    if: github.repository == 'allen-bot-ctl/lan-li' && github.actor_id == '352863755'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Cancel exact draft run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          api="repos/$GITHUB_REPOSITORY/actions/runs/45800603538"
+          test "$(gh api "$api" --jq .head_sha)" = 330dfb986629b4a2ceb909260d603c59b9779c0a
+          if [ "$(gh api "$api" --jq .status)" != completed ]; then gh api --method POST "$api/cancel"; fi
