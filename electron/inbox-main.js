@@ -21,6 +21,11 @@ const TEXT_CLIP_DUP = '已经收过了';
 const CLIP_DUP_MS = 3000;
 
 function xmlUnescape(s) { return String(s).replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&'); }
+// 只返回刚落盘条目的标题和类型，供收纳成功弹窗使用，不返回正文或路径。
+function captureItems(saved) {
+  return saved.slice(0, 2).map((m) => ({ title: m.displayTitle || m.title, type: m.type, rich: !!m.rich }));
+}
+
 function fileUrlPath(u) { try { return /^file:/i.test(u) ? decodeURIComponent(new URL(String(u).trim()).pathname).replace(/\/$/, '') : ''; } catch { return ''; } }
 
 // 按快捷键那一刻最前面的应用名（系统自带 lsappinfo，无需授权）。
@@ -271,7 +276,7 @@ function createInboxController(deps) {
       const label = captureLabel(items);
       if (deps.onChanged) deps.onChanged();
       tell({ state: 'success', text: `已收纳 · ${label}`, sub: '点开查看' }, SUCCESS_HIDE_MS);
-      return { ok: true, count: lastSaved.length, label, text: `已收纳 · ${label}`, ids: lastSaved.map((m) => m.id) };
+      return { ok: true, count: lastSaved.length, label, text: `已收纳 · ${label}`, ids: lastSaved.map((m) => m.id), items: panel ? captureItems(lastSaved) : undefined };
     } catch (error) {
       if (logger) logger.warn('[栏历] 剪贴板收纳失败：' + (error && error.message));
       const unsupported = error && (error.code === 'empty' || error.code === 'unsupported');
@@ -292,7 +297,7 @@ function createInboxController(deps) {
     try {
       lastSaved = store.saveAll([{ kind: 'text', text }], { via: 'manual' });
       if (deps.onChanged) deps.onChanged();
-      return { ok: true, count: lastSaved.length, text: '已收纳', ids: lastSaved.map((m) => m.id) };
+      return { ok: true, count: lastSaved.length, text: '已收纳', ids: lastSaved.map((m) => m.id), items: captureItems(lastSaved) };
     } catch (error) {
       if (logger) logger.warn('[栏历] 录入失败：' + (error && error.message));
       return { ok: false, kind: 'error', text: errorText(error) };

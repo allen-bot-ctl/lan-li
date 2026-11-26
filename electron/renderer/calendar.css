@@ -1688,13 +1688,24 @@ mark.inbox-hit{background:rgba(255,200,0,.45);color:inherit;border-radius:2px;}
   padding: 15px; color: var(--text); background: var(--card-bg); border: 1px solid var(--sheet-border);
   border-radius: 14px; overflow: auto; box-shadow: 0 12px 36px #0005; backdrop-filter: blur(36px); }
 #inbox-edit-dialog::backdrop, #inbox-capture-tags::backdrop { background: #0007; }
-#inbox-capture-tags { width: min(400px, calc(100% - 48px)); padding: 18px; }
+#inbox-capture-tags { width: min(420px, calc(100% - 48px)); box-sizing:border-box; padding:16px; background: var(--sheet-bg); }
 .capture-tags-card { display:grid; gap:8px; }
-.capture-tags-card :is(h2,p) { margin:0; }
-.capture-tags-card h2 { font-size:17px; }
-.capture-tags-card header { display:flex; align-items:center; justify-content:space-between; }
+.capture-tags-card :is(h2,h3,p) { margin:0; }
+.capture-tags-receipt { display:flex; align-items:center; gap:7px; }
+.capture-tags-receipt h2 { font-size:18px; font-weight:700; }
+.capture-tags-receipt svg { width:22px; height:22px; fill:none; stroke:var(--capture-success); stroke-width:2.1; stroke-linejoin:round; stroke-linecap:round; flex:none; }
+#inbox-capture-tags { --capture-success:#1f844d; }
+@media (prefers-color-scheme:dark) { #inbox-capture-tags { --capture-success:#78d49a; } }
+.capture-tags-saved { display:grid; gap:4px; padding:8px 10px; border:1px solid var(--sheet-border); border-radius:8px; background:var(--chip); }
+#capture-tags-items { list-style:none; padding:0; margin:0; display:grid; gap:3px; }
+#capture-tags-items li { display:flex; align-items:baseline; gap:8px; min-width:0; }
+.capture-tags-item-type { flex:none; font-size:11px; color:var(--muted); }
+.capture-tags-item-title { min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; font-size:13px; font-weight:600; }
+.capture-tags-section { display:flex; align-items:baseline; justify-content:space-between; padding-top:2px; gap:8px; }
+.capture-tags-section h3 { font-size:13px; }
+.capture-tags-section h3 span { font-size:12px; font-weight:400; color:var(--muted); }
 .capture-tags-card :is(p,label), #capture-tags-count { font-size:12px; color:var(--muted); }
-#capture-tags-picked, #capture-tags-options { display:flex; flex-wrap:wrap; gap:5px; max-height:80px; overflow:auto; }
+#capture-tags-picked, #capture-tags-options { display:flex; flex-wrap:wrap; gap:5px; max-height:60px; overflow:auto; }
 #capture-tags-picked:empty, #capture-tags-options:empty, #capture-tags-status:empty { display:none; }
 .capture-tags-input-row { display:flex; gap:6px; }
 .capture-tags-input-row input { min-width:0; flex:1; user-select:text; cursor:text; font:inherit; color:inherit; background:var(--chip); border:1px solid var(--sheet-border); border-radius:7px; padding:7px 9px; }

@@ -1760,15 +1760,35 @@ function renderCaptureTags() {
   capEl('options').replaceChildren(...state.library.filter((n) => !has(n) && (!q || n.toLowerCase().includes(q))).map((n) => chip(n, false)));
 }
 
-function openCaptureTags(result) {
+function openCaptureTags(result, source) {
   if (inboxView.hidden || !inboxDetail.hidden || captureTags.open ||
-      !result?.ok || result.dup || !result.ids?.length) return;
+      !result?.ok || result.dup || !result.ids?.length) return false;
   const state = { ids: [...result.ids], tags: [], library: [], saving: false };
   captureTagState = state;
   capEl('input').value = '';
   capEl('status').textContent = '';
-  capEl('desc').textContent = state.ids.length === 1 ? '内容已收纳，可以为它选多个标签。' :
-    '已收纳 ' + state.ids.length + ' 项，所选标签将应用到这批条目。';
+  capEl('title').textContent = source === 'manual' ? '录入成功' : '粘贴收纳成功';
+  capEl('desc').textContent = state.ids.length === 1 ? '已保存到收纳，不添加标签也可以。' :
+    '本次保存了 ' + state.ids.length + ' 项，标签将应用到全部条目。';
+  const labels = { file: '文件', image: '图片', link: '链接', text: '文字' };
+  capEl('items').replaceChildren(...(result.items || []).slice(0, 2).map((item) => {
+    const row = document.createElement('li');
+    const kind = document.createElement('span');
+    kind.className = 'capture-tags-item-type';
+    kind.textContent = item.type === 'text' && item.rich ? '图文' : (labels[item.type] || '收纳');
+    const name = document.createElement('span');
+    name.className = 'capture-tags-item-title';
+    name.textContent = typeof item.title === 'string' && item.title.trim() ? item.title : '（无标题）';
+    name.title = name.textContent;
+    row.append(kind, name);
+    return row;
+  }));
+  if (state.ids.length > 2) {
+    const more = document.createElement('li');
+    more.className = 'capture-tags-item-type';
+    more.textContent = '另有 ' + (state.ids.length - 2) + ' 项';
+    capEl('items').append(more);
+  }
   renderCaptureTags();
   captureTags.showModal();
   api.inboxTags().then((list) => {
@@ -1776,6 +1796,7 @@ function openCaptureTags(result) {
     state.library = (list || []).map((t) => t.name).sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'));
     renderCaptureTags();
   }).catch(() => { /* 输入新标签仍然可用 */ });
+  return true;
 }
 
 function stageCaptureTag(value) {
@@ -1848,11 +1869,11 @@ async function captureFromPanel() {
     const r = await api.captureClipboard();
     refreshInbox();
     if (!r) return;
-    if (r.text) {
+    const opened = inboxOpenGeneration === generation && openCaptureTags(r, 'clipboard');
+    if (!opened && r.text) {
       const type = r.dup ? 'info' : r.ok ? 'success' : r.kind === 'empty' ? 'warning' : 'error';
       showToast({ type, title: r.text });
     }
-    if (inboxOpenGeneration === generation) openCaptureTags(r);
   } catch {
     showToast({ type: 'error', title: '收纳失败' });
   } finally {
@@ -1898,8 +1919,8 @@ async function saveCompose() {
     if (r?.ok) {
       closeCompose(true);
       refreshInbox();
-      showToast({ type: 'success', title: r.text || '已收纳' });
-      if (inboxOpenGeneration === generation) openCaptureTags(r);
+      const opened = inboxOpenGeneration === generation && openCaptureTags(r, 'manual');
+      if (!opened) showToast({ type: 'success', title: r.text || '已收纳' });
     } else {
       showToast({ type: r?.kind === 'empty' ? 'warning' : 'error', title: r?.text || '收纳失败' });
     }

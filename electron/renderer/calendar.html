@@ -244,8 +244,15 @@
       <div class="inbox-tagpop" id="inbox-tagpop" hidden><input id="inbox-tag-input" type="text" maxlength="8" placeholder="加标签，回车" autocomplete="off"><span class="inbox-tag-suggest" id="inbox-tag-suggest"></span><span class="inbox-tagpop-err" id="inbox-tagpop-err"></span><button type="button" class="inbox-tagpop-manage" id="inbox-tagpop-manage">管理标签…</button></div>
       <dialog id="inbox-capture-tags" aria-labelledby="capture-tags-title" aria-describedby="capture-tags-desc">
         <div class="capture-tags-card">
-          <header><h2 id="capture-tags-title">添加标签</h2><span id="capture-tags-count"></span></header>
-          <p id="capture-tags-desc"></p>
+          <header class="capture-tags-receipt">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8 12 2.6 2.6L16 9"/></svg>
+            <h2 id="capture-tags-title"></h2>
+          </header>
+          <div class="capture-tags-saved">
+            <ul id="capture-tags-items" aria-label="刚保存的收纳"></ul>
+            <p id="capture-tags-desc"></p>
+          </div>
+          <div class="capture-tags-section"><h3>添加标签 <span>（可选）</span></h3><span id="capture-tags-count" aria-label="已选标签数量"></span></div>
           <div id="capture-tags-picked" aria-label="已选标签"></div>
           <label for="capture-tags-input">搜索或输入新标签</label>
           <div class="capture-tags-input-row">
@@ -255,7 +262,7 @@
           <div id="capture-tags-options" aria-label="已有标签"></div>
           <p id="capture-tags-status" role="alert"></p>
           <footer class="inbox-edit-actions">
-            <button id="capture-tags-skip" type="button">跳过</button>
+            <button id="capture-tags-skip" type="button">暂不添加</button>
             <button id="capture-tags-save" type="button">保存标签</button>
           </footer>
         </div>

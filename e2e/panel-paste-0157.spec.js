@@ -26,18 +26,21 @@ test.afterAll(async () => { if (app) await app.close(); });
 async function pasteAndCheck(clipData, opensTagDialog = false) {
   if (clipData) await hook('setClipboardData', clipData);
   await page.click('#inbox-paste');
-  if (opensTagDialog) await page.locator('#capture-tags-skip').click();
+  if (opensTagDialog) {
+    await expect(page.locator('#capture-tags-title')).toHaveText('粘贴收纳成功');
+    await expect(page.locator('#toast')).toBeHidden();
+    await page.locator('#capture-tags-skip').click();
+  }
   await page.waitForTimeout(1500);
   expect(await hook('isPinned')).toBe(true);   // 0.1.62：收纳页自动钉住
   expect(await hook('isVisible')).toBe(true);
   expect((await hook('dropzoneState')).visible).toBe(false);
-  await expect(page.locator('#toast')).toBeVisible();
+  if (!opensTagDialog) await expect(page.locator('#toast')).toBeVisible();
 }
 
-test('P1 未钉住点「粘贴收纳」：窗口仍可见、无托盘提示框、窗口内 success toast、条数 +1', async () => {
+test('P1 未钉住点「粘贴收纳」：窗口仍可见、无托盘提示框、窗口内保存回执、条数 +1', async () => {
   const n = await count();
   await pasteAndCheck({ text: '面板粘贴一段文字' }, true);
-  await expect(toastTitle()).toHaveText('已收纳 · 文字');
   expect(await count()).toBe(n + 1);
   await expect(page.locator('.inbox-row').first()).toContainText('面板粘贴一段文字');
   for (const scheme of ['dark', 'light']) {

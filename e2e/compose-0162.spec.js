@@ -101,9 +101,9 @@ test('R4 收纳录入：空内容保存禁用；⌘↩ 保存；标题取第一�
   await expect(page.locator('#inbox-compose-count')).not.toHaveClass(/is-over/);
   await shots('62-inbox-compose', page.locator('#inbox-view'));
   await page.press('#inbox-compose-text', 'Control+Enter');
+  await expect(page.locator('#capture-tags-title')).toHaveText('录入成功');
   await page.locator('#capture-tags-skip').click();
   await expect(page.locator('#inbox-compose')).toBeHidden();
-  await expect(page.locator('#toast-title')).toHaveText('已收纳');
   const list = await hook('inboxList');
   expect(list.length).toBe(n0 + 1);
   const e = list[0];

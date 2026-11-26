@@ -29,8 +29,8 @@ test('R2 带 meta 的富文本粘贴收纳：标题是正文开头，详情里�
     text: '栏历 v0.1.57 已出包，安装包'
   });
   await page.click('#inbox-paste');
+  await expect(page.locator('.capture-tags-item-type')).toHaveText('图文');
   await page.locator('#capture-tags-skip').click();
-  await expect(page.locator('#toast-title')).toHaveText('已收纳 · 图文');
   const [m] = await hook('inboxList');
   expect(m.title.startsWith('栏历 v0.1.57 已出包，安装包')).toBe(true);
   await page.locator('.inbox-row', { hasText: '栏历 v0.1.57 已出包' }).first().click();
@@ -58,8 +58,8 @@ test('R3 清洗后为空、text 有字：存成「文字」条目，内容是「
   }).toPass({ timeout: 5000 });
   await hook('setClipboardData', { html: '<style>p{}</style>', text: '备用文字' });
   await page.click('#inbox-paste');
+  await expect(page.locator('.capture-tags-item-type')).toHaveText('文字');
   await page.locator('#capture-tags-skip').click();
-  await expect(page.locator('#toast-title')).toHaveText(/已收纳/);
   await expect.poll(async () => (await hook('inboxList'))[0].title).toBe('备用文字');
   const [m] = await hook('inboxList');
   expect(m.rich).toBeFalsy();
