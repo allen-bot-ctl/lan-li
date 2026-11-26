@@ -246,20 +246,24 @@
         <div class="capture-tags-card">
           <header class="capture-tags-receipt">
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8 12 2.6 2.6L16 9"/></svg>
-            <h2 id="capture-tags-title"></h2>
+            <h2 id="capture-tags-title" tabindex="-1" autofocus></h2>
           </header>
-          <div class="capture-tags-saved">
+          <div class="capture-tags-saved" id="capture-tags-saved">
             <ul id="capture-tags-items" aria-label="刚保存的收纳"></ul>
             <p id="capture-tags-desc"></p>
           </div>
-          <div class="capture-tags-section"><h3>添加标签 <span>（可选）</span></h3><span id="capture-tags-count" aria-label="已选标签数量"></span></div>
-          <div id="capture-tags-picked" aria-label="已选标签"></div>
-          <label for="capture-tags-input">搜索或输入新标签</label>
-          <div class="capture-tags-input-row">
-            <input id="capture-tags-input" type="text" autocomplete="off" placeholder="搜索或输入，回车添加" autofocus>
-            <button id="capture-tags-add" type="button">添加</button>
+          <div class="capture-tags-section">
+            <button id="capture-tags-toggle" type="button" aria-controls="capture-tags-picker" aria-expanded="false">＋ 添加标签</button>
+            <span class="capture-tags-optional">可选</span><span id="capture-tags-count" aria-label="已选标签数量"></span>
           </div>
-          <div id="capture-tags-options" aria-label="已有标签"></div>
+          <div id="capture-tags-picked" aria-label="已选标签"></div>
+          <div id="capture-tags-picker" hidden>
+            <div class="capture-tags-input-row">
+              <input id="capture-tags-input" type="text" autocomplete="off" aria-label="搜索或输入新标签" placeholder="搜索或输入新标签">
+              <button id="capture-tags-add" type="button">添加</button>
+            </div>
+            <div id="capture-tags-options" aria-label="已有标签"></div>
+          </div>
           <p id="capture-tags-status" role="alert"></p>
           <footer class="inbox-edit-actions">
             <button id="capture-tags-skip" type="button">暂不添加</button>
