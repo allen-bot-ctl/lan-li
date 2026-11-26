@@ -1,0 +1,23 @@
+name: Stop v0.1.88 package with visual regression
+on:
+  push:
+    branches: [release/v0.1.88-capture-tags]
+    paths: [.github/workflows/stop-v0.1.88-first.yml]
+permissions:
+  actions: write
+jobs:
+  stop:
+    if: github.repository == 'allen-bot-ctl/lan-li' && github.actor_id == '352863755'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Cancel only the verified first draft run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          api="repos/$GITHUB_REPOSITORY/actions/runs/45798455969"
+          test "$(gh api "$api" --jq .head_sha)" = 2796d7abf0bd5a6b7a0949ee15506c085f4e24da
+          if [ "$(gh api "$api" --jq .status)" != completed ]; then
+            gh api --method POST "$api/cancel"
+          fi
