@@ -29,7 +29,7 @@ test('R2 带 meta 的富文本粘贴收纳：标题是正文开头，详情里�
     text: '栏历 v0.1.57 已出包，安装包'
   });
   await page.click('#inbox-paste');
-  await expect(page.locator('.capture-tags-item-type')).toHaveText('图文');
+  await expect(page.locator('.capture-tags-item-type')).toHaveText('富文本');
   await page.locator('#capture-tags-skip').click();
   const [m] = await hook('inboxList');
   expect(m.title.startsWith('栏历 v0.1.57 已出包，安装包')).toBe(true);

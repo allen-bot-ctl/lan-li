@@ -6,6 +6,7 @@ const crypto = require('node:crypto');
 const { execFile } = require('node:child_process');
 const { createInboxStore, classifyDrop, classifyClipboard, captureLabel, imgSources, htmlToPlain, MAX_IMAGE_BYTES, InboxError } = require('./inbox-store');
 const Q = require('./renderer/inbox-query');
+const { capturePreview } = require('./inbox-capture-preview');
 const UNDO_MS = 5000;
 
 const DZ_W = 240;
@@ -21,9 +22,9 @@ const TEXT_CLIP_DUP = '已经收过了';
 const CLIP_DUP_MS = 3000;
 
 function xmlUnescape(s) { return String(s).replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&'); }
-// 只返回刚落盘条目的标题和类型，供收纳成功弹窗使用，不返回正文或路径。
+// 只返回收纳弹窗需要的短预览和类型，不返回完整正文或路径。
 function captureItems(saved) {
-  return saved.slice(0, 2).map((m) => ({ title: m.displayTitle || m.title, type: m.type, rich: !!m.rich }));
+  return saved.slice(0, 2).map((m) => ({ preview: capturePreview(m), type: m.type, rich: !!m.rich }));
 }
 
 function fileUrlPath(u) { try { return /^file:/i.test(u) ? decodeURIComponent(new URL(String(u).trim()).pathname).replace(/\/$/, '') : ''; } catch { return ''; } }
