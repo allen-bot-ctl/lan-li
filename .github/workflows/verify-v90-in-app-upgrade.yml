@@ -56,11 +56,11 @@ jobs:
               await el.evaluate(()=>globalThis.__lanliTest.trayEnter());
               const page=await el.firstWindow();
               await page.locator('#check-update').click({timeout:10000});
-              const action=page.getByRole('button',{name:/重启更新|下载新版/});
+              const action=page.getByRole('button',{name:/立即重启|下载新版/});
               await action.waitFor({timeout:120000});
               const label=await action.textContent();
               console.log('Upgrade button:', label);
-              if(!label.includes('重启更新'))throw new Error('Manual download fallback reproduced');
+              if(!label.includes('立即重启'))throw new Error('Manual download fallback reproduced');
               const staged=path.join(root,'.栏历-update-0.1.90','栏历.app');
               if(extract('CFBundleShortVersionString',path.join(staged,'Contents','Info.plist'))!=='0.1.90')throw new Error('wrong staged version');
               execFileSync('/usr/bin/codesign',['--verify','--deep','--strict',staged]);
