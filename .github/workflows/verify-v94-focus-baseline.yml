@@ -1,0 +1,180 @@
+name: Diagnose native hover focus on signed-release source
+on:
+  push:
+    branches: [verify/v94-focus-baseline]
+    paths: [.github/workflows/verify-v94-focus-baseline.yml]
+permissions:
+  contents: read
+jobs:
+  baseline:
+    if: github.repository == 'allen-bot-ctl/lan-li' && github.actor_id == '352863755'
+    runs-on: macos-15-intel
+    timeout-minutes: 9
+    env:
+      FOCUS_BASELINE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 4809fbb0f76e0b4960ec6b88c5db30158a32483f
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci && npm run build:inbox-editor
+      - name: Verify actual keyboard routing between two macOS apps
+        shell: bash
+        run: |
+          set -euo pipefail
+          probe="$RUNNER_TEMP/FocusProbe.app"
+          mkdir -p "$probe/Contents/MacOS"
+          cat > "$probe/Contents/Info.plist" <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict><key>CFBundleIdentifier</key><string>com.lanli.focusprobe</string><key>CFBundleName</key><string>FocusProbe</string><key>CFBundleExecutable</key><string>probe</string><key>CFBundlePackageType</key><string>APPL</string><key>NSPrincipalClass</key><string>NSApplication</string></dict></plist>
+          PLIST
+          cat > "$RUNNER_TEMP/FocusProbe.swift" <<'SWIFT'
+          import AppKit
+          import CoreGraphics
+          
+          let args = CommandLine.arguments
+          func log(_ text: String, file: String) {
+            let url = URL(fileURLWithPath: file)
+            if !FileManager.default.fileExists(atPath: file) { FileManager.default.createFile(atPath: file, contents: nil) }
+            guard let h = try? FileHandle(forWritingTo: url) else { return }
+            defer { try? h.close() }
+            try? h.seekToEnd()
+            try? h.write(contentsOf: Data((text + "\n").utf8))
+          }
+          if args.count > 1 && args[1] == "front" {
+            print(NSWorkspace.shared.frontmostApplication?.processIdentifier ?? -1)
+            exit(0)
+          }
+          if args.count > 2 && args[1] == "key" {
+            let k = CGKeyCode(args[2])!
+            let s = CGEventSource(stateID: .hidSystemState)
+            print("postEventAccess=\(CGPreflightPostEventAccess())")
+            CGEvent(keyboardEventSource: s, virtualKey: k, keyDown: true)?.post(tap: .cghidEventTap)
+            usleep(25000)
+            CGEvent(keyboardEventSource: s, virtualKey: k, keyDown: false)?.post(tap: .cghidEventTap)
+            exit(0)
+          }
+          if args.count > 3 && args[1] == "click" {
+            let p = CGPoint(x: Double(args[2])!, y: Double(args[3])!)
+            let s = CGEventSource(stateID: .hidSystemState)
+            print("postEventAccess=\(CGPreflightPostEventAccess())")
+            CGEvent(mouseEventSource: s, mouseType: .mouseMoved, mouseCursorPosition: p, mouseButton: .left)?.post(tap: .cghidEventTap)
+            CGEvent(mouseEventSource: s, mouseType: .leftMouseDown, mouseCursorPosition: p, mouseButton: .left)?.post(tap: .cghidEventTap)
+            usleep(25000)
+            CGEvent(mouseEventSource: s, mouseType: .leftMouseUp, mouseCursorPosition: p, mouseButton: .left)?.post(tap: .cghidEventTap)
+            exit(0)
+          }
+          final class Probe: NSObject, NSApplicationDelegate, NSTextViewDelegate {
+            let file: String
+            var window: NSWindow?
+            init(_ file: String) { self.file = file }
+            func applicationDidFinishLaunching(_ notification: Notification) {
+              let w = NSWindow(contentRect: NSRect(x: 35, y: 60, width: 320, height: 140), styleMask: [.titled, .closable], backing: .buffered, defer: false)
+              let view = NSTextView(frame: w.contentView!.bounds)
+              view.isEditable = true
+              view.isRichText = false
+              view.delegate = self
+              w.title = "Keyboard Focus Probe"
+              w.contentView = view
+              w.makeKeyAndOrderFront(nil)
+              w.makeFirstResponder(view)
+              NSApp.activate(ignoringOtherApps: true)
+              window = w
+              log("ready \(ProcessInfo.processInfo.processIdentifier)", file: file)
+            }
+            func textDidChange(_ notification: Notification) {
+              guard let v = notification.object as? NSTextView else { return }
+              log("input " + v.string, file: file)
+            }
+          }
+          let app = NSApplication.shared
+          let delegate = Probe(args[1])
+          app.setActivationPolicy(.regular)
+          app.delegate = delegate
+          app.run()
+          SWIFT
+          swiftc -framework AppKit -framework CoreGraphics "$RUNNER_TEMP/FocusProbe.swift" -o "$probe/Contents/MacOS/probe"
+          codesign --force --sign - "$probe"
+          cat > "$RUNNER_TEMP/native-focus.cjs" <<'NODE'
+          'use strict';
+          const { _electron } = require(require('path').join(process.cwd(), 'node_modules/playwright'));
+          const { spawn, execFileSync } = require('node:child_process');
+          const { readFileSync } = require('node:fs');
+          const assert = require('node:assert/strict');
+          const path = require('node:path');
+          const root = process.env.RUNNER_TEMP;
+          const exe = path.join(root, 'FocusProbe.app', 'Contents', 'MacOS', 'probe');
+          const logFile = path.join(root, 'focus-probe.log');
+          const read = () => { try { return readFileSync(logFile, 'utf8'); } catch { return ''; } };
+          const command = (...a) => execFileSync(exe,a.map(String),{encoding:'utf8'}).trim();
+          async function until(predicate, name, ms=9000) {
+            for (const end=Date.now()+ms; Date.now()<end;) {
+              try { if (await predicate()) return; } catch(err) { console.log(name,err.message); }
+              await new Promise(r=>setTimeout(r,150));
+            }
+            throw Error(name+'; front='+command('front')+' probe='+read());
+          }
+          (async()=>{
+            const baseline = process.env.FOCUS_BASELINE === '1';
+            const app=await _electron.launch({args:['.'],env:{...process.env,LANLI_E2E:'1',LANLI_E2E_USER_DATA_DIR:path.join(root,'focus-lanli-profile')}});
+            let other;
+            try {
+              const page=await app.firstWindow();
+              await page.waitForSelector('#grid');
+              other=spawn(exe,[logFile],{stdio:'inherit'});
+              await until(()=>Number(command('front'))===other.pid && read().includes('ready'), 'companion app active and ready');
+              console.log('BEFORE hover active pid',command('front'), 'El',app.process().pid, 'probe',other.pid);
+              console.log('KEY before',command('key',0)); // a
+              await until(()=>read().includes('input a'), 'independent app receives key before hover',5000);
+              const hook=(name)=>app.evaluate((_e,name)=>globalThis.__lanliTest[name](),name);
+              await hook('trayEnter');
+              const state=async()=>app.evaluate(({BrowserWindow})=>{
+                const w=BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().endsWith('/calendar.html'));
+                return {visible:w.isVisible(),focused:w.isFocused(),bounds:w.getContentBounds()};
+              });
+              const hovering=await state();
+              assert.equal(hovering.visible,true);
+              console.log('AFTER hover active pid',command('front'), JSON.stringify(hovering));
+              if (baseline) {
+                await until(()=>Number(command('front'))===app.process().pid&&(state().then(s=>s.focused)), 'old version takes OS focus');
+                const before=read();
+                console.log('KEY baseline',command('key',11)); // b
+                await new Promise(r=>setTimeout(r,200));
+                assert.equal(read(),before,'baseline steals an actual key from independent app');
+                console.log('NATIVE-BASELINE-FOCUS-REPRO: PASS');
+                return;
+              }
+              assert.equal(hovering.focused,false);
+              assert.equal(Number(command('front')),other.pid);
+              console.log('KEY during',command('key',11)); // b
+              await until(()=>read().includes('input ab'), 'independent app receives key while calendar is visible',5000);
+              const rect=await page.locator('#settings-button').boundingBox();
+              const x=Math.round(hovering.bounds.x+rect.x+rect.width/2);
+              const y=Math.round(hovering.bounds.y+rect.y+rect.height/2);
+              console.log('CLICK settings first native click',x,y,command('click',x,y));
+              await until(()=>Number(command('front'))===app.process().pid, 'first intentional native click activates LanLi');
+              await page.locator('#settings-view').waitFor({state:'visible',timeout:5000});
+              // Prove normal key input in the application with a field explicitly clicked.
+              await page.locator('#settings-back').click();
+              const inboxLoc=await page.locator('#inbox-button').boundingBox();
+              const bw=await state();
+              command('click',Math.round(bw.bounds.x+inboxLoc.x+inboxLoc.width/2),Math.round(bw.bounds.y+inboxLoc.y+inboxLoc.height/2));
+              await page.locator('#inbox-search').waitFor({state:'visible',timeout:5000});
+              const b=await page.locator('#inbox-search').boundingBox();
+              const now=await state();
+              command('click',Math.round(now.bounds.x+b.x+b.width/2),Math.round(now.bounds.y+b.y+b.height/2));
+              command('key',8); // c
+              await until(()=>page.locator('#inbox-search').inputValue().then(s=>s==='c'), 'native keyboard event arrives at LanLi after click');
+              assert.equal(read().includes('input abc'),false);
+              console.log('NATIVE-TWO-APPS-HOVER-TYPING: PASS');
+            } finally {
+              if (other) other.kill();
+              await app.close();
+            }
+          })().catch(e=>{console.error(e);process.exitCode=1;});
+          NODE
+          node "$RUNNER_TEMP/native-focus.cjs"
