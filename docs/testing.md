@@ -181,3 +181,13 @@ xvfb-run -a npm run e2e   # Linux；macOS 直接 npm run e2e
 `tests/inbox-archive.test.js` 验证纯 URL 全串匹配/原拼写、混合文字、旧数据无归档字段、原子与幂等持久化、内容/附件元数据和顺序保持、meta/索引失败、重启、缺失文件、真实 IPC 日历计数、范围/标签/日期及完整 URL 路径搜索。
 
 `e2e/inbox-archive.spec.js`（grep「收纳归档与纯链接录入」）从录入、行内 SVG 和范围按钮操作，覆盖旧历史链接独占日期、已选标签跨范围取消、空归档与筛选空、归档后主页标记减少但归档内日期仍可筛、恢复、缺失文件与进程重启持久性、窄窗和深浅截图。`e2e/row-actions-0159.spec.js` 的准确按钮顺序断言同步加入归档，原 Finder/复制/标签/删除覆盖保留。原生 Electron/Intel 安装包行为需对应环境确认。
+
+## 悬停不抢焦点（0.1.94）
+
+`tests/hover-no-focus.test.js` 执行实际注册的托盘事件和实际 openCalendar，验证悬停仅 showInactive、重复悬停不激活、点击可激活已展开面板、显式设置/收纳入口聚焦，以及菜单/接纳框守卫和离开计时路径。窗口保持 focusable 并开启 acceptFirstMouse；原固定、Esc、子页与快捷键测试保留。
+
+`e2e/hover-no-focus.spec.js`（grep「悬停不抢焦点」）在真实 Electron 中用对照窗口验证焦点保留、显式点击激活、一次点击翻月、离开/固定/Esc及子页输入。该项目回归使用同进程对照窗口；两个独立应用的原生键盘归属、前台应用保持和 macOS 首击行为仍须平台级验收，不能由 DOM focus 断言替代。
+
+`LANLI_E2E=1` 下 `globalThis.__lanliTest.trayEnter()` 发实际 tray `mouse-enter` 事件，`trayClick()` 发实际 `click`，`trayLeave()` 发实际 `mouse-leave`。托盘不可创建时调用同一真实处理器。示例：`await app.evaluate(() => globalThis.__lanliTest.trayClick())`；外部测试可通过 Electron `BrowserWindow.getAllWindows()` 找到 calendar.html 窗口并读取 `isFocused()`，不新增 preload/IPC。
+
+归档 E2E 的当前日录入断言移至独占日期计数断言之后，避免每月首日的 fixture 日期碰撞；精确计数保持。
