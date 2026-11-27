@@ -96,16 +96,63 @@ test('收纳归档与纯链接录入：真实入口、范围筛选、日期计�
     expect(after.type).toBe(before.type);
     expect(after.sourceUrl).toBe(before.sourceUrl);
     expect(after.tags).toEqual(before.tags);
+    const resizeAndInspect = async (width, mode) => {
+      // Resize the real frameless Electron content; avoid CDP-only viewport emulation.
+      const native = await app.evaluate(({ BrowserWindow }, size) => {
+        const win = BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().endsWith('/calendar.html'));
+        win.setContentSize(size.width, size.height);
+        return { content: win.getContentBounds(), outer: win.getBounds() };
+      }, { width, height: 432 });
+      const inspect = () => page.locator('#inbox-toolbar').evaluate((el) => {
+        const rect = (node) => {
+          const r = node.getBoundingClientRect();
+          return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height };
+        };
+        return {
+          viewport: { width: window.innerWidth, height: window.innerHeight, dpr: window.devicePixelRatio },
+          body: rect(document.body), app: rect(document.querySelector('.app')),
+          inbox: rect(document.getElementById('inbox-view')), toolbar: rect(el),
+          controls: [...el.querySelectorAll('input,button')].map((node) => ({
+            id: node.id, name: node.getAttribute('aria-label') || node.textContent || node.placeholder,
+            type: node.dataset.type || node.type, ...rect(node)
+          }))
+        };
+      });
+      let layout;
+      try {
+        await expect.poll(async () => {
+          layout = await inspect();
+          return { width: layout.viewport.width, height: layout.viewport.height };
+        }, { message: 'renderer viewport must match native Electron content bounds' }).toEqual({ width, height: 432 });
+      } finally {
+        layout ||= await inspect();
+        const diagnostic = JSON.stringify({ requested: { width, height: 432 }, mode, native, emulatedViewport: page.viewportSize(), ...layout }, null, 2);
+        console.log('ARCHIVE_LAYOUT ' + diagnostic);
+        await test.info().attach(`archive-layout-${width}-${mode}`, { body: Buffer.from(diagnostic), contentType: 'application/json' });
+      }
+      expect(native.content.width).toBe(width);
+      expect(layout.inbox.width).toBe(width);
+      for (const control of layout.controls) {
+        expect(control.left, control.name + ' left edge').toBeGreaterThanOrEqual(0);
+        expect(control.right, control.name + ' right edge').toBeLessThanOrEqual(width);
+        expect(control.top, control.name + ' top edge').toBeGreaterThanOrEqual(layout.toolbar.top);
+        expect(control.bottom, control.name + ' bottom edge').toBeLessThanOrEqual(layout.toolbar.bottom);
+      }
+      for (let i = 0; i < layout.controls.length; i += 1) {
+        for (const other of layout.controls.slice(i + 1)) {
+          const current = layout.controls[i];
+          expect(current.right <= other.left || other.right <= current.left || current.bottom <= other.top || other.bottom <= current.top,
+            current.name + ' overlaps ' + other.name).toBe(true);
+        }
+      }
+    };
     for (const mode of ['dark', 'light']) {
       await page.emulateMedia({ colorScheme: mode });
-      await page.setViewportSize({ width: 400, height: 432 });
-      const boxes = await page.locator('#inbox-toolbar').evaluate((el) => [...el.querySelectorAll('input,button')].map((b) => {
-        const r = b.getBoundingClientRect(); return { left: r.left, right: r.right, bottom: r.bottom };
-      }));
-      expect(boxes.every((r) => r.left >= 0 && r.right <= 400)).toBe(true);
-      await page.screenshot({ path: path.join(__dirname, 'screenshots', 'archive-scope-' + mode + '.png') });
+      for (const width of [400, 580]) {
+        await resizeAndInspect(width, mode);
+        await page.screenshot({ path: path.join(__dirname, 'screenshots', `archive-scope-${width}-${mode}.png`) });
+      }
     }
-    await page.setViewportSize({ width: 580, height: 432 });
     await archive(oldId, true);
     await expect(page.locator('#inbox-empty')).toHaveText(/还没有归档/);
     await scope('all').click();

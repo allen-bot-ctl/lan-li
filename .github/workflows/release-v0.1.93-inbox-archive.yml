@@ -14,8 +14,8 @@ concurrency:
 
 env:
   VERSION_TAG: v0.1.93
-  SOURCE_SHA: 397d04b27128857c4692c17eeade127c6e511cb2
-  SOURCE_TREE: 0217014c361a53a6160b226d223054097af96f20
+  SOURCE_SHA: 4809fbb0f76e0b4960ec6b88c5db30158a32483f
+  SOURCE_TREE: e114f0ea286e977861b988d228f08acd405f53c8
   BASELINE_SHA: 7633c285667944b897e60ac92ccb274243b7f0e4
 
 jobs:
@@ -68,6 +68,14 @@ jobs:
 
       - name: Verify full native Electron suite
         run: npm run e2e
+
+      - name: Collect failed UI test diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: failed-ui-test-diagnostics
+          if-no-files-found: ignore
+          path: test-results/
 
       - name: Upload e2e screenshots
         if: always()
