@@ -175,3 +175,9 @@ xvfb-run -a npm run e2e   # Linux；macOS 直接 npm run e2e
 ## 既有条目标签多选（0.1.92）
 
 `e2e/inbox-item-tag-toggle.spec.js`（grep「既有条目标签多选」）从真实列表行「#」进入，覆盖所有标签、已选黄色字体及 hover 深浅色、即时增删不关框、共享标签仅改目标、回车新增、五个限制、候选区独立滚动/焦点，以及筛选下原行消失后保持位置并恢复标签。已有 B 段、标签管理和回执测试只更新被新版契约替代的列表断言。`tests/inbox-item-tag-toggle.test.js` 通过实际 controller IPC 验证条目隔离，并执行实际 renderer 验证迟到写响应不污染关闭/切换后的会话。Intel Mac 原生视觉与发布后体验需对应环境验证。
+
+## 收纳归档与纯链接录入（0.1.93）
+
+`tests/inbox-archive.test.js` 验证纯 URL 全串匹配/原拼写、混合文字、旧数据无归档字段、原子与幂等持久化、内容/附件元数据和顺序保持、meta/索引失败、重启、缺失文件、真实 IPC 日历计数、范围/标签/日期及完整 URL 路径搜索。
+
+`e2e/inbox-archive.spec.js`（grep「收纳归档与纯链接录入」）从录入、行内 SVG 和范围按钮操作，覆盖旧历史链接独占日期、已选标签跨范围取消、空归档与筛选空、归档后主页标记减少但归档内日期仍可筛、恢复、缺失文件与进程重启持久性、窄窗和深浅截图。`e2e/row-actions-0159.spec.js` 的准确按钮顺序断言同步加入归档，原 Finder/复制/标签/删除覆盖保留。原生 Electron/Intel 安装包行为需对应环境确认。

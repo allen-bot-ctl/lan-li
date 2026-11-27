@@ -269,6 +269,7 @@ main.setupUpdates()
 | `update:check` | `checkUpdate` | 顶栏右上角的检查更新图标；主进程复用 `requestUpdateCheck()`，结果仍经 `update:status` |
 | `update:restart` | `restartToUpdate` | 就绪后重启更新（自更新） |
 | `inbox:removeItemTag` | `removeInboxItemTag` | 仅移除指定条目的一个标签，保留共享标签库 |
+| `inbox:setArchived` | `setInboxArchived` | 明确设置单条归档布尔值，原子写入且幂等 |
 | `reader:cancelQa` | `cancelReaderQa` | 取消当前追问，不写入未完成的问答 |
 
 **send（主 → 渲染）**
@@ -362,3 +363,13 @@ main.setupUpdates()
 列表行「#」入口显示全部库标签和当前条目已选项，按名称排序并支持搜索；已选 `aria-pressed=true`，浅色深金黄、深色亮黄色字体，保留原胶囊底色。点击立即通过 `inbox:addTag` 或新增窄 IPC `inbox:removeItemTag(id, tag)` 写入当前条目，返回 `{ ok, tags?, code?, text? }`，preload 对应 `removeInboxItemTag`；移除只调用 `store.removeTagFromItem`，不删除库标签或修改其它条目。回车继续新增且不关闭弹框，每条最多五个标签。
 
 弹框会话独立保存目标 ID、标签快照和打开时的锚点矩形；列表刷新、筛选使原行消失也不切换目标。串行处理本会话修改，保留输入/候选焦点及滚动，关闭或切换后的旧响应不会修改新会话。仅候选区滚动，输入和管理固定。录入/粘贴回执及标签全局删除的实现不变。
+
+### 手动纯网址与收纳归档（0.1.93）
+
+`manual-capture.js` 只服务 `inbox:addManual`：去首尾空白后全文匹配 HTTP(S) URL，再经 URL 解析验证，保存原拼写为独立 link；其它输入保留原文字，剪贴板/拖放分类不变。链接索引包含完整 sourceUrl，支持路径搜索。
+
+归档为可选 `meta.archived` 布尔字段，旧数据缺省未归档，无迁移。`store.setArchived(id, boolean)` 非反转、重复值不写；先退役旧索引，再原子替换 meta，成功后失效缓存。缓存写失败不会使重启信任旧归档状态；meta 失败不假成功。原 ID、类型、日期、正文、附件、标签和排序保持。`inbox:setArchived` 返回 `{ok, archived?, text?}`，失败只报告错误；成功通知列表/日历刷新。
+
+`inbox-query.scopeEntries` 区分未归档与归档，全部/类型只含前者，归档汇总后者且不另叠加类型。搜索/标签/日期组合只作用当前范围，切换保留条件；标签胶囊按范围统计，跨范围已选项保留为可取消的零计数胶囊。清除条件保持归档范围，点击「全部」回未归档；主页日期入口显式回未归档。主日历 days/counts 只算未归档，收纳日期菜单由当前范围列表派生并在新数据到达后重画。
+
+收纳工具条仅 `#inbox-search` 收窄，窄窗换行，不影响帮阅共用基础样式。归档 SVG 按钮在复制后、标签前，归档内同位置恢复；缺失文件也有该动作。操作不跳页、不确认，成功提示；归档全空与当前条件无结果分别展示。

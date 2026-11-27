@@ -6,6 +6,7 @@ const crypto = require('node:crypto');
 const { execFile } = require('node:child_process');
 const { createInboxStore, classifyDrop, classifyClipboard, captureLabel, imgSources, htmlToPlain, MAX_IMAGE_BYTES, InboxError } = require('./inbox-store');
 const Q = require('./renderer/inbox-query');
+const { manualCaptureItem } = require('./manual-capture');
 const { capturePreview } = require('./inbox-capture-preview');
 const UNDO_MS = 5000;
 
@@ -296,7 +297,7 @@ function createInboxController(deps) {
     if (!text.trim()) return { ok: false, kind: 'empty', text: '内容不能为空' };
     if ([...text].length > MANUAL_MAX) return { ok: false, kind: 'too-long', text: `最多 ${MANUAL_MAX} 字` };
     try {
-      lastSaved = store.saveAll([{ kind: 'text', text }], { via: 'manual' });
+      lastSaved = store.saveAll([manualCaptureItem(text)], { via: 'manual' });
       if (deps.onChanged) deps.onChanged();
       return { ok: true, count: lastSaved.length, text: '已收纳', ids: lastSaved.map((m) => m.id), items: captureItems(lastSaved) };
     } catch (error) {
@@ -473,11 +474,11 @@ function createInboxController(deps) {
     catch (error) { return { ok: false, text: '没能重新指定：' + error.message }; }
   }
 
-  function days() { return [...new Set(store.list().map((m) => Q.entryDayKey(m)))]; }
+  function days() { return [...new Set(Q.scopeEntries(store.list()).map((m) => Q.entryDayKey(m)))]; }
   // 0.1.55：每天的收纳条数，日历圆点悬停显示「收纳 N 条」
   function dayCounts() {
     const counts = {};
-    for (const m of store.list()) { const k = Q.entryDayKey(m); counts[k] = (counts[k] || 0) + 1; }
+    for (const m of Q.scopeEntries(store.list())) { const k = Q.entryDayKey(m); counts[k] = (counts[k] || 0) + 1; }
     return counts;
   }
 
@@ -489,6 +490,11 @@ function createInboxController(deps) {
     ipcMain.handle('inbox:captureClipboard', () => captureClipboard({ via: 'panel' }));
     ipcMain.on('drop:openInbox', () => { hide(); if (deps.openInbox) deps.openInbox(); });
     ipcMain.handle('inbox:list', () => listForRenderer());
+    ipcMain.handle('inbox:setArchived', (_e, id, archived) => {
+      if (typeof id !== 'string' || typeof archived !== 'boolean') return { ok: false, text: '归档状态无效' };
+      try { store.setArchived(id, archived); changed(); return { ok: true, archived }; }
+      catch { return { ok: false, text: archived ? '没能归档，请重试' : '没能恢复，请重试' }; }
+    });
     ipcMain.handle('inbox:open', (_e, id) => openEntry(id));
     const editResult = (fn) => {
       try { return { ok: true, ...fn() }; }
