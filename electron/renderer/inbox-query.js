@@ -53,7 +53,7 @@
   // 检索用的文本：标题、正文纯文本、文件名、来源域名、标签。
   function haystack(m) {
     if (m.__hay !== undefined) return m.__hay;
-    const parts = [m.title, m.displayTitle, m.note, m.targetUrl, m.preview, m.body, m.type === 'file' ? baseName(m.sourcePath) : '', m.sourceUrl ? hostOf(m.sourceUrl) : '', (m.tags || []).join(' ')];
+    const parts = [m.title, m.displayTitle, m.note, m.targetUrl, m.preview, m.body, m.type === 'file' ? baseName(m.sourcePath) : '', m.type === 'link' ? m.sourceUrl : '', m.sourceUrl ? hostOf(m.sourceUrl) : '', (m.tags || []).join(' ')];
     const hay = parts.filter(Boolean).join('\n').toLowerCase();
     try { Object.defineProperty(m, '__hay', { value: hay, enumerable: false }); } catch (e) { /* frozen */ }
     return hay;
@@ -66,12 +66,16 @@
   }
 
   // filter: { query, type: 'all'|'file'|..., tags: [], day: 'Y-M-D'|null }，四种条件叠加（与）。
+  function scopeEntries(entries, type) {
+    return (entries || []).filter((m) => (m.archived === true) === (type === 'archived'));
+  }
+
   function filterEntries(entries, filter) {
     const f = filter || {};
-    const type = f.type && f.type !== 'all' ? f.type : null;
+    const type = f.type && !['all', 'archived'].includes(f.type) ? f.type : null;
     const tags = (f.tags || []).filter(Boolean);
     const q = String(f.query || '').trim().toLowerCase();
-    return (entries || []).filter((m) => {
+    return scopeEntries(entries, f.type).filter((m) => {
       if (type && m.type !== type) return false;
       if (tags.length && !tags.every((t) => (m.tags || []).includes(t))) return false;
       if (f.day && entryDayKey(m) !== f.day) return false;
@@ -175,6 +179,6 @@
 
   return {
     MAX_TAGS, MAX_TAG_LEN, TYPES, normalizeTag, addTag, cleanTags, entryMs, entryDayKey, dayKeyOf,
-    matchesQuery, filterEntries, dateGroupLabel, groupByDate, startOfWeek, tagCounts, highlightParts, dayChipLabel, inRange, makeRange, presetRange, rangeChipLabel
+    matchesQuery, scopeEntries, filterEntries, dateGroupLabel, groupByDate, startOfWeek, tagCounts, highlightParts, dayChipLabel, inRange, makeRange, presetRange, rangeChipLabel
   };
 }));

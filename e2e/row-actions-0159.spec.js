@@ -52,13 +52,13 @@ test('S1 长标题图文行悬停：标题右边界 ≤ 按钮组左边界 - 8�
   expect(f.right).toBeLessThanOrEqual(f.left - 8 + 0.5);
 });
 
-test('S2 文件类 4 个按钮；图文/文字/链接/图片 3 个按钮，没有 reveal', async () => {
+test('S2 文件类5个按钮，其余4个；归档在复制与标签之间，非文件无reveal', async () => {
   await rowOf('Annual-Report').hover();
-  expect(await rowOf('Annual-Report').locator('.inbox-act').allTextContents()).toEqual(['在 Finder 中显示', '复制', '#', '×']);
+  expect(await rowOf('Annual-Report').locator('.inbox-act').evaluateAll((els) => els.map((el) => el.getAttribute('aria-label') || el.textContent))).toEqual(['在 Finder 中显示', '复制', '归档收纳', '#', '×']);
   for (const t of ['栏历 v0.1.57', '一段纯文字', '仓库主页', '设计稿']) {
     await rowOf(t).hover();
     await expect(rowOf(t).locator('.inbox-act-reveal')).toHaveCount(0);
-    expect(await rowOf(t).locator('.inbox-act').allTextContents()).toEqual(['复制', '#', '×']);
+    expect(await rowOf(t).locator('.inbox-act').evaluateAll((els) => els.map((el) => el.getAttribute('aria-label') || el.textContent))).toEqual(['复制', '归档收纳', '#', '×']);
   }
 });
 

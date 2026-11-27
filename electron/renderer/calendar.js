@@ -1427,16 +1427,20 @@ function appendHighlighted(el, text, query) {
 }
 
 function inboxFilterActive() {
-  return Boolean(inboxFilter.query.trim() || inboxFilter.type !== 'all' || inboxFilter.tags.length || inboxFilter.day || inboxFilter.range);
+  return Boolean(inboxFilter.query.trim() || !['all', 'archived'].includes(inboxFilter.type) || inboxFilter.tags.length || inboxFilter.day || inboxFilter.range);
 }
 
 function renderInboxTags() {
-  const counts = IQ.tagCounts(inboxEntries);
+  const allTags = new Set(inboxEntries.flatMap((m) => m.tags || []));
+  inboxFilter.tags = inboxFilter.tags.filter((tag) => allTags.has(tag));
+  const counts = IQ.tagCounts(IQ.scopeEntries(inboxEntries, inboxFilter.type));
+  for (const tag of inboxFilter.tags) if (!counts.some((c) => c.tag === tag)) counts.push({ tag, count: 0 });
   inboxTagsEl.textContent = '';
   inboxMoreMenu.textContent = '';
   // 选中的标签即使排在 6 名以后也显示出来
-  const shown = counts.slice(0, INBOX_TAG_SHOW);
-  const rest = counts.slice(INBOX_TAG_SHOW);
+  const selected = counts.filter((c) => inboxFilter.tags.includes(c.tag));
+  const shown = [...selected, ...counts.filter((c) => !inboxFilter.tags.includes(c.tag)).slice(0, Math.max(0, INBOX_TAG_SHOW - selected.length))];
+  const rest = counts.filter((c) => !shown.includes(c));
   const makePill = (c, inMenu) => {
     const b = document.createElement('button');
     b.type = 'button';
@@ -1455,8 +1459,7 @@ function renderInboxTags() {
   inboxMore.classList.toggle('is-active', rest.some((c) => inboxFilter.tags.includes(c.tag)));
   if (!rest.length) inboxMoreMenu.hidden = true;
   inboxTagCounts = counts;
-  // 已不存在的标签从筛选里去掉
-  inboxFilter.tags = inboxFilter.tags.filter((t) => counts.some((c) => c.tag === t));
+  // 当前范围没有的已选标签仍显示，用户可直接取消，切换范围不丢条件。
 }
 
 function toggleInboxTag(tag) {
@@ -1472,6 +1475,7 @@ function setInboxType(type) {
     b.classList.toggle('is-active', on);
     b.setAttribute('aria-checked', on ? 'true' : 'false');
   }
+  closeTagPop();
   renderInbox();
 }
 
@@ -1499,7 +1503,7 @@ function closeInboxRangePop(commitPending) {
 function clearInboxFilters() {
   inboxFilter.query = ''; inboxSearch.value = '';
   inboxFilter.tags = [];
-  setInboxType('all');
+  setInboxType(inboxFilter.type === 'archived' ? 'archived' : 'all');
   setInboxDay(null);
 }
 
@@ -1509,6 +1513,7 @@ function rowAction(label, cls, onClick) {
   b.className = 'inbox-act ' + cls;
   b.textContent = label;
   b.title = label;
+  b.setAttribute('aria-label', label);
   b.addEventListener('click', (e) => { e.stopPropagation(); onClick(e); });
   return b;
 }
@@ -1573,8 +1578,14 @@ function buildInboxRow(m) {
     acts.appendChild(rowAction('复制', 'inbox-act-copy', () => {
       api.copyInboxEntry(m.id).then(() => showToast({ type: 'success', title: '已复制' })).catch(() => {});
     }));
-    acts.appendChild(rowAction('#', 'inbox-act-tag', (e) => openTagPop(m, e.currentTarget)));
   }
+  const archived = m.archived === true;
+  const archive = rowAction(archived ? '恢复收纳' : '归档收纳', 'inbox-act-archive', () => setInboxArchived(m.id, !archived));
+  archive.innerHTML = archived
+    ? '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 6h10v7H3zM2 3h12v3H2zM8 11V7m-2 2 2-2 2 2"/></svg>'
+    : '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 6h10v7H3zM2 3h12v3H2zM6 9h4"/></svg>';
+  acts.appendChild(archive);
+  if (!m.missing) acts.appendChild(rowAction('#', 'inbox-act-tag', (e) => openTagPop(m, e.currentTarget)));
   acts.appendChild(rowAction('×', 'inbox-act-delete', () => deleteInboxEntry(m.id)));
   if (richThumb) {
     const th = document.createElement('img');
@@ -1601,10 +1612,12 @@ function renderInbox(entries) {
   renderInboxTags();
   const shown = IQ.filterEntries(inboxEntries, inboxFilter);
   inboxList.textContent = '';
-  inboxCount.textContent = inboxEntries.length ? (inboxFilterActive() ? `${shown.length}/${inboxEntries.length} 项` : `${inboxEntries.length} 项`) : '';
-  inboxEmpty.hidden = inboxEntries.length > 0;
+  const scoped = IQ.scopeEntries(inboxEntries, inboxFilter.type);
+  inboxCount.textContent = scoped.length ? (inboxFilterActive() ? `${shown.length}/${scoped.length} 项` : `${scoped.length} 项`) : '';
+  inboxEmpty.hidden = scoped.length > 0;
+  inboxEmpty.querySelector('.inbox-empty-text').textContent = inboxFilter.type === 'archived' ? '还没有归档的收纳' : '把文件、图片、文字或链接拖到菜单栏时钟上，就会收在这里';
   updateInboxRangeChip();
-  inboxNoResult.hidden = !(inboxEntries.length > 0 && shown.length === 0);
+  inboxNoResult.hidden = !(scoped.length > 0 && shown.length === 0);
   for (const g of IQ.groupByDate(shown, new Date())) {
     const head = document.createElement('div');
     head.className = 'inbox-group';
@@ -1612,6 +1625,21 @@ function renderInbox(entries) {
     inboxList.appendChild(head);
     for (const m of g.entries) inboxList.appendChild(buildInboxRow(m));
   }
+  if (!inboxMiniCal.hidden) renderMiniCal();
+}
+
+const inboxArchivePending = new Set();
+async function setInboxArchived(id, archived) {
+  if (inboxArchivePending.has(id)) return;
+  inboxArchivePending.add(id);
+  try {
+    const result = await api.setInboxArchived(id, archived);
+    if (!result?.ok) throw new Error(result?.text || '操作失败，请重试');
+    if (inboxTagSession?.id === id) closeTagPop();
+    await refreshInbox();
+    showToast({ type: 'success', title: archived ? '已归档' : '已恢复收纳' });
+  } catch (error) { showToast({ type: 'warning', title: error.message || '操作失败，请重试' }); }
+  finally { inboxArchivePending.delete(id); }
 }
 
 function deleteInboxEntry(id) {
@@ -2085,6 +2113,7 @@ function syncInboxPresets() {
 }
 function renderMiniCal() {
   syncInboxPresets();
+  const scopeDays = new Set(IQ.scopeEntries(inboxEntries, inboxFilter.type).map(IQ.entryDayKey));
   if (!miniMonth) { const n = new Date(); miniMonth = { y: n.getFullYear(), m: n.getMonth() }; }
   const { y, m } = miniMonth;
   inboxMiniTitle.textContent = `${y}年${m + 1}月`;
@@ -2105,12 +2134,12 @@ function renderMiniCal() {
     const future = t > todayMs;
     const isEnd = inboxPickStart ? key === inboxPickStart : Boolean(r && (key === r.from || key === r.to));
     const inSel = !inboxPickStart && r && IQ.inRange({ createdMs: t }, r);
-    b.className = 'inbox-minical-day' + (inboxDaySet.has(key) ? ' has-inbox' : ' no-inbox') + (isEnd ? ' is-active' : (inSel ? ' is-in-range' : '')) + (key === todayKey ? ' is-today' : '') + (future ? ' is-future' : '');
+    b.className = 'inbox-minical-day' + (scopeDays.has(key) ? ' has-inbox' : ' no-inbox') + (isEnd ? ' is-active' : (inSel ? ' is-in-range' : '')) + (key === todayKey ? ' is-today' : '') + (future ? ' is-future' : '');
     if (future) b.disabled = true;
     b.dataset.day = key;
     const num = document.createElement('span'); num.textContent = String(d);
     b.appendChild(num);
-    if (inboxDaySet.has(key)) { const dot = document.createElement('span'); dot.className = 'inbox-dot'; b.appendChild(dot); }
+    if (scopeDays.has(key)) { const dot = document.createElement('span'); dot.className = 'inbox-dot'; b.appendChild(dot); }
     b.addEventListener('click', (ev) => {
       ev.stopPropagation();
       if (inboxView.hidden || b.disabled) return;
@@ -2270,6 +2299,7 @@ function openInboxView() {
 
 function openInboxForDay(key) {
   if (!inboxDateLinkEnabled || !key) return;
+  setInboxType('all');
   clearInboxFilters();
   setInboxDay(key);
   inboxOpenedFromDay = true;

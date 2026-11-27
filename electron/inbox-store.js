@@ -478,6 +478,19 @@ function createInboxStore(opts) {
     }
   }
 
+  function setArchived(id, archived) {
+    if (typeof archived !== 'boolean') throw new InboxError('invalid-archive', '归档状态无效');
+    const { dir, meta } = readMeta(id);
+    if ((meta.archived === true) === archived) return resolveTags({ ...meta });
+    const next = { ...meta, archived };
+    // Retire the old persisted cache before committing this independent state.
+    fs.rmSync(path.join(root, INDEX), { force: true });
+    writeMetaAtomic(dir, next);
+    stale = true;
+    try { invalidate(); stale = false; } catch { cache = null; }
+    return resolveTags({ ...next });
+  }
+
   function applyDisplayTitle(meta, value) {
     if (value === undefined) return;
     if (typeof value !== 'string' || [...value].length > 120) throw new InboxError('invalid-edit', '标题最多 120 个字符');
@@ -858,7 +871,7 @@ function createInboxStore(opts) {
     purge();
   }
 
-  return { root, tags, save, saveAll, addFile, addImage, addText, addLink, list, get, readEdit, saveEdit, saveDocument, remove, setTags, addTag, addTags, removeTagFromItem, removeTagEverywhere,
+  return { root, tags, save, saveAll, addFile, addImage, addText, addLink, list, get, readEdit, saveEdit, saveDocument, remove, setArchived, setTags, addTag, addTags, removeTagFromItem, removeTagEverywhere,
     listTags, createTag, renameTag, deleteTag, tagUsage, migrateTags, trash, restore, purge, relink, cleanup, rebuildIndex, readIndex };
 }
 
