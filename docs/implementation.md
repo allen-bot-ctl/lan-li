@@ -145,20 +145,21 @@ ${M}月${D}日 ${HH}:${mm}:${ss}
 - `tray = new Tray(nativeImage.createEmpty())`：纯文字状态项，0×0 空图。`electron/assets/trayTemplate.png` 仍在仓库，但代码未引用。
 - 没有 `setContextMenu`，没有 tooltip。
 - 事件：
-  - `mouse-enter` → `openCalendar()`
+  - `mouse-enter` → `onTrayMouseEnter()` → `openCalendar({activate:false})`（`showInactive`，不激活）
   - `mouse-leave` → `scheduleClose()`（未钉住时 200ms 后 `hideCalendar`）
-  - `click` → 仅当窗口不可见时打开；已打开不关闭。
+  - `click` → `onTrayClick()` → `openCalendar()`：显式激活，已展开也可获得焦点，保持当前浏览月份。
 
 **窗口**
 
 - `BrowserWindow`：`width 580`、`height 432`（32px 通栏顶栏 + 400px 内容）、`frame: false`、`resizable/minimizable/maximizable: false`、`skipTaskbar: true`、`alwaysOnTop: true`、`show: false`、`fullscreenable: false`。
 - `setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })`；加载 `renderer/calendar.html`。
+- 窗口保持 `focusable:true` 并启用 macOS `acceptFirstMouse:true`；悬停不激活，首次点击仍可直接操作控件。显式托盘点击、设置/收纳/帮阅入口默认 `activate:true`，必要时 show 后 focus；不全局禁止焦点，也不恢复/转移其它应用的焦点。
 - `before-input-event` 拦截 Esc → `hideCalendar()`；Esc 只关窗口，不退出应用；钉住时按 Esc 同时取消钉住。
 - 每次从隐藏变可见时 `resetViewToToday()`，即浏览年月与焦点日回到系统今天。
 
 **指针与关闭计时**
 
-- 托盘 `mouse-enter` 打开；`mouse-leave` 安排 200ms 关闭。
+- 托盘 `mouse-enter` 用 `showInactive()` 打开；可见时重复悬停不调用 `show/focus`。`mouse-leave` 安排 200ms 关闭。
 - 渲染层 `document.documentElement` 的 `mouseenter` → `pointer:enter`，主进程 `cancelClose()`；`mouseleave` → `pointer:leave`，主进程再次 `scheduleClose()`。
 - 200ms 是托盘与窗口之间短暂「两边都不在」的缓冲。
 - **钉住**：主进程内存里的 `pinned` 为 true 时，`scheduleClose()` 直接返回；窗口失焦本来就不触发隐藏，因此托盘/指针离开与失焦都不隐藏。渲染层图钉按钮经 `pin:toggle` 切换；点 × 时主进程取消钉住并 `hideCalendar()`，Esc 走同一 `hideCalendar()`。`hideCalendar()` 无条件把 `pinned` 清回 false 并经 `pin:state` 通知渲染层，所以隐藏后再悬停托盘一定回到未钉住。状态不写 `preferences.json`。

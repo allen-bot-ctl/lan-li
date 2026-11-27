@@ -439,6 +439,7 @@ function createCalendarWindow() {
     roundedCorners: true,
     transparent: false,
     focusable: true,
+    acceptFirstMouse: true,
     fullscreenable: false,
     backgroundColor: '#FFFFFF',
     webPreferences: {
@@ -484,6 +485,9 @@ function createCalendarWindow() {
   });
 }
 
+function onTrayMouseEnter() { openCalendar({ activate: false }); }
+function onTrayClick() { openCalendar(); }
+
 function createTray() {
   // Text-only status item. Tray still requires a NativeImage; an empty image
   // occupies 0x0 and does not use trayTemplate.png. macOS/Electron still add
@@ -502,14 +506,11 @@ function createTray() {
     return;
   }
 
-  tray.on('mouse-enter', openCalendar);
+  tray.on('mouse-enter', onTrayMouseEnter);
   tray.on('mouse-leave', scheduleClose);
   tray.on('right-click', () => openTrayMenu());
   if (inbox) inbox.attachTray(tray);
-  tray.on('click', () => {
-    if (!calendarWindow || calendarWindow.isDestroyed()) return;
-    if (!calendarWindow.isVisible()) openCalendar();
-  });
+  tray.on('click', onTrayClick);
 }
 
 function buildTrayMenu() {
@@ -739,7 +740,7 @@ function positionCalendar() {
   calendarWindow.setBounds(target);
 }
 
-function openCalendar() {
+function openCalendar({ activate = true } = {}) {
   if (!calendarWindow || calendarWindow.isDestroyed()) return;
   if (trayMenuOpen) return;   // 0.1.40：托盘右键菜单开着时悬停不开日历
   if (inbox && inbox.isVisible()) return;   // 0.1.42：接纳框出现时暂停悬停开日历
@@ -751,10 +752,13 @@ function openCalendar() {
     openSeq += 1;
     resetViewToToday();
     positionCalendar();
-    calendarWindow.show();
+    if (activate) calendarWindow.show();
+    else calendarWindow.showInactive();
   } else {
     positionCalendar();
   }
+  // Explicit entry points activate even an already-visible hover preview.
+  if (activate) calendarWindow.focus();
 
   updateClock();
   if (!weatherRefresher || !weatherRefresher.onWindowShow()) refreshWeather();
@@ -1123,12 +1127,16 @@ function registerE2eHooks() {
   app.getLoginItemSettings = () => ({ openAtLogin: e2eLoginOpen });
   globalThis.__lanliTest = {
     trayEnter() {
-      openCalendar();
+      if (tray) tray.emit('mouse-enter'); else onTrayMouseEnter();
       return Boolean(calendarWindow && !calendarWindow.isDestroyed() &&
         calendarWindow.isVisible());
     },
+    trayClick() {
+      if (tray) tray.emit('click'); else onTrayClick();
+      return Boolean(calendarWindow && !calendarWindow.isDestroyed() && calendarWindow.isVisible());
+    },
     trayLeave() {
-      scheduleClose();
+      if (tray) tray.emit('mouse-leave'); else scheduleClose();
       return true;
     },
     isVisible() {

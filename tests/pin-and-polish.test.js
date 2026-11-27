@@ -54,7 +54,7 @@ function navIds() {
 }
 
 test('C1 未钉住时托盘离开与窗口 pointer-leave 仍走 200ms 隐藏', () => {
-  assert.match(MAIN, /tray\.on\('mouse-enter', openCalendar\)/);
+  assert.match(MAIN, /tray\.on\('mouse-enter', onTrayMouseEnter\)/);
   assert.match(MAIN, /tray\.on\('mouse-leave', scheduleClose\)/);
   assert.match(MAIN, /ipcMain\.on\('pointer:leave', \(\) => \{\s*scheduleClose\(\);/);
 
@@ -97,7 +97,7 @@ test('C3/C4 ×、Esc 与任何隐藏都清掉钉住，重新悬停即回到未�
   assert.match(esc[0], /input\.key === 'Escape' \|\| input\.key === 'Esc'/);
   assert.match(esc[0], /hideCalendar\(\)/);
 
-  assert.match(MAIN, /tray\.on\('mouse-enter', openCalendar\)/);
+  assert.match(MAIN, /tray\.on\('mouse-enter', onTrayMouseEnter\)/);
   assert.match(functionBody('openCalendar'), /calendarWindow\.show\(\)/);
 });
 
