@@ -514,6 +514,11 @@ function createInboxController(deps) {
     ipcMain.handle('inbox:remove', (_e, id) => removeWithUndo(id));
     ipcMain.handle('inbox:undo', (_e, id) => undoRemove(id));
     ipcMain.handle('inbox:addTag', (_e, id, tag) => addTag(id, tag));
+    ipcMain.handle('inbox:removeItemTag', (_e, id, tag) => {
+      if (typeof id !== 'string' || typeof tag !== 'string' || !tag || tag.length > 64) return { ok: false, text: '标签无效' };
+      try { const meta = store.removeTagFromItem(id, tag); changed(); return { ok: true, tags: meta.tags }; }
+      catch (error) { return { ok: false, code: error.code, text: error.message }; }
+    });
     ipcMain.handle('inbox:addCaptureTags', (_e, id, names) => {
       if (typeof id !== 'string' || !Array.isArray(names) || names.length > Q.MAX_TAGS ||
           names.some((name) => typeof name !== 'string' || name.length > 64)) {

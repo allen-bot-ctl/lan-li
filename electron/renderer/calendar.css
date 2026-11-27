@@ -1423,6 +1423,13 @@ mark.inbox-hit{background:rgba(255,200,0,.45);color:inherit;border-radius:2px;}
 .inbox-tag-suggest:empty{display:none;}
 .inbox-tag-suggest-item{box-sizing:border-box;display:inline-flex;align-items:center;height:22px;max-width:200px;border:0;background:var(--chip);color:var(--text);border-radius:11px;font-size:12px;padding:0 8px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .inbox-tag-suggest-item:hover{background:var(--accent);color:#fff;}
+#inbox-tag-suggest .inbox-tag-suggest-item[aria-pressed="true"]{background:var(--chip);color:#906000;}
+@media (prefers-color-scheme:dark){#inbox-tag-suggest .inbox-tag-suggest-item[aria-pressed="true"]{color:#ffd45a;}}
+#inbox-tag-suggest .inbox-tag-suggest-item:disabled{opacity:.48;cursor:default;}
+#inbox-tagpop{max-height:calc(100% - 16px);overflow:hidden;}
+#inbox-tagpop > input,#inbox-tagpop > .inbox-tagpop-err,#inbox-tagpop > .inbox-tagpop-manage{flex-shrink:0;}
+#inbox-tagpop > .inbox-tag-suggest{min-height:0;flex-shrink:1;overflow-y:auto;overscroll-behavior:contain;}
+
 
 /* 0.1.46：📅 换成与顶栏一致的单色线条图标 */
 .inbox-cal-toggle{display:inline-flex;align-items:center;justify-content:center;color:var(--muted);}

@@ -1410,7 +1410,6 @@ let inboxEntries = [];
 const inboxFilter = { query: '', type: 'all', tags: [], day: null, range: null };
 let inboxPickStart = null; // 0.1.46 区间选择：已点的起点
 const inboxCustom = document.getElementById('inbox-custom');
-let inboxTagTarget = null;
 let inboxTagCounts = [];
 let inboxUndoId = null;
 let inboxUndoTimer = null;
@@ -1635,24 +1634,36 @@ document.getElementById('inbox-undo-btn').addEventListener('click', () => {
 });
 
 let inboxTagLib = [];
+let inboxTagSession = null;
+let inboxTagAnchor = null;
+function loadTagPopLibrary(session) {
+  const request = ++session.libraryRequest;
+  api.inboxTags().then((list) => {
+    if (inboxTagSession !== session || request !== session.libraryRequest) return;
+    inboxTagLib = list || [];
+    renderTagSuggest();
+    positionTagPop();
+  }).catch(() => {});
+}
 function openTagPop(m, anchor) {
-  inboxTagTarget = m.id;
+  const session = { id: m.id, tags: [...(m.tags || [])], busy: false, libraryRequest: 0 };
+  inboxTagSession = session;
   inboxTagErr.textContent = '';
   inboxTagInput.value = '';
+  inboxTagInput.readOnly = false;
+  // Keep geometry after a filter removes the original row or a refresh replaces it.
+  inboxTagAnchor = anchor.getBoundingClientRect();
   inboxTagPop.hidden = false;
   renderTagSuggest();
-  // 0.1.56：候选来自标签库
-  inboxTagAnchor = anchor;
   positionTagPop();
-  api.inboxTags().then((list) => { inboxTagLib = list || []; if (!inboxTagPop.hidden) { renderTagSuggest(); positionTagPop(); } }).catch(() => {});
+  loadTagPopLibrary(session);
   inboxTagInput.focus();
 }
-let inboxTagAnchor = null;
-// 弹层右缘对齐「#」按钮；放不下就翻到按钮上方，始终不出窗口。
+// 弹层右缘对齐打开时的「#」位置；目标行消失也不跟随其它条目。
 function positionTagPop() {
   if (!inboxTagAnchor || inboxTagPop.hidden) return;
   const vr = inboxView.getBoundingClientRect();
-  const ar = inboxTagAnchor.getBoundingClientRect();
+  const ar = inboxTagAnchor;
   const h = inboxTagPop.offsetHeight;
   const w = inboxTagPop.offsetWidth;
   let top = ar.bottom - vr.top + 4;
@@ -1661,38 +1672,67 @@ function positionTagPop() {
   inboxTagPop.style.top = `${top}px`;
   inboxTagPop.style.right = `${Math.min(Math.max(8, vr.right - ar.right), Math.max(8, vr.width - w - 8))}px`;
 }
-// 输入时联想已有标签（不用 datalist：自绘候选，点一下即填入并添加）
-function renderTagSuggest() {
+function renderTagSuggest(focusTag = document.activeElement?.dataset?.tag) {
+  const session = inboxTagSession;
+  if (!session) return;
+  const scroll = inboxTagSuggest.scrollTop;
   const q = inboxTagInput.value.trim().replace(/^#+/, '').toLowerCase();
-  const target = inboxEntries.find((m) => m.id === inboxTagTarget);
-  const have = (target && target.tags) || [];
-  inboxTagSuggest.textContent = '';
-  // 0.1.56：标签库里本条还没有的全部标签，按名称排序；输入时按包含过滤。
-  const names = inboxTagLib.map((t) => t.name).sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'));
-  for (const name of names) {
-    if (have.includes(name) || (q && !name.toLowerCase().includes(q))) continue;
+  const names = [...new Set([...inboxTagLib.map((t) => t.name), ...session.tags])]
+    .sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'));
+  inboxTagSuggest.replaceChildren(...names.filter((name) => !q || name.toLowerCase().includes(q)).map((name) => {
+    const selected = session.tags.includes(name);
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'inbox-tag-suggest-item';
     b.dataset.tag = name;
     b.title = '#' + name;
     b.textContent = '#' + name;
-    b.addEventListener('click', (e) => { e.stopPropagation(); inboxTagInput.value = name; submitTag(); });
-    inboxTagSuggest.appendChild(b);
-  }
+    b.setAttribute('aria-pressed', String(selected));
+    b.disabled = session.busy || (!selected && session.tags.length >= IQ.MAX_TAGS);
+    b.addEventListener('click', (e) => { e.stopPropagation(); changeItemTag(name, selected); });
+    return b;
+  }));
+  if (focusTag) Array.from(inboxTagSuggest.children).find((b) => b.dataset.tag === focusTag && !b.disabled)?.focus({ preventScroll: true });
+  inboxTagSuggest.scrollTop = scroll;
 }
 inboxTagInput.addEventListener('input', () => { renderTagSuggest(); positionTagPop(); });
 
-function submitTag() {
-  const id = inboxTagTarget; const tag = inboxTagInput.value;
-  if (!id) return;
-  api.addInboxTag(id, tag).then((r) => {
-    if (r && r.ok) { closeTagPop(); refreshInbox(); }
-    else inboxTagErr.textContent = (r && r.text) || '没加上';
-  }).catch(() => {});
+async function changeItemTag(tag, remove = false, fromInput = false) {
+  const session = inboxTagSession;
+  if (!session || session.busy) return;
+  const focusTag = document.activeElement?.dataset?.tag;
+  const inputFocused = document.activeElement === inboxTagInput;
+  session.busy = true;
+  inboxTagInput.readOnly = true;
+  renderTagSuggest();
+  let result;
+  try { result = await (remove ? api.removeInboxItemTag(session.id, tag) : api.addInboxTag(session.id, tag)); }
+  catch { result = { ok: false, text: '没能修改标签，请重试' }; }
+  if (result?.ok) refreshInbox();
+  // A completed write belongs to its original item, never a newly opened popup.
+  if (inboxTagSession !== session) return;
+  session.busy = false;
+  inboxTagInput.readOnly = false;
+  if (result?.ok) {
+    session.tags = [...result.tags];
+    inboxTagErr.textContent = '';
+    if (fromInput) inboxTagInput.value = '';
+    loadTagPopLibrary(session);
+  } else inboxTagErr.textContent = result?.text || '没能修改标签';
+  renderTagSuggest(focusTag);
+  if (inputFocused) inboxTagInput.focus({ preventScroll: true });
+  positionTagPop();
 }
-
-function closeTagPop() { inboxTagPop.hidden = true; inboxTagTarget = null; }
+function submitTag() { return changeItemTag(inboxTagInput.value, false, true); }
+function closeTagPop() {
+  const returnFocus = inboxTagPop.contains(document.activeElement);
+  const targetId = inboxTagSession?.id;
+  inboxTagPop.hidden = true;
+  inboxTagSession = null;
+  inboxTagAnchor = null;
+  inboxTagInput.readOnly = false;
+  if (returnFocus && !inboxView.hidden) (findInboxRow(targetId)?.querySelector('.inbox-act-tag') || inboxSearch).focus({ preventScroll: true });
+}
 
 inboxTagInput.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeTagPop(); return; }
@@ -2161,6 +2201,7 @@ function refreshInbox() {
     const focused = row === document.activeElement && inboxList.contains(row);
     const scrollTop = inboxList.scrollTop;
     renderInbox(entries);
+    if (!inboxTagPop.hidden) inboxList.scrollTop = scrollTop;
     if (focused && !inboxView.hidden && inboxDetail.hidden) {
       (findInboxRow(row.dataset.id) || inboxSearch).focus({ preventScroll: true });
       inboxList.scrollTop = scrollTop;

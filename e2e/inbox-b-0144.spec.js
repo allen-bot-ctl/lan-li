@@ -83,6 +83,8 @@ async function addTagUI(text, tag) {
   await expect(page.locator('#inbox-tagpop')).toBeVisible();
   await page.locator('#inbox-tag-input').fill(tag);
   await page.locator('#inbox-tag-input').press('Enter');
+  await expect(page.locator('#inbox-tag-input')).toHaveValue('');
+  await page.locator('#inbox-tag-input').press('Escape');
 }
 
 test('B-C4/B-C6 # 加标签（联想已有标签），每条≤5、单个≤8 字', async () => {

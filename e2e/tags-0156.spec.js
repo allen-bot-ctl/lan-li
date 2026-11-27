@@ -131,7 +131,7 @@ test.describe.serial('main', () => {
     await expect(page.locator('.inbox-row')).toHaveCount(12);
   });
 
-  test('T7 弹层尺寸按 A 表；T6 候选不含本条已有标签、按名称排序', async () => {
+  test('T7 弹层尺寸按 A 表；T6 全部标签含已选、按名称排序', async () => {
     await openTagPopFor('真实条目 00');   // 有 #test
     const m = await page.evaluate(() => {
       const pop = document.getElementById('inbox-tagpop');
@@ -154,8 +154,8 @@ test.describe.serial('main', () => {
     expect(m.gap).toBe(10); expect(m.sgap).toBe('6px');
     expect(m.ih).toBe(22); expect(m.ifont).toBe('12px'); expect(m.ipadx).toBe('8px'); expect(m.imax).toBe('200px');
     expect(Math.round(m.popW)).toBeGreaterThanOrEqual(224);
-    expect(m.names).not.toContain('test');
-    expect(m.names).toEqual(['备忘', '重要', '临时'].sort((a, b) => a.localeCompare(b, 'zh-Hans-CN')));
+    expect(m.names).toEqual(['备忘', '重要', '临时', 'test'].sort((a, b) => a.localeCompare(b, 'zh-Hans-CN')));
+    await expect(page.locator('#inbox-tag-suggest [data-tag="test"]')).toHaveAttribute('aria-pressed', 'true');
     // 弹层不出窗口
     const inWin = await page.evaluate(() => { const r = document.getElementById('inbox-tagpop').getBoundingClientRect(); return r.left >= 0 && r.right <= window.innerWidth && r.bottom <= window.innerHeight; });
     expect(inWin).toBe(true);
@@ -175,6 +175,8 @@ test.describe.serial('main', () => {
     const n0 = (await libNames()).length;
     await page.fill('#inbox-tag-input', ' #重要 ');
     await page.press('#inbox-tag-input', 'Enter');
+    await expect(page.locator('#inbox-tag-input')).toHaveValue('');
+    await page.press('#inbox-tag-input', 'Escape');
     await expect(page.locator('#inbox-tagpop')).toBeHidden();
     await expect.poll(async () => (await entries()).find((x) => x.title === '真实条目 00' || (x.preview || '').includes('真实条目 00'))?.tags || []).toContain('重要');
     expect((await libNames()).length).toBe(n0);

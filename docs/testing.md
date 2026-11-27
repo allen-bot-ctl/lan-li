@@ -171,3 +171,7 @@ xvfb-run -a npm run e2e   # Linux；macOS 直接 npm run e2e
 ## 应用内更新重试
 
 `e2e/update-in-app-retry.spec.js` 的「应用内重试」用真实 updater + IPC + renderer，替换 feed 和下载/安装副作用，验证超时 → 重试、顶栏/设置/原生菜单新请求、重复点击合并、校验错误不误报网络、旧通知不覆盖 ready，以及安装启动失败后重新准备。假时钟将下载推进 35 秒后仍保持 progress，再返回 ready；初次失败和就绪保存截图。`e2e/toast-0129.spec.js` 同时验证其他普通 progress 的 30 秒兜底不变。Node 覆盖真实 AbortSignal feed 超时与新的下载任务；真实已签名旧包 → 新包替换重启由发布验收独立验证。
+
+## 既有条目标签多选（0.1.92）
+
+`e2e/inbox-item-tag-toggle.spec.js`（grep「既有条目标签多选」）从真实列表行「#」进入，覆盖所有标签、已选黄色字体及 hover 深浅色、即时增删不关框、共享标签仅改目标、回车新增、五个限制、候选区独立滚动/焦点，以及筛选下原行消失后保持位置并恢复标签。已有 B 段、标签管理和回执测试只更新被新版契约替代的列表断言。`tests/inbox-item-tag-toggle.test.js` 通过实际 controller IPC 验证条目隔离，并执行实际 renderer 验证迟到写响应不污染关闭/切换后的会话。Intel Mac 原生视觉与发布后体验需对应环境验证。

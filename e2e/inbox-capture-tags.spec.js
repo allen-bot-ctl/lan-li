@@ -128,7 +128,7 @@ test('录入与粘贴复用标签弹层：多选新增只在外层保存写入�
     expect((await library()).some((t) => t.name === '新建标签')).toBe(true);
     expect((await library()).some((t) => ['未确认新增', '查询不保存'].includes(t.name))).toBe(false);
 
-    // 原列表弹层保持管理入口、单选立即添加并关闭；不出现内层确认步骤。
+    // 原列表弹层保持管理入口，点击立即添加且留在弹层；不出现内层确认步骤。
     const row = page.locator('.inbox-row', { hasText: '录入的新条目' });
     await row.hover();
     await row.locator('.inbox-act-tag').click({ force: true });
@@ -137,6 +137,8 @@ test('录入与粘贴复用标签弹层：多选新增只在外层保存写入�
     await expect(listPicker.getByRole('button', { name: '管理标签…', exact: true })).toBeVisible();
     await expect(listPicker.getByRole('button', { name: '确认', exact: true })).toHaveCount(0);
     await listPicker.getByRole('button', { name: '#临时', exact: true }).click();
+    await expect(listPicker.getByRole('button', { name: '#临时', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await page.locator('#inbox-tag-input').press('Escape');
     await expect(listPicker).toBeHidden();
     expect((await read())[0].tags).toEqual(['备忘', '新建标签', '临时']);
 
