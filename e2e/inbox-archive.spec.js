@@ -55,18 +55,12 @@ test('收纳归档与纯链接录入：真实入口、范围筛选、日期计�
       await expect(receipt.locator('.capture-tags-item-type')).toHaveText(type);
       await receipt.getByRole('button', { name: '暂不添加', exact: true }).click();
     };
-    const url = 'https://example.com/manual-unique-path?q=1#part';
-    await capture('  ' + url + ' \n', '链接');
-    const manual = (await list()).find((m) => m.sourceUrl === url);
-    expect(manual.type).toBe('link');
-    expect(manual.via).toBe('manual');
-    for (const text of ['说明 https://example.com/a', 'https://a.example https://b.example', 'example.com/no-protocol']) await capture(text, '文字');
-    await page.evaluate(async ([a, b]) => { await window.lanli.addInboxTag(a, '历史'); await window.lanli.addInboxTag(b, '当前'); }, [oldId, manual.id]);
+    await page.evaluate(async ([a, b]) => { await window.lanli.addInboxTag(a, '历史'); await window.lanli.addInboxTag(b, '当前'); }, [oldId, missingId]);
     await expect(page.locator('#inbox-tags [data-tag="历史"]')).toBeVisible();
-    await row(manual.id).hover();
-    expect(await row(manual.id).locator('.inbox-act').evaluateAll((els) => els.map((el) => el.getAttribute('aria-label'))))
+    await row(oldId).hover();
+    expect(await row(oldId).locator('.inbox-act').evaluateAll((els) => els.map((el) => el.getAttribute('aria-label'))))
       .toEqual(['复制', '归档收纳', '#', '×']);
-    await expect(row(manual.id).locator('.inbox-act-archive svg')).toHaveCount(1);
+    await expect(row(oldId).locator('.inbox-act-archive svg')).toHaveCount(1);
     // A date containing only the historical link disappears from the home calendar.
     expect((await page.evaluate(() => window.lanli.inboxDayCounts()))[key]).toBe(1);
     await page.locator('#inbox-search').fill('unique-history-path');
@@ -161,6 +155,14 @@ test('收纳归档与纯链接录入：真实入口、范围筛选、日期计�
     await page.locator('#inbox-search').fill('');
     await page.locator('#inbox-day-chip-x').click();
     await page.locator('#inbox-tags [data-tag="历史"]').click();
+    // Capture today's entries after the independent historical-day count checks;
+    // the first of a month must not collide with the date fixture.
+    const url = 'https://example.com/manual-unique-path?q=1#part';
+    await capture('  ' + url + ' \n', '链接');
+    const manual = (await list()).find((m) => m.sourceUrl === url);
+    expect(manual.type).toBe('link');
+    expect(manual.via).toBe('manual');
+    for (const text of ['说明 https://example.com/a', 'https://a.example https://b.example', 'example.com/no-protocol']) await capture(text, '文字');
     await scope('file').click();
     await expect(row(missingId)).toHaveCount(1);
     await archive(missingId);
