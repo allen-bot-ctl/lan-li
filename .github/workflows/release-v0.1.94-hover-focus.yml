@@ -14,8 +14,8 @@ concurrency:
 
 env:
   VERSION_TAG: v0.1.94
-  SOURCE_SHA: 3b6516afb3c1fea35702b71158f3032959e57996
-  SOURCE_TREE: 8b2e6a49f5ecb1a7c56e5549ff6cff94f4138077
+  SOURCE_SHA: ee66d07b7171a211d9d5504463d3e1f22a9079a4
+  SOURCE_TREE: da0b23806aa622c2dc9bb1720de2141deb1b76ec
   BASELINE_SHA: 4809fbb0f76e0b4960ec6b88c5db30158a32483f
 
 jobs:
@@ -60,8 +60,6 @@ jobs:
           echo "RELEASE: tests=${pass:-?}/${total}"
           exit "$status"
 
-      - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium || true
 
       - name: Build renderer assets for native focus test
         run: npm run build:inbox-editor

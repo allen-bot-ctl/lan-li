@@ -4,7 +4,18 @@ const { test, expect, _electron: electron } = require('@playwright/test');
 test('悬停不抢焦点：实际托盘入口、显式点击激活、首击按钮和子页输入', async () => {
   const app = await electron.launch({ args: process.platform === 'linux' ? ['--no-sandbox', '.'] : ['.'],
     env: { ...process.env, LANLI_E2E: '1' } });
-  const hook = (name, arg) => app.evaluate((_e, a) => globalThis.__lanliTest[a.name](a.arg), { name, arg });
+  const hook = async (name, arg) => {
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        return await app.evaluate((_e, a) => globalThis.__lanliTest[a.name](a.arg), { name, arg });
+      } catch (error) {
+        if (attempt >= 2 || !/Resulting promise was garbage collected/.test(String(error))) throw error;
+        // These hooks are repeatable. clickTrayMenuItem consumes its pending
+        // menu; if the first call ran, retry is a no-op rather than a second action.
+        await new Promise((resolve) => setTimeout(resolve, 150));
+      }
+    }
+  };
   try {
     const page = await app.firstWindow();
     await page.waitForSelector('#grid');
