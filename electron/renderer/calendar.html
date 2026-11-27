@@ -252,23 +252,23 @@
             <ul id="capture-tags-items" aria-label="刚保存的收纳"></ul>
             <p id="capture-tags-desc"></p>
           </div>
-          <div id="capture-tags-picker" hidden>
-            <span id="capture-tags-count" aria-label="已选标签数量"></span>
+          <section id="capture-tags-confirmed" hidden aria-label="已确认标签">
+            <div class="capture-tags-summary"><span>已选标签</span><button id="capture-tags-edit" type="button" aria-haspopup="dialog" aria-controls="capture-tags-picker">重新选择</button></div>
             <div id="capture-tags-picked" aria-label="已选标签"></div>
-            <div class="capture-tags-input-row">
-              <input id="capture-tags-input" type="text" autocomplete="off" aria-label="搜索或输入新标签" placeholder="搜索或输入新标签">
-              <button id="capture-tags-add" type="button">添加</button>
-            </div>
-            <div id="capture-tags-options" aria-label="已有标签"></div>
-            <p id="capture-tags-status" role="alert"></p>
-          </div>
+          </section>
+          <p id="capture-tags-status" role="alert"></p>
           <footer class="inbox-edit-actions">
             <button id="capture-tags-skip" type="button">暂不添加</button>
-            <button id="capture-tags-toggle" type="button" aria-controls="capture-tags-picker" aria-expanded="false">添加标签</button>
-            <button id="capture-tags-back" type="button" hidden>返回</button>
+            <button id="capture-tags-toggle" type="button" aria-haspopup="dialog" aria-controls="capture-tags-picker">添加标签</button>
             <button id="capture-tags-save" type="button" hidden>保存标签</button>
           </footer>
         </div>
+        <dialog id="capture-tags-picker" class="inbox-tagpop capture-tag-picker" aria-label="选择标签">
+          <input id="capture-tags-input" type="text" maxlength="8" autocomplete="off" aria-label="搜索或输入新标签" placeholder="加标签，回车">
+          <div id="capture-tags-options" class="inbox-tag-suggest" aria-label="可选标签"></div>
+          <span id="capture-tags-picker-status" class="inbox-tagpop-err" role="alert"></span>
+          <footer class="capture-tag-picker-actions"><span id="capture-tags-count" aria-label="已选标签数量"></span><button id="capture-tags-confirm" type="button">确认</button></footer>
+        </dialog>
       </dialog>
       <dialog id="inbox-edit-dialog" aria-labelledby="inbox-edit-title">
         <form id="inbox-edit-form">

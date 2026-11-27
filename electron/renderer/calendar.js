@@ -1727,47 +1727,96 @@ const captureTags = document.getElementById('inbox-capture-tags');
 let captureRequestPending = false;
 let captureTagState = null;
 
+// 内层选择与外层已确认草稿分别持有副本；只有外层保存调用写入 IPC。
+let capturePickerDraft = null;
+
 function renderCaptureTags() {
   const state = captureTagState;
   if (!state) return;
+  const selected = state.tags.length > 0;
+  capEl('confirmed').hidden = !selected;
+  capEl('toggle').hidden = selected;
+  capEl('save').hidden = !selected;
+  for (const id of ['toggle', 'edit', 'skip']) capEl(id).disabled = state.saving;
+  capEl('save').disabled = state.saving || !selected;
+  capEl('picked').replaceChildren(...state.tags.map((name) => {
+    const chip = document.createElement('span');
+    chip.className = 'inbox-tag-suggest-item';
+    chip.textContent = '#' + name;
+    return chip;
+  }));
+  if (capturePickerDraft) renderCapturePicker();
+}
+
+function positionCapturePicker() {
+  const picker = capEl('picker');
+  if (!picker.open) return;
+  const parent = captureTags.getBoundingClientRect();
+  picker.style.left = Math.max(8, Math.min(parent.left + (parent.width - picker.offsetWidth) / 2,
+    window.innerWidth - picker.offsetWidth - 8)) + 'px';
+  picker.style.top = Math.max(8, Math.min(parent.top + (parent.height - picker.offsetHeight) / 2,
+    window.innerHeight - picker.offsetHeight - 8)) + 'px';
+}
+
+function renderCapturePicker() {
+  const draft = capturePickerDraft;
+  if (!draft || !captureTagState) return;
   const raw = IQ.normalizeTag(capEl('input').value);
   const q = raw.toLowerCase();
-  const has = (name) => state.tags.some((tag) => tag.toLowerCase() === name.toLowerCase());
-  capEl('count').textContent = state.tags.length ? state.tags.length + ' / ' + IQ.MAX_TAGS : '';
-  capEl('toggle').disabled = state.saving;
-  capEl('input').disabled = state.saving;
-  capEl('add').disabled = state.saving || !raw;
-  capEl('skip').disabled = state.saving;
-  capEl('back').disabled = state.saving;
-  capEl('save').disabled = state.saving || !state.tags.length;
-  const chip = (name, picked) => {
+  const names = [...new Set([...captureTagState.library, ...draft.created, ...draft.tags])]
+    .sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'));
+  const has = (name) => draft.tags.some((tag) => tag.toLowerCase() === name.toLowerCase());
+  const option = (name, create = false) => {
     const b = document.createElement('button');
+    const picked = has(name);
     b.type = 'button';
-    b.textContent = '#' + name + (picked ? ' ×' : '');
-    b.disabled = state.saving || (!picked && state.tags.length >= IQ.MAX_TAGS);
-    if (picked) b.setAttribute('aria-label', '移除标签 ' + name);
+    b.className = 'inbox-tag-suggest-item';
+    b.textContent = (create ? '＋ 新建 #' : '#') + name;
+    b.setAttribute('aria-label', create ? '新建标签 ' + name : '#' + name);
+    if (!create) b.setAttribute('aria-pressed', String(picked));
+    b.disabled = !picked && draft.tags.length >= IQ.MAX_TAGS;
     b.addEventListener('click', () => {
       if (picked) {
-        state.tags = state.tags.filter((n) => n !== name);
-        capEl('status').textContent = '';
-        renderCaptureTags();
-        (capEl('picker').hidden ? capEl('toggle') : capEl('input')).focus();
-      } else {
-        stageCaptureTag(name);
-      }
+        draft.tags = draft.tags.filter((tag) => tag.toLowerCase() !== name.toLowerCase());
+        capEl('picker-status').textContent = '';
+        renderCapturePicker();
+        capEl('input').focus();
+      } else stageCaptureTag(name);
     });
     return b;
   };
-  capEl('picked').replaceChildren(...state.tags.map((n) => chip(n, true)));
-  capEl('options').replaceChildren(...state.library.filter((n) => !has(n) && (!q || n.toLowerCase().includes(q))).map((n) => chip(n, false)));
+  const matches = names.filter((name) => !q || name.toLowerCase().includes(q));
+  const options = matches.map((name) => option(name));
+  if (raw && !names.some((name) => name.toLowerCase() === q)) options.push(option(raw, true));
+  capEl('options').replaceChildren(...options);
+  capEl('count').textContent = draft.tags.length + ' / ' + IQ.MAX_TAGS;
+  positionCapturePicker();
 }
 
-function setCapturePicker(open, focus = true) {
-  capEl('picker').hidden = !open;
-  capEl('toggle').setAttribute('aria-expanded', String(open));
-  for (const id of ['skip', 'toggle']) capEl(id).hidden = open;
-  for (const id of ['back', 'save']) capEl(id).hidden = !open;
-  if (focus) (open ? capEl('input') : capEl('toggle')).focus();
+function openCapturePicker() {
+  const state = captureTagState;
+  if (!state || state.saving || capEl('picker').open) return;
+  capturePickerDraft = { tags: [...state.tags], created: [] };
+  capEl('input').value = '';
+  capEl('picker-status').textContent = '';
+  renderCapturePicker();
+  capEl('picker').showModal();
+  positionCapturePicker();
+  capEl('input').focus();
+}
+
+function closeCapturePicker(focus = true) {
+  capturePickerDraft = null;
+  if (capEl('picker').open) capEl('picker').close();
+  if (focus && captureTagState) (captureTagState.tags.length ? capEl('edit') : capEl('toggle')).focus();
+}
+
+function confirmCapturePicker() {
+  if (!capturePickerDraft || !captureTagState) return;
+  captureTagState.tags = [...capturePickerDraft.tags];
+  capEl('status').textContent = '';
+  renderCaptureTags();
+  closeCapturePicker();
 }
 
 function openCaptureTags(result, source) {
@@ -1781,7 +1830,7 @@ function openCaptureTags(result, source) {
   const batch = state.ids.length > 1;
   capEl('desc').textContent = batch ? '本次保存了 ' + state.ids.length + ' 项，标签将应用到全部条目。' : '';
   capEl('saved').classList.toggle('capture-tags-single', !batch && result.items?.[0]?.type === 'text');
-  setCapturePicker(false, false);
+  closeCapturePicker(false);
   const labels = { file: '文件', image: '图片', link: '链接', text: '文字' };
   capEl('items').replaceChildren(...(result.items || []).slice(0, 2).map((item) => {
     const row = document.createElement('li');
@@ -1820,31 +1869,38 @@ function openCaptureTags(result, source) {
 
 function stageCaptureTag(value) {
   const state = captureTagState;
-  if (!state || state.saving) return false;
+  const draft = capturePickerDraft;
+  if (!state || !draft || state.saving) return false;
   const name = IQ.normalizeTag(value);
   try {
-    const known = state.library.find((n) => n.toLowerCase() === name.toLowerCase()) || name;
-    if (!state.tags.some((n) => n.toLowerCase() === known.toLowerCase())) state.tags = IQ.addTag(state.tags, known);
-    capEl('status').textContent = '';
+    const known = [...state.library, ...draft.created, ...draft.tags]
+      .find((n) => n.toLowerCase() === name.toLowerCase()) || name;
+    if (!draft.tags.some((n) => n.toLowerCase() === known.toLowerCase())) {
+      draft.tags = IQ.addTag(draft.tags, known);
+      if (!state.library.includes(known) && !draft.created.includes(known)) draft.created.push(known);
+    }
+    capEl('picker-status').textContent = '';
     capEl('input').value = '';
-    renderCaptureTags();
+    renderCapturePicker();
     capEl('input').focus();
     return true;
   } catch (error) {
-    capEl('status').textContent = error.message;
+    capEl('picker-status').textContent = error.message;
+    positionCapturePicker();
     return false;
   }
 }
 
 function closeCaptureTags() {
   if (captureTagState?.saving) return;
+  closeCapturePicker(false);
   captureTagState = null;
   if (captureTags.open) captureTags.close();
 }
 
 async function saveCaptureTags() {
   const state = captureTagState;
-  if (!state || state.saving) return;
+  if (!state || state.saving || capEl('picker').open) return;
   if (!state.tags.length) return;
   state.saving = true;
   renderCaptureTags();
@@ -1870,22 +1926,24 @@ async function saveCaptureTags() {
 
 function escapeCaptureTags() {
   if (!captureTagState || captureTagState.saving) return;
-  if (!capEl('picker').hidden) setCapturePicker(false);
+  if (capEl('picker').open) closeCapturePicker();
   else closeCaptureTags();
 }
 
-capEl('toggle').addEventListener('click', () => setCapturePicker(true));
-capEl('back').addEventListener('click', () => setCapturePicker(false));
-capEl('input').addEventListener('input', () => { capEl('status').textContent = ''; renderCaptureTags(); });
+capEl('toggle').addEventListener('click', openCapturePicker);
+capEl('edit').addEventListener('click', openCapturePicker);
+capEl('confirm').addEventListener('click', confirmCapturePicker);
+capEl('input').addEventListener('input', () => { capEl('picker-status').textContent = ''; renderCapturePicker(); });
 capEl('input').addEventListener('keydown', (e) => {
   if (e.key !== 'Enter' || e.isComposing) return;
   e.preventDefault();
   stageCaptureTag(capEl('input').value);
 });
-capEl('add').addEventListener('click', () => stageCaptureTag(capEl('input').value));
 capEl('save').addEventListener('click', saveCaptureTags);
 capEl('skip').addEventListener('click', closeCaptureTags);
+capEl('picker').addEventListener('cancel', (e) => { e.preventDefault(); e.stopPropagation(); closeCapturePicker(); });
 captureTags.addEventListener('cancel', (e) => { e.preventDefault(); escapeCaptureTags(); });
+window.addEventListener('resize', positionCapturePicker);
 
 async function captureFromPanel() {
   if (captureRequestPending || captureTags.open) return;
