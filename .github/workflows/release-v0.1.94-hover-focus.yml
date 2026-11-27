@@ -1,0 +1,512 @@
+name: 栏历 v0.1.94 验证及发布
+
+on:
+  push:
+    branches: [release/v0.1.94-hover-focus]
+    paths: [.github/workflows/release-v0.1.94-hover-focus.yml]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-v0.1.94-hover-focus
+  cancel-in-progress: false
+
+env:
+  VERSION_TAG: v0.1.94
+  SOURCE_SHA: 3b6516afb3c1fea35702b71158f3032959e57996
+  SOURCE_TREE: 8b2e6a49f5ecb1a7c56e5549ff6cff94f4138077
+  BASELINE_SHA: 4809fbb0f76e0b4960ec6b88c5db30158a32483f
+
+jobs:
+  macos:
+    name: Build macOS Intel (x64) packages
+    if: github.repository == 'allen-bot-ctl/lan-li' && github.ref_name == 'release/v0.1.94-hover-focus' && github.actor_id == '352863755'
+    runs-on: macos-15-intel
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          fetch-depth: 2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Verify approved candidate and runner
+        run: |
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          test "$(git rev-parse HEAD^{tree})" = "$SOURCE_TREE"
+          test "$(git rev-parse HEAD^)" = "$BASELINE_SHA"
+          test "$(node -p 'require("./package.json").version')" = "${VERSION_TAG#v}"
+          test "$(uname -m)" = x86_64
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        shell: bash
+        run: |
+          set -uo pipefail
+          npm test 2>&1 | tee /tmp/tests.log
+          status=${PIPESTATUS[0]}
+          pass=$(awk '/^(#|ℹ) pass /{print $3}' /tmp/tests.log | tail -n 1)
+          fail=$(awk '/^(#|ℹ) fail /{print $3}' /tmp/tests.log | tail -n 1)
+          total=$(( ${pass:-0} + ${fail:-0} ))
+          echo "RELEASE: tests=${pass:-?}/${total}"
+          exit "$status"
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium || true
+
+      - name: Build renderer assets for native focus test
+        run: npm run build:inbox-editor
+
+      - name: Verify actual keyboard routing between two macOS apps
+        shell: bash
+        run: |
+          set -euo pipefail
+          probe="$RUNNER_TEMP/FocusProbe.app"
+          mkdir -p "$probe/Contents/MacOS"
+          cat > "$probe/Contents/Info.plist" <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict><key>CFBundleIdentifier</key><string>com.lanli.focusprobe</string><key>CFBundleName</key><string>FocusProbe</string><key>CFBundleExecutable</key><string>probe</string><key>CFBundlePackageType</key><string>APPL</string><key>NSPrincipalClass</key><string>NSApplication</string></dict></plist>
+          PLIST
+          cat > "$RUNNER_TEMP/FocusProbe.swift" <<'SWIFT'
+          import AppKit
+          import CoreGraphics
+          
+          let args = CommandLine.arguments
+          func log(_ text: String, file: String) {
+            let url = URL(fileURLWithPath: file)
+            if !FileManager.default.fileExists(atPath: file) { FileManager.default.createFile(atPath: file, contents: nil) }
+            guard let h = try? FileHandle(forWritingTo: url) else { return }
+            defer { try? h.close() }
+            try? h.seekToEnd()
+            try? h.write(contentsOf: Data((text + "\n").utf8))
+          }
+          if args.count > 1 && args[1] == "front" {
+            print(NSWorkspace.shared.frontmostApplication?.processIdentifier ?? -1)
+            exit(0)
+          }
+          if args.count > 2 && args[1] == "key" {
+            let k = CGKeyCode(args[2])!
+            let s = CGEventSource(stateID: .hidSystemState)
+            print("postEventAccess=\(CGPreflightPostEventAccess())")
+            CGEvent(keyboardEventSource: s, virtualKey: k, keyDown: true)?.post(tap: .cghidEventTap)
+            usleep(25000)
+            CGEvent(keyboardEventSource: s, virtualKey: k, keyDown: false)?.post(tap: .cghidEventTap)
+            exit(0)
+          }
+          if args.count > 3 && args[1] == "click" {
+            let p = CGPoint(x: Double(args[2])!, y: Double(args[3])!)
+            let s = CGEventSource(stateID: .hidSystemState)
+            print("postEventAccess=\(CGPreflightPostEventAccess())")
+            CGEvent(mouseEventSource: s, mouseType: .mouseMoved, mouseCursorPosition: p, mouseButton: .left)?.post(tap: .cghidEventTap)
+            CGEvent(mouseEventSource: s, mouseType: .leftMouseDown, mouseCursorPosition: p, mouseButton: .left)?.post(tap: .cghidEventTap)
+            usleep(25000)
+            CGEvent(mouseEventSource: s, mouseType: .leftMouseUp, mouseCursorPosition: p, mouseButton: .left)?.post(tap: .cghidEventTap)
+            exit(0)
+          }
+          final class Probe: NSObject, NSApplicationDelegate, NSTextViewDelegate {
+            let file: String
+            var window: NSWindow?
+            init(_ file: String) { self.file = file }
+            func applicationDidFinishLaunching(_ notification: Notification) {
+              let w = NSWindow(contentRect: NSRect(x: 35, y: 60, width: 320, height: 140), styleMask: [.titled, .closable], backing: .buffered, defer: false)
+              let view = NSTextView(frame: w.contentView!.bounds)
+              view.isEditable = true
+              view.isRichText = false
+              view.delegate = self
+              w.title = "Keyboard Focus Probe"
+              w.contentView = view
+              w.makeKeyAndOrderFront(nil)
+              w.makeFirstResponder(view)
+              NSApp.activate(ignoringOtherApps: true)
+              window = w
+              log("ready \(ProcessInfo.processInfo.processIdentifier)", file: file)
+            }
+            func textDidChange(_ notification: Notification) {
+              guard let v = notification.object as? NSTextView else { return }
+              log("input " + v.string, file: file)
+            }
+          }
+          let app = NSApplication.shared
+          let delegate = Probe(args[1])
+          app.setActivationPolicy(.regular)
+          app.delegate = delegate
+          app.run()
+          SWIFT
+          swiftc -framework AppKit -framework CoreGraphics "$RUNNER_TEMP/FocusProbe.swift" -o "$probe/Contents/MacOS/probe"
+          codesign --force --sign - "$probe"
+          cat > "$RUNNER_TEMP/native-focus.cjs" <<'NODE'
+          'use strict';
+          const { _electron } = require(require('path').join(process.cwd(), 'node_modules/playwright'));
+          const { spawn, execFileSync } = require('node:child_process');
+          const { readFileSync } = require('node:fs');
+          const assert = require('node:assert/strict');
+          const path = require('node:path');
+          const root = process.env.RUNNER_TEMP;
+          const exe = path.join(root, 'FocusProbe.app', 'Contents', 'MacOS', 'probe');
+          const logFile = path.join(root, 'focus-probe.log');
+          const read = () => { try { return readFileSync(logFile, 'utf8'); } catch { return ''; } };
+          const command = (...a) => execFileSync(exe,a.map(String),{encoding:'utf8'}).trim();
+          async function until(predicate, name, ms=9000) {
+            for (const end=Date.now()+ms; Date.now()<end;) {
+              try { if (await predicate()) return; } catch(err) { console.log(name,err.message); }
+              await new Promise(r=>setTimeout(r,150));
+            }
+            throw Error(name+'; front='+command('front')+' probe='+read());
+          }
+          (async()=>{
+            const baseline = process.env.FOCUS_BASELINE === '1';
+            const app=await _electron.launch({args:['.'],env:{...process.env,LANLI_E2E:'1',LANLI_E2E_USER_DATA_DIR:path.join(root,'focus-lanli-profile')}});
+            let other;
+            try {
+              const page=await app.firstWindow();
+              await page.waitForSelector('#grid');
+              other=spawn(exe,[logFile],{stdio:'inherit'});
+              await until(()=>Number(command('front'))===other.pid && read().includes('ready'), 'companion app active and ready');
+              console.log('BEFORE hover active pid',command('front'), 'El',app.process().pid, 'probe',other.pid);
+              console.log('KEY before',command('key',0)); // a
+              await until(()=>read().includes('input a'), 'independent app receives key before hover',5000);
+              const hook=(name)=>app.evaluate((_e,name)=>globalThis.__lanliTest[name](),name);
+              await hook('trayEnter');
+              const state=async()=>app.evaluate(({BrowserWindow})=>{
+                const w=BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().endsWith('/calendar.html'));
+                return {visible:w.isVisible(),focused:w.isFocused(),bounds:w.getContentBounds()};
+              });
+              const hovering=await state();
+              assert.equal(hovering.visible,true);
+              console.log('AFTER hover active pid',command('front'), JSON.stringify(hovering));
+              if (baseline) {
+                await until(()=>Number(command('front'))===app.process().pid&&(state().then(s=>s.focused)), 'old version takes OS focus');
+                const before=read();
+                console.log('KEY baseline',command('key',11)); // b
+                await new Promise(r=>setTimeout(r,200));
+                assert.equal(read(),before,'baseline steals an actual key from independent app');
+                console.log('NATIVE-BASELINE-FOCUS-REPRO: PASS');
+                return;
+              }
+              assert.equal(hovering.focused,false);
+              assert.equal(Number(command('front')),other.pid);
+              console.log('KEY during',command('key',11)); // b
+              await until(()=>read().includes('input ab'), 'independent app receives key while calendar is visible',5000);
+              const rect=await page.locator('#settings-button').boundingBox();
+              const x=Math.round(hovering.bounds.x+rect.x+rect.width/2);
+              const y=Math.round(hovering.bounds.y+rect.y+rect.height/2);
+              console.log('CLICK settings first native click',x,y,command('click',x,y));
+              await until(()=>Number(command('front'))===app.process().pid, 'first intentional native click activates LanLi');
+              await page.locator('#settings-view').waitFor({state:'visible',timeout:5000});
+              // Prove normal key input in the application with a field explicitly clicked.
+              await page.locator('#settings-back').click();
+              const inboxLoc=await page.locator('#inbox-button').boundingBox();
+              const bw=await state();
+              command('click',Math.round(bw.bounds.x+inboxLoc.x+inboxLoc.width/2),Math.round(bw.bounds.y+inboxLoc.y+inboxLoc.height/2));
+              await page.locator('#inbox-search').waitFor({state:'visible',timeout:5000});
+              const b=await page.locator('#inbox-search').boundingBox();
+              const now=await state();
+              command('click',Math.round(now.bounds.x+b.x+b.width/2),Math.round(now.bounds.y+b.y+b.height/2));
+              command('key',8); // c
+              await until(()=>page.locator('#inbox-search').inputValue().then(s=>s==='c'), 'native keyboard event arrives at LanLi after click');
+              assert.equal(read().includes('input abc'),false);
+              console.log('NATIVE-TWO-APPS-HOVER-TYPING: PASS');
+            } finally {
+              if (other) other.kill();
+              await app.close();
+            }
+          })().catch(e=>{console.error(e);process.exitCode=1;});
+          NODE
+          node "$RUNNER_TEMP/native-focus.cjs"
+      - name: Verify tray hover and explicit input focus on Intel
+        run: npm run e2e -- --grep '悬停不抢焦点'
+
+      - name: Verify full native Electron suite
+        run: npm run e2e
+
+      - name: Collect failed UI test diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: failed-ui-test-diagnostics
+          if-no-files-found: ignore
+          path: test-results/
+
+      - name: Upload e2e screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-screenshots
+          if-no-files-found: warn
+          path: e2e/screenshots/
+
+      - name: Import stable signing certificate
+        shell: bash
+        env:
+          LANLI_SIGN_P12: ${{ secrets.LANLI_SIGN_P12 }}
+          LANLI_SIGN_PASSWORD: ${{ secrets.LANLI_SIGN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          [ -n "$LANLI_SIGN_P12" ] || { echo "::error::LANLI_SIGN_P12 secret missing"; exit 1; }
+          kc="$RUNNER_TEMP/lanli-sign.keychain-db"
+          kcpass=$(openssl rand -hex 16)
+          echo "$LANLI_SIGN_P12" | base64 --decode > "$RUNNER_TEMP/lanli-sign.p12"
+          security create-keychain -p "$kcpass" "$kc"
+          security set-keychain-settings -lut 21600 "$kc"
+          security unlock-keychain -p "$kcpass" "$kc"
+          security import "$RUNNER_TEMP/lanli-sign.p12" -k "$kc" -P "$LANLI_SIGN_PASSWORD" -T /usr/bin/codesign -f pkcs12
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$kcpass" "$kc" >/dev/null
+          security list-keychains -d user -s "$kc" $(security list-keychains -d user | tr -d '"')
+          openssl pkcs12 -in "$RUNNER_TEMP/lanli-sign.p12" -nokeys -passin env:LANLI_SIGN_PASSWORD -legacy -out "$RUNNER_TEMP/lanli-sign.pem" 2>/dev/null \
+            || openssl pkcs12 -in "$RUNNER_TEMP/lanli-sign.p12" -nokeys -passin env:LANLI_SIGN_PASSWORD -out "$RUNNER_TEMP/lanli-sign.pem"
+          sudo security add-trusted-cert -d -r trustRoot -p codeSign -k /Library/Keychains/System.keychain "$RUNNER_TEMP/lanli-sign.pem"
+          rm -f "$RUNNER_TEMP/lanli-sign.p12"
+          security find-identity -p codesigning "$kc"
+          echo "LANLI_SIGN_KEYCHAIN=$kc" >> "$GITHUB_ENV"
+
+      - name: Build macOS Intel dmg and zip
+        run: npx electron-builder --mac dmg zip --x64 --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          LANLI_SIGN_IDENTITY: "LanLi Self-Signed"
+
+      - name: Verify x64 binaries with lipo
+        shell: bash
+        run: |
+          set -euo pipefail
+          app=$(find dist -maxdepth 2 -type d -name '*.app' -print -quit)
+          [ -n "$app" ] || { echo "::error::no .app found under dist"; exit 1; }
+          echo "app: $app"
+          main_bin=$(find "$app/Contents/MacOS" -maxdepth 1 -type f -print -quit)
+          [ -n "$main_bin" ] || { echo "::error::no main binary under Contents/MacOS"; exit 1; }
+          fw_bin="$app/Contents/Frameworks/Electron Framework.framework/Electron Framework"
+          if [ ! -e "$fw_bin" ]; then
+            fw_bin="$app/Contents/Frameworks/Electron Framework.framework/Versions/A/Electron Framework"
+          fi
+          [ -e "$fw_bin" ] || { echo "::error::no Electron Framework binary"; exit 1; }
+          echo "main binary: $main_bin"
+          echo "framework binary: $fw_bin"
+          file "$main_bin"
+          file "$fw_bin"
+          for bin in "$main_bin" "$fw_bin"; do
+            archs=$(lipo -archs "$bin")
+            echo "RELEASE: lipo $(basename "$bin")=$archs"
+            if [ "$archs" != "x86_64" ]; then
+              echo "::error::$(basename "$bin") archs=$archs, expected exactly x86_64"
+              exit 1
+            fi
+          done
+          echo "RELEASE: lipo=x86_64"
+
+      - name: Verify stable signature
+        shell: bash
+        run: |
+          set -euo pipefail
+          app=$(find dist -maxdepth 2 -type d -name '*.app' -print -quit)
+          [ -n "$app" ] || { echo "::error::no .app found under dist"; exit 1; }
+          codesign -dv --verbose=2 "$app" 2>&1 | tee /tmp/codesign.log
+          grep -q "Authority=LanLi Self-Signed" /tmp/codesign.log || { echo "::error::not signed by LanLi Self-Signed"; exit 1; }
+          if grep -q "Signature=adhoc" /tmp/codesign.log; then echo "::error::still ad-hoc"; exit 1; fi
+          codesign -d -r- "$app" 2>&1 | tee /tmp/dr1.txt
+          grep -q "certificate leaf" /tmp/dr1.txt || { echo "::error::designated has no certificate leaf"; exit 1; }
+          if grep -q "cdhash" /tmp/dr1.txt; then echo "::error::designated still uses cdhash"; exit 1; fi
+          # 0.1.52 PM 定：designated 与仓库里的 build/expected-designated.txt 逐字一致（只有 bundle id 和证书公开指纹）
+          actual=$(grep -o 'designated => .*' /tmp/dr1.txt | sed 's/^designated => //')
+          expected=$(cat build/expected-designated.txt)
+          [ "$actual" = "$expected" ] || { echo "::error::designated mismatch"; echo "expected: $expected"; echo "actual:   $actual"; exit 1; }
+          codesign --verify --deep --strict "$app"
+          echo "RELEASE: designated=$(grep designated /tmp/dr1.txt)"
+          # S-C2：同一份产物再签一遍，designated 必须一字不差
+          cp -R "$app" "$RUNNER_TEMP/again.app"
+          codesign --force --deep --sign "LanLi Self-Signed" --timestamp=none --keychain "$LANLI_SIGN_KEYCHAIN" "$RUNNER_TEMP/again.app"
+          codesign -d -r- "$RUNNER_TEMP/again.app" 2>&1 | grep designated > /tmp/dr2.txt
+          grep designated /tmp/dr1.txt | diff - /tmp/dr2.txt || { echo "::error::designated differs between two signings"; exit 1; }
+          echo "RELEASE: codesign=stable"
+
+      - name: Smoke test x64 app under Rosetta
+        shell: bash
+        run: |
+          set -euo pipefail
+          app=$(find dist -maxdepth 2 -type d -name '*.app' -print -quit)
+          [ -n "$app" ] || { echo "::error::no .app found under dist"; exit 1; }
+          main_bin=$(find "$app/Contents/MacOS" -maxdepth 1 -type f -print -quit)
+          [ -n "$main_bin" ] || { echo "::error::no main binary under Contents/MacOS"; exit 1; }
+          echo "smoke binary: $main_bin"
+
+          if ! arch -x86_64 /usr/bin/true >/dev/null 2>&1; then
+            echo "Rosetta not available yet, trying to install"
+            softwareupdate --install-rosetta --agree-to-license || true
+          fi
+          if ! arch -x86_64 /usr/bin/true >/dev/null 2>&1; then
+            echo "::error::Rosetta unavailable, cannot run x64 smoke test"
+            exit 1
+          fi
+          echo "RELEASE: rosetta=ok"
+
+          log=/tmp/x64-smoke.log
+          : > "$log"
+          echo "file $main_bin: $(file "$main_bin")"
+          arch -x86_64 "$main_bin" >"$log" 2>&1 &
+          launcher=$!
+
+          app_pids() {
+            local found
+            found=$(pgrep -f "$main_bin" || true)
+            if [ -n "$found" ]; then
+              printf '%s\n' "$found"
+            else
+              printf '%s\n' "$launcher"
+            fi
+          }
+
+          fail() {
+            echo "::error::$1"
+            echo "--- app output ---"
+            cat "$log" || true
+            pkill -KILL -f "$main_bin" 2>/dev/null || true
+            kill -KILL "$launcher" 2>/dev/null || true
+            exit 1
+          }
+
+          check_alive_x64() {
+            local phase="$1" pid alive=0 pids
+            pids=$(app_pids | tr '\n' ' ')
+            for pid in $pids; do
+              if kill -0 "$pid" 2>/dev/null; then
+                alive=1
+              fi
+            done
+            [ "$alive" -eq 1 ] || fail "app is not running at ${phase}"
+            # This runner's ps has no arch keyword; verify the executable
+            # architecture with file instead of ps -o arch or vmmap.
+            if ! file "$main_bin" | grep -q 'x86_64'; then
+              fail "running executable is not x86_64 at ${phase}"
+            fi
+            echo "RELEASE: smoke=alive arch=x86_64 at=${phase}"
+          }
+
+          sleep 5
+          check_alive_x64 5s
+          sleep 15
+          check_alive_x64 20s
+
+          pids=$(app_pids | tr '\n' ' ')
+          kill -TERM $pids 2>/dev/null || true
+          for _ in $(seq 1 10); do
+            if ! kill -0 "$launcher" 2>/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          kill -KILL $pids 2>/dev/null || true
+          pkill -KILL -f "$main_bin" 2>/dev/null || true
+          wait "$launcher" 2>/dev/null || true
+          echo "--- app output ---"
+          cat "$log" || true
+          echo "RELEASE: smoke=ok 20s"
+
+      - name: Generate zip checksum for in-app update
+        run: |
+          cd dist
+          for f in LanLi-*-mac-x64.zip; do
+            shasum -a 256 "$f" > "$f.sha256"
+          done
+
+      - name: Upload macOS Intel artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-x64
+          if-no-files-found: error
+          path: |
+            dist/LanLi-*-mac-x64.dmg
+            dist/LanLi-*-mac-x64.zip
+            dist/LanLi-*-mac-x64.zip.sha256
+
+  publish:
+    name: Publish GitHub Release
+    needs: [macos]
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout release notes
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          fetch-depth: 2
+          sparse-checkout: release-notes
+
+      - name: Download macOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Download e2e screenshots
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: e2e-screenshots
+          path: screenshots
+
+      - name: List release files
+        run: |
+          test -s "dist/LanLi-${VERSION_TAG#v}-mac-x64.dmg"
+          test -s "dist/LanLi-${VERSION_TAG#v}-mac-x64.zip"
+          test -s "dist/LanLi-${VERSION_TAG#v}-mac-x64.zip.sha256"
+          ls -lh dist
+          ls -lh screenshots || true
+
+      - name: Prepare release notes
+        id: notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ env.VERSION_TAG }}
+        run: |
+          VERSION="${TAG#v}"
+          NOTES="release-notes/v${VERSION}.md"
+          test -s "$NOTES"
+          cp "$NOTES" "$RUNNER_TEMP/release-notes.md"
+          echo "path=$RUNNER_TEMP/release-notes.md" >> "$GITHUB_OUTPUT"
+
+      - name: Check previous release and fast-forward exact verified master
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          api="repos/$GITHUB_REPOSITORY"
+          test "$(gh api "$api/releases/latest" --jq .tag_name)" = v0.1.93
+          test "$(gh api "$api/git/matching-refs/tags/$VERSION_TAG" --jq length)" = 0
+          head="$(gh api "$api/git/ref/heads/master" --jq .object.sha)"
+          test "$head" = "$BASELINE_SHA" || test "$head" = "$SOURCE_SHA"
+          if [ "$head" = "$BASELINE_SHA" ]; then
+            gh api --method PATCH "$api/git/refs/heads/master" -f sha="$SOURCE_SHA" -F force=false --jq .object.sha
+          fi
+          test "$(gh api "$api/git/ref/heads/master" --jq .object.sha)" = "$SOURCE_SHA"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.VERSION_TAG }}
+          target_commitish: ${{ env.SOURCE_SHA }}
+          name: 栏历 ${{ env.VERSION_TAG }}
+          body_path: ${{ steps.notes.outputs.path }}
+          files: |
+            dist/LanLi-*-mac-x64.dmg
+            dist/LanLi-*-mac-x64.zip
+            dist/LanLi-*-mac-x64.zip.sha256
+            screenshots/*.png
+          fail_on_unmatched_files: false
+          make_latest: true
+          overwrite_files: false
+          draft: false
+          prerelease: false
+          generate_release_notes: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
