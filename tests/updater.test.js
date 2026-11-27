@@ -9,7 +9,7 @@ const path = require('node:path');
 const { setupAutoUpdate } = require('../electron/updater');
 const { createLogger } = require('../electron/logger');
 
-const FINAL_STATES = new Set(['up-to-date', 'manual', 'error']);
+const FINAL_STATES = new Set(['up-to-date', 'error', 'download-error', 'prepare-error', 'ready']);
 
 function tempDir(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lanli-updater-'));
@@ -111,7 +111,9 @@ function setupProbeOnly(t, options = {}) {
     net: { fetch: options.fetch },
     onStatus: collector.onStatus,
     onManual: (payload) => manualCalls.push(payload),
-    onReady: () => {},
+    onReady: options.onReady || (() => {}),
+    selfUpdate: options.selfUpdate || null,
+    probeTimeoutMs: options.probeTimeoutMs,
     isNotified: notified.isNotified,
     markNotified: notified.markNotified,
     logger: (message) => logs.push(message),
@@ -163,31 +165,17 @@ test('macOS always enters probe-only mode without calling setFeedURL', async (t)
   assert.match(env.logs.join('\n'), /manual check result: up-to-date/);
 });
 
-test('probe-only mode reports a manual download once for a 200 feed payload', async (t) => {
+test('a release without an available self updater reports retryable error without a browser notice', async (t) => {
   const env = setupProbeOnly(t, {
-    fetch: async () => feedResponse(200, {
-      name: '栏历 v0.1.4',
-      url: 'https://example.invalid/LanLi-0.1.4-mac-x64.zip'
-    })
+    fetch: async () => feedResponse(200, { name: '栏历 v0.1.4', url: 'https://example.invalid/update.zip' })
   });
-
   env.updater.checkNow({ manual: true });
-  await env.collector.waitForFinal(1);
-
-  const final = env.collector.statuses.at(-1);
-  assert.equal(final.state, 'manual');
-  assert.equal(final.manual, true);
-  assert.equal(final.name, '栏历 v0.1.4');
-  assert.equal(
-    final.url,
-    'https://github.com/allen-bot-ctl/lan-li/releases/download/v0.1.4/LanLi-0.1.4-mac-x64.dmg'
-  );
-  assert.equal(env.manualCalls.length, 1);
-  assert.deepEqual(env.manualCalls[0], {
-    name: '栏历 v0.1.4',
-    url: 'https://github.com/allen-bot-ctl/lan-li/releases/download/v0.1.4/LanLi-0.1.4-mac-x64.dmg'
-  });
-  assert.match(env.logs.join('\n'), /manual check result: manual/);
+  await env.collector.waitForFinal();
+  assert.equal(env.collector.statuses.at(-1).state, 'prepare-error');
+  assert.equal(env.collector.statuses.at(-1).manual, true);
+  assert.equal(env.manualCalls.length, 0);
+  assert.equal(env.notified.keys.size, 0);
+  assert.equal('url' in env.collector.statuses.at(-1), false);
 });
 
 test('probe-only mode reports error when the feed fetch rejects', async (t) => {
@@ -207,7 +195,7 @@ test('probe-only mode reports error when the feed fetch rejects', async (t) => {
   assert.match(env.logs.join('\n'), /manual check result: error/);
 });
 
-test('concurrent manual clicks share one feed probe but both get a final state', async (t) => {
+test('concurrent manual clicks coalesce the whole check and emit one final state', async (t) => {
   let fetchCalls = 0;
   let resolveFetch = null;
   const pendingFetch = new Promise((resolve) => {
@@ -227,11 +215,11 @@ test('concurrent manual clicks share one feed probe but both get a final state',
   assert.equal(fetchCalls, 1);
 
   resolveFetch(feedResponse(204, null));
-  await env.collector.waitForFinal(2);
+  await env.collector.waitForFinal(1);
 
   assert.equal(fetchCalls, 1);
   const finals = env.collector.statuses.filter((status) => FINAL_STATES.has(status.state));
-  assert.equal(finals.length, 2);
+  assert.equal(finals.length, 1);
   assert.ok(finals.every((status) => status.state === 'up-to-date' && status.manual === true));
 });
 
@@ -270,4 +258,101 @@ test('logger never throws when the logs directory cannot be resolved', () => {
   });
 
   assert.doesNotThrow(() => logger.error('before ready'));
+});
+
+
+test('actual feed timeout resets the job; retry fetches fresh and reaches verified ready', async (t) => {
+  let fetches = 0;
+  let downloads = 0;
+  const ready = [];
+  const env = setupProbeOnly(t, {
+    probeTimeoutMs: 5,
+    fetch: async (_url, init) => {
+      fetches += 1;
+      assert.equal(init.cache, 'no-store');
+      if (fetches === 1) return new Promise((_resolve, reject) => {
+        init.signal.addEventListener('abort', () => reject(init.signal.reason), { once: true });
+      });
+      return feedResponse(200, { name: 'v0.1.4', url: 'https://github.com/allen-bot-ctl/lan-li/releases/download/v0.1.4/LanLi-0.1.4-mac-x64.zip' });
+    },
+    selfUpdate: { available: true, start: async () => { downloads += 1; return { ok: true, name: 'v0.1.4' }; } },
+    onReady: (notice) => ready.push(notice)
+  });
+  env.updater.checkNow({ manual: true });
+  await env.collector.waitForFinal(1);
+  assert.equal(env.collector.statuses.at(-1).state, 'error');
+  assert.equal(fetches, 1);
+  assert.equal(downloads, 0);
+  env.updater.checkNow({ manual: true });
+  await env.collector.waitForFinal(2);
+  assert.equal(fetches, 2);
+  assert.equal(downloads, 1);
+  assert.deepEqual(ready, [{ name: 'v0.1.4', mode: 'ready-self' }]);
+  assert.equal(env.collector.statuses.at(-1).state, 'ready');
+  env.updater.checkNow({ manual: true });
+  env.updater.checkNow();
+  assert.equal(fetches, 2, 'verified ready is retained');
+  assert.equal(ready.length, 1);
+  env.updater.invalidateReady();
+  env.updater.checkNow({ manual: true });
+  await env.collector.waitForFinal(5);
+  assert.equal(fetches, 3, 'failed install permits fresh preparation');
+  assert.equal(downloads, 2);
+});
+
+test('download failures release the entire job; joined manual callers share retry then ready', async (t) => {
+  let fetches = 0;
+  let starts = 0;
+  let finishDownload;
+  const env = setupProbeOnly(t, {
+    fetch: async () => { fetches += 1; return feedResponse(200, { name: 'v0.1.4', url: 'asset' }); },
+    selfUpdate: { available: true, start: () => { starts += 1; return new Promise((resolve) => { finishDownload = resolve; }); } }
+  });
+  env.updater.checkNow();
+  await new Promise(setImmediate);
+  assert.equal(env.collector.statuses.at(-1).manual, false);
+  env.updater.checkNow({ manual: true });
+  env.updater.checkNow({ manual: true });
+  assert.equal(fetches, 1);
+  assert.equal(starts, 1);
+  finishDownload({ ok: false, reason: 'zip-download-failed: timeout' });
+  await env.collector.waitForFinal(1);
+  assert.equal(env.collector.statuses.at(-1).manual, true);
+  assert.equal(env.collector.statuses.at(-1).state, 'download-error');
+  assert.equal(env.manualCalls.length, 0);
+  env.updater.checkNow({ manual: true });
+  await new Promise(setImmediate);
+  assert.equal(fetches, 2);
+  assert.equal(starts, 2);
+  finishDownload({ ok: true, name: 'v0.1.4' });
+  await env.collector.waitForFinal(2);
+  assert.equal(env.collector.statuses.at(-1).state, 'ready');
+});
+
+test('missing asset URL, rejected downloads and stopped jobs never create download notices', async (t) => {
+  let startCalls = 0;
+  const env = setupProbeOnly(t, {
+    fetch: async () => feedResponse(200, { name: 'v0.1.4' }),
+    selfUpdate: { available: true, start: async () => { startCalls += 1; throw new Error('checksum'); } }
+  });
+  env.updater.checkNow();
+  await env.collector.waitForFinal();
+  assert.equal(env.collector.statuses.at(-1).state, 'prepare-error');
+  assert.equal(env.collector.statuses.at(-1).manual, false);
+  assert.equal(startCalls, 0);
+  assert.equal(env.manualCalls.length, 0);
+  let resolveDownload;
+  const ready = [];
+  const pending = setupProbeOnly(t, {
+    fetch: async () => feedResponse(200, { name: 'v0.1.4', url: 'asset' }),
+    selfUpdate: { available: true, start: () => new Promise((resolve) => { resolveDownload = resolve; }) },
+    onReady: (notice) => ready.push(notice)
+  });
+  pending.updater.checkNow({ manual: true });
+  await new Promise(setImmediate);
+  pending.updater.stop();
+  resolveDownload({ ok: true });
+  await new Promise(setImmediate);
+  assert.deepEqual(ready, []);
+  assert.equal(pending.collector.statuses.at(-1).state, 'downloading');
 });

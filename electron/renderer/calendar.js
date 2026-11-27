@@ -669,7 +669,7 @@ function loadVersion() {
 // is already waiting, the icon re-opens its notice instead of re-checking.
 checkUpdate.addEventListener('click', () => {
   hideIconTooltip();
-  if (pendingNotice) {
+  if (pendingNotice?.mode === 'ready') {
     showUpdateNotice(pendingNotice);
     return;
   }
@@ -986,38 +986,28 @@ function closeAlmanacPicker() {
   almanacStyleList.replaceChildren();
 }
 
-function checkFailedToast() {
+function checkFailedToast(state = 'error') {
+  const failed = state === 'download-error' ? ['下载失败', '本次下载未完成，请重试']
+    : state === 'prepare-error' ? ['更新未完成', '未能验证或准备更新，请重试']
+    : ['检查失败', '网络不通或更新源暂不可用'];
   return {
-    type: 'error',
-    title: '检查失败',
-    detail: '网络不通或更新源暂不可用',
+    type: 'error', title: failed[0], detail: failed[1],
     action: { label: '重试', onClick: () => api.checkUpdate() }
   };
 }
 
 function showUpdateNotice(notice) {
-  if (!notice) return;
-
+  if (!notice || notice.mode !== 'ready') return;
   clearSettingsHighlight();
   pendingNotice = notice;
-  const ready = notice.mode === 'ready';
-  // An available update keeps its orange dot until it is installed.
-  checkUpdate.classList.toggle('has-update', ready);
-  showToast(ready
-    ? {
-        type: 'warning',
-        title: '新版本已就绪',
-        detail: '重启后完成更新',
-        action: { label: '立即重启', onClick: () => api.restartToUpdate() },
-        sticky: true
-      }
-    : {
-        type: 'warning',
-        title: '发现新版本',
-        detail: '无法自动更新，请手动下载',
-        action: { label: '下载新版', onClick: () => api.openLatestRelease() },
-        sticky: true
-      });
+  checkUpdate.classList.add('has-update');
+  showToast({
+    type: 'warning',
+    title: '新版本已就绪',
+    detail: '重启后完成更新',
+    action: { label: '立即重启', onClick: () => api.restartToUpdate() },
+    sticky: true
+  });
 }
 
 // Manual check statuses share the toast with update notices. Sticky notices win
@@ -1026,7 +1016,8 @@ function showUpdateNotice(notice) {
 const UPDATE_RESULT_TEXT = {
   'up-to-date': '已是最新',
   error: '检查失败，请稍后再试',
-  manual: '需手动下载新版本',
+  'download-error': '下载失败，可重试',
+  'prepare-error': '更新未完成，可重试',
   ready: '新版本已就绪，重启即可更新'
 };
 
@@ -1043,29 +1034,36 @@ function applyCheckStatus(status) {
   if (!status) return;
   const state = typeof status.state === 'string' ? status.state : '';
   const label = typeof status.label === 'string' ? status.label : '';
+  if (status.resetReady === true) {
+    pendingNotice = null;
+    checkUpdate.classList.remove('has-update');
+  }
+  // A verified ready notice survives late status messages and re-opened views.
+  if (pendingNotice?.mode === 'ready' && state !== 'ready') return;
   recordUpdateResult(state, label);
   if (!state && !label) {
     if (toastState && toastState.type === 'progress') hideToast();
     return;
   }
-  if (toastState && toastState.sticky) return;
+  if (pendingNotice?.mode === 'ready') return;
 
   const version = appVersion.textContent.trim();
   if (state === 'checking') {
-    showToast({ type: 'progress', title: '正在检查更新…' });
+    showToast({ type: 'progress', title: '正在检查更新…', progressTimeoutMs: 0 });
   } else if (state === 'downloading') {
     showToast({
       type: 'progress',
+      progressTimeoutMs: 0,
       title: Number.isFinite(status.percent)
         ? `正在下载新版本 ${Math.round(status.percent)}%`
         : '正在下载新版本'
     });
   } else if (state === 'up-to-date') {
     showToast({ type: 'success', title: version ? `已是最新版本 ${version}` : '已是最新版本' });
-  } else if (state === 'error') {
-    showToast(checkFailedToast());
-  } else if (state === 'manual') {
-    showToast({ type: 'warning', title: '需手动下载' });
+  } else if (['error', 'manual', 'download-error', 'prepare-error'].includes(state)) {
+    showToast(checkFailedToast(state));
+  } else if (state === 'ready') {
+    if (toastState?.type === 'progress') hideToast();
   } else {
     showToast({ type: 'info', title: label || '开发态不检查更新' });
   }
@@ -1323,7 +1321,7 @@ settingInboxDateLink.addEventListener('change', async () => {
   }
 });
 settingsCheckUpdate.addEventListener('click', () => {
-  if (pendingNotice) {
+  if (pendingNotice?.mode === 'ready') {
     showUpdateNotice(pendingNotice);
     return;
   }

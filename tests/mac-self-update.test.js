@@ -708,7 +708,7 @@ test('probe-only mode emits downloading then ready for a self-updatable release'
   assert.equal(ready.selfUpdate, true);
 });
 
-test('probe-only mode falls back to the direct DMG when self-update fails', async (t) => {
+test('checksum failure stays in-app and reports a retryable error without a download URL', async (t) => {
   const collector = makeCollector();
   const manualCalls = [];
   const notified = new Set();
@@ -744,14 +744,13 @@ test('probe-only mode falls back to the direct DMG when self-update fails', asyn
   t.after(() => updater.stop());
 
   updater.checkNow({ manual: true });
-  await collector.waitFor('manual');
+  await collector.waitFor('prepare-error');
 
   assert.deepEqual(
     collector.statuses.map((status) => status.state),
-    ['checking', 'downloading', 'manual']
+    ['checking', 'downloading', 'prepare-error']
   );
-  const expectedUrl =
-    `https://github.com/allen-bot-ctl/lan-li/releases/download/v${NEXT_VERSION}/LanLi-${NEXT_VERSION}-mac-x64.dmg`;
-  assert.deepEqual(manualCalls, [{ name: update.name, url: expectedUrl }]);
-  assert.equal(collector.statuses.at(-1).url, expectedUrl);
+  assert.deepEqual(manualCalls, []);
+  assert.equal(notified.size, 0);
+  assert.equal('url' in collector.statuses.at(-1), false);
 });

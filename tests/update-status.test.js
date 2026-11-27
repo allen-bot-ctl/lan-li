@@ -27,13 +27,6 @@ test('manual check states map to short labels and timing flags', () => {
     timed: true
   });
 
-  assert.deepEqual(describeStatus({ state: 'manual' }), {
-    state: 'manual',
-    label: '需手动下载',
-    busy: false,
-    timed: true
-  });
-
   assert.deepEqual(describeStatus({ state: 'disabled' }), {
     state: 'disabled',
     label: '开发态不检查更新',
@@ -63,4 +56,11 @@ test('ready restores the entry and unknown states fail closed', () => {
     busy: false,
     timed: true
   });
+});
+
+
+test('download and preparation failures have distinct in-app retry labels', () => {
+  for (const [state, label] of [['download-error', '下载失败'], ['prepare-error', '更新未完成']]) {
+    assert.deepEqual(describeStatus({ state }), { state, label, busy: false, timed: true });
+  }
 });

@@ -54,7 +54,6 @@ contextBridge.exposeInMainWorld('lanli', {
   },
   checkUpdate: () => ipcRenderer.send('update:check'),
   restartToUpdate: () => ipcRenderer.send('update:restart'),
-  openLatestRelease: () => ipcRenderer.send('update:openLatest'),
   // 0.1.42 收纳
   listInbox: () => ipcRenderer.invoke('inbox:list'),
   addInboxManual: (text) => ipcRenderer.invoke('inbox:addManual', text),

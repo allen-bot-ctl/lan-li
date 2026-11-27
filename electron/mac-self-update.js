@@ -10,8 +10,8 @@
 // The update is downloaded from the GitHub release URL, verified against the
 // published .sha256 asset, extracted with ditto, checked against its
 // CFBundleShortVersionString, and installed by a small /bin/sh script after the
-// current process exits. If anything looks wrong we fall back to a manual DMG
-// download instead of replacing the app.
+// current process exits. If anything looks wrong the attempt fails without
+// replacing the app; the caller offers an in-app retry.
 
 const crypto = require('node:crypto');
 const nodeFs = require('node:fs');

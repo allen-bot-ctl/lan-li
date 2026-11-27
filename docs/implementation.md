@@ -198,16 +198,16 @@ main.setupUpdates()
             ├─ 204 → up-to-date
             ├─ 200 + name/url → 有更新
             │    ├─ selfUpdate.available → 下载/校验/暂存 → onReady(mode:'ready-self')
-            │    └─ 否则 → 手动 DMG 链接 → onManual
+            │    └─ 否则 → prepare-error → 应用内重试
             └─ 其他/失败 → error
 ```
 
 - feed：`https://update.electronjs.org/allen-bot-ctl/lan-li/${platform}-${arch}/${version}`。
 - 首次检查在启动约 10 秒后，之后每 6 小时；探测超时 15 秒。
 - 自动检查无更新时静默；只有 `manual === true` 的状态才会经 `update:status` 发给渲染进程。
-- 手动检查日志：`manual check start`；结束状态为 `up-to-date` / `manual` / `error` 时写 `manual check result: <state>`（`ready` 不在此列）。进入 probe-only 时写 `macOS 未正式签名，使用 probe-only`。
+- 手动检查日志：`manual check start`；结束状态为 `up-to-date` / `error` / `download-error` / `prepare-error` 时写 `manual check result: <state>`（`ready` 不在此列）。进入 probe-only 时写 `macOS 未正式签名，使用 probe-only`。
 - 下载成功：渲染层经 `showToast` 显示「新版本已就绪 / 立即重启」。当前 macOS 只有自更新路径，「立即重启」调 `selfUpdater.installReady()`。
-- 失败回退：`fallbackManualUrl` 能从版本号推导时直接给同版本 `.dmg` 直链，否则 `RELEASES_LATEST_URL`。同一版本的手动下载提醒只出现一次（偏好文件 `updateNotifications` 去重）。
+- 失败仅通过状态返回应用内重试，不保存失败 notice 或打开浏览器；重复点击共享整轮任务，失败后下次点击重新请求。安装启动失败清除 ready，允许重新准备。
 - 完整行为与边界见 [updater.md](updater.md)。
 
 **测试**：`tests/updater.test.js`、`tests/mac-self-update.test.js`、`tests/update-feed.test.js`、`tests/update-status.test.js`。
@@ -268,7 +268,6 @@ main.setupUpdates()
 | `menu:openSettings` | `openSettings` | `{ x, y }` 为设置按钮左缘/下缘 + 4px；主进程把原生菜单左上角放在该点 |
 | `update:check` | `checkUpdate` | 顶栏右上角的检查更新图标；主进程复用 `requestUpdateCheck()`，结果仍经 `update:status` |
 | `update:restart` | `restartToUpdate` | 就绪后重启更新（自更新） |
-| `update:openLatest` | `openLatestRelease` | 打开手动下载地址 |
 | `reader:cancelQa` | `cancelReaderQa` | 取消当前追问，不写入未完成的问答 |
 
 **send（主 → 渲染）**
@@ -278,12 +277,12 @@ main.setupUpdates()
 | `calendar:onTick` | `onTick` | 每秒发送 `{ almanac, viewSubtitle, clocks }`（窗口可见时），`clocks`、黄历与 `viewSubtitle` 都按当前时刻与当前显示月份重新计算 |
 | `weather:update` | `onWeatherUpdate` | 后台或打开窗口刷新后的天气结果；失败同样下发 `{ ok: false, text: '天气暂不可用', emoji: '🌡️' }` |
 | `ui:openPanel` | `onOpenPanel` | `'almanac'`、`'clocks'` 或 `'weather'`；由设置菜单触发，渲染层打开对应面板 |
-| `update:notice` | `onUpdateNotice` | `ready` / `manual` 通用提示；打开窗口与加载完成时重发 |
+| `update:notice` | `onUpdateNotice` | `ready` 通用提示；打开窗口与加载完成时重发 |
 | `update:status` | `onUpdateStatus` | 短状态；**仅手动检查**时发送 |
 | `pin:state` | `onPinState` | 主进程钉住状态变化（取消钉住、隐藏）时发送 `{ pinned }` |
 | `reader:qaDelta` | `onReaderQaDelta` | 本轮追问收到的纯文字增量 `{ id, requestId, delta }`；只在等待中的视图显示，最终结果仍由 `reader:sendQa` 返回 |
 
-**preload API 全量（27 个）**：`getVersion`、`getState`、`setView`、`goToday`、`addClock`、`removeClock`、`setMenuBarClock`、`searchClocks`、`getWeather`、`searchCity`、`getQuickCities`、`setCity`、`getAlmanacStyles`、`setAlmanacStyle`、`onWeatherUpdate`、`onTick`、`pointerEnter`、`pointerLeave`、`togglePin`、`onPinState`、`openSettings`、`onOpenPanel`、`onUpdateNotice`、`onUpdateStatus`、`checkUpdate`、`restartToUpdate`、`openLatestRelease`。
+**preload API 全量（26 个）**：`getVersion`、`getState`、`setView`、`goToday`、`addClock`、`removeClock`、`setMenuBarClock`、`searchClocks`、`getWeather`、`searchCity`、`getQuickCities`、`setCity`、`getAlmanacStyles`、`setAlmanacStyle`、`onWeatherUpdate`、`onTick`、`pointerEnter`、`pointerLeave`、`togglePin`、`onPinState`、`openSettings`、`onOpenPanel`、`onUpdateNotice`、`onUpdateStatus`、`checkUpdate`、`restartToUpdate`。
 
 **状态文案（`electron/update-status.js`）**
 
@@ -293,11 +292,12 @@ main.setupUpdates()
 | `downloading` | 正在下载… | true | false |
 | `up-to-date` | 已是最新 | false | true |
 | `ready` | （空） | false | false |
-| `manual` | 需手动下载 | false | true |
+| `download-error` | 下载失败 | false | true |
+| `prepare-error` | 更新未完成 | false | true |
 | `disabled` | 开发态不检查更新 | false | true |
 | `error` | 检查失败 | false | true |
 
-未知或空状态按 `error` 处理（fail closed）。`ready` 的提示文案在渲染层经 `showToast` 展示：「新版本已就绪」「立即重启」（sticky，不自动消失）；手动失败：「发现新版本」「无法自动更新，请手动下载」「下载新版」（sticky）。info/success 约 3 秒后隐藏（悬停暂停）；进行中的提示只被下一状态替换，30 秒无结果转为「检查失败」。就绪/手动下载的 sticky 提示优先，不会被短状态覆盖。
+未知或空状态按 `error` 处理（fail closed）。`ready` 的提示文案在渲染层经 `showToast` 展示：「新版本已就绪」「立即重启」（sticky，不自动消失）；失败仅显示对应检查/下载/准备错误和「重试」。更新进行中不使用通用 toast 的 30 秒界面兜底，其他 progress 保留原计时。就绪提示不会被旧状态覆盖；安装启动失败时显式解除 ready。
 
 ## 7. 登录项与平台限制
 

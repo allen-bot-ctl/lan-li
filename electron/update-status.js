@@ -8,13 +8,14 @@ const LABELS = {
   downloading: '正在下载…',
   'up-to-date': '已是最新',
   ready: '',
-  manual: '需手动下载',
   disabled: '开发态不检查更新',
-  error: '检查失败'
+  error: '检查失败',
+  'download-error': '下载失败',
+  'prepare-error': '更新未完成'
 };
 
 const BUSY_STATES = new Set(['checking', 'downloading']);
-const TIMED_STATES = new Set(['up-to-date', 'manual', 'disabled', 'error']);
+const TIMED_STATES = new Set(['up-to-date', 'disabled', 'error', 'download-error', 'prepare-error']);
 
 function describeStatus(status) {
   const state = status && typeof status.state === 'string'

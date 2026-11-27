@@ -61,7 +61,7 @@ function scheduleToastDismiss() {
   }, TOAST_AUTO_MS);
 }
 
-function showToast({ type = 'info', title = '', detail = '', action = null, sticky = false } = {}) {
+function showToast({ type = 'info', title = '', detail = '', action = null, sticky = false, progressTimeoutMs = TOAST_PROGRESS_LIMIT_MS } = {}) {
   clearToastTimers();
   if (toastExitTimer) {
     clearTimeout(toastExitTimer);
@@ -87,7 +87,7 @@ function showToast({ type = 'info', title = '', detail = '', action = null, stic
   requestAnimationFrame(() => {
     if (toastState) toast.classList.add('is-visible');
   });
-  if (kind === 'progress') {
+  if (kind === 'progress' && progressTimeoutMs > 0) {
     toastProgressTimer = setTimeout(() => {
       toastProgressTimer = null;
       if (toastProgressFallback) {
@@ -95,7 +95,7 @@ function showToast({ type = 'info', title = '', detail = '', action = null, stic
       } else {
         hideToast();
       }
-    }, TOAST_PROGRESS_LIMIT_MS);
+    }, progressTimeoutMs);
   } else {
     scheduleToastDismiss();
   }

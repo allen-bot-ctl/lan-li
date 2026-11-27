@@ -177,25 +177,24 @@ test('C6 页面只有一个提示容器，连续触发两次只剩最新一条',
   await clearToast();
 });
 
-test('C5 progress 持续到下一状态；30 秒无结果转「检查失败」', async () => {
-  test.setTimeout(70000);
+test('C5 普通 progress 保留30秒兜底，更新下载超过30秒保持进行中', async () => {
   await trayEnter();
   await clearToast();
-  await emitStatus({ state: 'checking', label: '正在检查…', busy: true });
-  await expect(page.locator('#toast-title')).toHaveText('正在检查更新…');
-  await page.waitForTimeout(5000);
-  await expect(toast()).toBeVisible();
-  await expect(toast()).toHaveAttribute('data-type', 'progress');
-
-  await emitStatus({ state: 'downloading', label: '正在下载…', busy: true });
-  await expect(page.locator('#toast-title')).toHaveText(/^正在下载新版本/);
-  const startedAt = Date.now();
-  await expect(page.locator('#toast-title')).toHaveText('检查失败', { timeout: 35000 });
-  expect(Date.now() - startedAt).toBeGreaterThanOrEqual(29000);
-  await expect(toast()).toHaveAttribute('data-type', 'error');
-  await expect(page.locator('#toast-detail')).toHaveText('网络不通或更新源暂不可用');
-  await expect(page.locator('#toast-action')).toHaveText('重试');
-  await clearToast();
+  await page.clock.install();
+  try {
+    await emitStatus({ state: 'downloading', label: '正在下载…', busy: true });
+    await page.clock.fastForward(35000);
+    await expect(page.locator('#toast-title')).toHaveText('正在下载新版本');
+    await expect(toast()).toHaveAttribute('data-type', 'progress');
+    await page.evaluate(() => showToast({ type: 'progress', title: '普通进度' }));
+    await page.clock.fastForward(30001);
+    await expect(page.locator('#toast-title')).toHaveText('检查失败');
+    await expect(toast()).toHaveAttribute('data-type', 'error');
+    await expect(page.locator('#toast-action')).toHaveText('重试');
+    await clearToast();
+  } finally {
+    await page.clock.resume();
+  }
 });
 
 // 放最后：ready 通知会留在主进程，之后每次开窗都会重发。

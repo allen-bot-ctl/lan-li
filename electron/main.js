@@ -70,10 +70,6 @@ const {
 const { buildTrayMenuTemplate } = require('./settings-menu');
 const { computePanelBounds } = require('./window-layout');
 const {
-  RELEASES_LATEST_URL,
-  HOMEPAGE_URL
-} = require('./update-feed');
-const {
   CACHE_TTL_MS: WEATHER_REFRESH_MS,
   createWeatherService,
   normalizeWeatherCity,
@@ -235,20 +231,20 @@ function applyLoginItem(desired) {
       if (outcome.ok) {
         logger.info('[栏历] 系统登录项未生效，已写入 LaunchAgent：' + outcome.path);
       } else {
-        logger.warn('[栏历] 系统登录项未生效，LaunchAgent 回退失败：' + outcome.reason);
+        logger.warn('[栏历] 系统登录项未生效，LaunchAgent 回退失败：' + (outcome?.reason || 'unknown'));
       }
     } else {
       // A working system login item makes a leftover fallback redundant (and
       // would otherwise launch the app twice at login).
       const outcome = helper.disable();
-      if (!outcome.ok) {
-        logger.warn('[栏历] 清理旧 LaunchAgent 失败：' + outcome.reason);
+      if (!outcome?.ok) {
+        logger.warn('[栏历] 清理旧 LaunchAgent 失败：' + (outcome?.reason || 'unknown'));
       }
     }
   } else {
     const outcome = helper.disable();
     if (!outcome.ok) {
-      logger.warn('[栏历] 删除 LaunchAgent 失败：' + outcome.reason);
+      logger.warn('[栏历] 删除 LaunchAgent 失败：' + (outcome?.reason || 'unknown'));
     }
   }
 
@@ -416,24 +412,6 @@ function commitWorldClocks(next) {
   return currentClockSnapshot();
 }
 
-// Update notices are keyed by the release name from the Squirrel feed so a
-// single release never produces the same reminder on every launch.
-function hasUpdateNotification(key) {
-  const notifications = readPreferences().updateNotifications;
-  return Boolean(notifications && typeof notifications === 'object' &&
-    notifications[key] === true);
-}
-
-function markUpdateNotification(key) {
-  const preferences = readPreferences();
-  const notifications = preferences.updateNotifications &&
-    typeof preferences.updateNotifications === 'object'
-    ? { ...preferences.updateNotifications }
-    : {};
-  notifications[key] = true;
-  writePreferences({ ...preferences, updateNotifications: notifications });
-}
-
 // First launch only: try to turn on the login item and remember that the
 // attempt was made. applyLoginItem falls back to a LaunchAgent when the system
 // API is rejected (unsigned builds), so the persisted flag matches the real
@@ -589,6 +567,7 @@ function sendUpdateNotice() {
 }
 
 function showUpdateNotice(notice) {
+  if (!notice || notice.mode !== 'ready') return;
   updateNotice = notice;
   sendUpdateNotice();
 }
@@ -661,6 +640,7 @@ function performUpdateCheck() {
 // path needs an explicit message.
 let e2eUpdateChecks = 0;
 let e2eUpdateChecks0 = 0;
+let e2eUpdateScenario = null;
 function requestUpdateCheck() {
   if (E2E) e2eUpdateChecks += 1;
   const status = performUpdateCheck();
@@ -682,18 +662,6 @@ function pointerInsideWindow() {
 
 // The renderer sends the settings button's left edge and bottom + 4. Electron's
 // popup takes the menu's top-left corner, so use that point as-is.
-function isAllowedUpdateUrl(value) {
-  if (typeof value !== 'string' || value.trim() === '') return false;
-  try {
-    const parsed = new URL(value);
-    return parsed.protocol === 'https:' &&
-      parsed.hostname === 'github.com' &&
-      parsed.pathname.startsWith('/allen-bot-ctl/lan-li/');
-  } catch {
-    return false;
-  }
-}
-
 function setupUpdates() {
   try {
     selfUpdater = createMacSelfUpdater({
@@ -729,19 +697,7 @@ function setupUpdates() {
         if (mode === 'ready-self') notice.selfUpdate = true;
         showUpdateNotice(notice);
       },
-      onManual: ({ name, url }) => {
-        logger.warn('[栏历] 无法自动应用更新' +
-          (name ? '（' + name + '）' : '') + '，改为提示手动下载。');
-        showUpdateNotice({
-          mode: 'manual',
-          name,
-          url: isAllowedUpdateUrl(url) ? url : RELEASES_LATEST_URL,
-          homepage: HOMEPAGE_URL
-        });
-      },
       onStatus: handleUpdateStatus,
-      isNotified: hasUpdateNotification,
-      markNotified: markUpdateNotification,
       logger: (message) => logger.info('[栏历] 更新：' + message)
     });
     updateSetupError = null;
@@ -1130,6 +1086,9 @@ function registerIpc() {
     if (updateNotice.selfUpdate) {
       if (!selfUpdater) {
         logger.warn('[栏历] 自更新安装器不可用，无法启动安装。');
+        updateNotice = null;
+        updater?.invalidateReady?.();
+        sendUpdateStatus({ ...describeStatus({ state: 'prepare-error' }), resetReady: true });
         return;
       }
       let outcome;
@@ -1141,24 +1100,17 @@ function registerIpc() {
           reason: error && error.message ? error.message : String(error)
         };
       }
-      if (!outcome.ok) {
-        logger.warn('[栏历] 启动自更新安装失败：' + outcome.reason);
+      if (!outcome?.ok) {
+        logger.warn('[栏历] 启动自更新安装失败：' + (outcome?.reason || 'unknown'));
+        updateNotice = null;
+        updater?.invalidateReady?.();
+        sendUpdateStatus({ ...describeStatus({ state: 'prepare-error' }), resetReady: true });
       }
       return;
     }
 
     // Real autoUpdater downloads still use Squirrel.Mac's installer.
     autoUpdater.quitAndInstall();
-  });
-
-  ipcMain.on('update:openLatest', () => {
-    const target = updateNotice && isAllowedUpdateUrl(updateNotice.url)
-      ? updateNotice.url
-      : RELEASES_LATEST_URL;
-    shell.openExternal(target).catch((error) => {
-      logger.warn('[栏历] 打开更新下载地址失败：' +
-        (error && error.message ? error.message : error));
-    });
   });
 }
 
@@ -1247,6 +1199,44 @@ function registerE2eHooks() {
     quitConfirmOpen() { return quitConfirmOpen; },
     promptAiOpen() { return promptAiOpen; },
     trayMenuStats() { return { quitCalls: e2eQuitCalls, updateChecks: e2eUpdateChecks - e2eUpdateChecks0, hold: trayMenuHold }; },
+    // Fake only transport/preparation; exercise the real updater, IPC and UI.
+    configureUpdateRetryScenario() {
+      updater?.stop();
+      updateNotice = null;
+      const scenario = { feeds: 0, downloads: 0, installs: 0, resolve: null };
+      e2eUpdateScenario = scenario;
+      selfUpdater = {
+        available: true,
+        start: () => { scenario.downloads += 1; return new Promise((resolve) => { scenario.resolve = resolve; }); },
+        installReady: () => {
+          scenario.installs += 1;
+          return scenario.installs === 1 ? { ok: false, reason: 'staged-app-missing' } : { ok: true };
+        }
+      };
+      updater = setupAutoUpdate({
+        app: { isPackaged: true, getVersion: () => app.getVersion() },
+        platform: 'darwin', arch: 'x64', schedule: false,
+        net: { fetch: async () => { scenario.feeds += 1; return { status: 200, json: async () => ({
+          name: '栏历 v0.1.92', url: 'https://github.com/allen-bot-ctl/lan-li/releases/download/v0.1.92/LanLi-0.1.92-mac-x64.zip'
+        }) }; } },
+        selfUpdate: selfUpdater,
+        onStatus: (status) => { scenario.state = status.state; handleUpdateStatus(status); },
+        onReady: ({ name }) => showUpdateNotice({ mode: 'ready', name, selfUpdate: true })
+      });
+      return true;
+    },
+    checkUpdateAutomatically() { updater.checkNow(); return true; },
+    finishUpdateAttempt(outcome) {
+      const resolve = e2eUpdateScenario?.resolve;
+      if (!resolve) return false;
+      e2eUpdateScenario.resolve = null;
+      resolve({ ...outcome, name: '栏历 v0.1.92' });
+      return true;
+    },
+    updateRetryStats() {
+      const s = e2eUpdateScenario;
+      return s ? { feeds: s.feeds, downloads: s.downloads, installs: s.installs, state: s.state, notice: updateNotice } : null;
+    },
     emitUpdateStatus(status) {
       sendUpdateStatus(status);
       return true;

@@ -7,7 +7,7 @@
 | 文件 | 职责 |
 | --- | --- |
 | `electron/main.js` | 创建自更新器、调用 `setupAutoUpdate`、把回调转成 IPC、处理「重启更新」 |
-| `electron/updater.js` | 选择 probe-only / disabled，调度检查，解释结果，决定 ready/manual/error |
+| `electron/updater.js` | 选择 probe-only / disabled，调度检查，解释结果，决定 ready/error/download-error/prepare-error |
 | `electron/mac-self-update.js` | 校验 URL、下载、sha256、解压、plist 校验、暂存、安装脚本 |
 | `electron/update-feed.js` | feed URL 拼接、`204`/`200` 语义 |
 | `electron/update-status.js` | 手动检查短文案 |
@@ -40,7 +40,7 @@ https://update.electronjs.org/allen-bot-ctl/lan-li/${platform}-${arch}/${version
 | `200` 但 JSON 无效 / 无 name 与 url | `error` |
 | 其他状态、网络失败、JSON 解析失败 | `error` |
 
-并发的手动点击共享同一个进行中的 probe（`probePromise`），每个调用者仍各自收到最终状态。
+并发的手动点击共享同一个进行中的 probe（`probePromise`），整轮检查及下载只产生一次最终状态；自动检查中加入手动请求会转为手动反馈。
 
 ## 自更新是否可用
 
@@ -51,7 +51,7 @@ https://update.electronjs.org/allen-bot-ctl/lan-li/${platform}-${arch}/${version
 - `arch === 'x64'`
 - 注入了可用的 `fetch`
 
-否则 `start()` 直接返回 `{ ok: false, reason: 'self-update-unavailable' }`，走手动下载回退。
+否则不准备更新，手动请求显示「更新未完成 / 重试」；自动失败保持静默。
 
 ## 更新 URL 校验
 
@@ -77,7 +77,7 @@ https://github.com/allen-bot-ctl/lan-li/releases/download/v<ver>/LanLi-<ver>-mac
 3. 流式计算 zip 的 sha256（无法流式时退回整块 buffer）。
 4. 超过 **500 MB**（`MAX_DOWNLOAD_BYTES`）中止：先看 `content-length`，流式过程中再累计一次。
 5. `.sha256` 内容为单行 64 位十六进制，可带 `*` 与文件名（`shasum -a 256` 输出）。若带文件名，必须与 zip 完全一致。
-6. 缺校验文件、文件名不符、摘要不一致、空下载、超限 → 回退。
+6. 缺校验文件、文件名不符、摘要不一致、空下载、超限 → 本轮失败，提供应用内重试。
 
 ## 解压与包校验
 
@@ -123,23 +123,14 @@ $1 pid  $2 当前 .app  $3 新 .app  $4 备份路径  $5 暂存目录
 
 真机上还可能被系统隐私限制挡住替换；当前代码没有检测该权限，以 `update-install.log` 为准。
 
-## 失败回退
+## 失败与应用内重试
 
-- 任一环节失败：记录原因，通用提示切到「无法自动更新，请手动下载」，「下载新版」打开**同版本**的 `.dmg` 直链：
-
-  ```text
-  https://github.com/allen-bot-ctl/lan-li/releases/download/v<ver>/LanLi-<ver>-mac-x64.dmg
-  ```
-
-- 只有版本号完全无法推导时才打开 `https://github.com/allen-bot-ctl/lan-li/releases/latest`。
-- 手动下载提示按版本去重（偏好文件 `updateNotifications`，键形如 `manual:<name>`）；同一版本只提醒一次。手动检查的短状态（如「需手动下载」）仍会照常返回。
-- 以下情况不尝试自更新，直接走手动 `.dmg` / Release：
-  - AppTranslocation 路径；
-  - 当前 `.app` 或其父目录不可写（`accessSync(W_OK)` 失败）；
-  - arm64；
-  - 开发态；
-  - URL/版本/架构校验失败；
-  - sha256 缺失或不匹配、解压失败、plist 版本不符、可执行文件缺失、下载超限、日志目录不可用、脚本启动失败。
+- feed 超时或失败显示「检查失败 / 重试」；zip/校验文件传输失败显示「下载失败 / 重试」；URL、摘要、包、本地权限或安装准备失败显示「更新未完成 / 重试」。只在用户主动检查或重试时反馈；自动检查失败不弹提示。
+- 不生成手动下载通知、不记录失败去重偏好，也不通过浏览器打开 DMG 或 Release。移除 `update:openLatest` 和对应 preload 方法。
+- 失败结束后释放整轮任务；重试按钮、顶栏、设置页及原生菜单下一次点击均重新请求 feed，按需重新下载/校验。不自动重试，不增加备用传输。
+- 正在检查或下载时的重复请求共用同一任务；已确认 ready 时保留重启提示。旧的失败/进度消息不覆盖已就绪状态；旧的手动下载通知被忽略。
+- 更新专用 progress 不使用通用 toast 的 30 秒界面兜底；真实网络与校验结果决定成功或失败。其他通用 progress 仍有 30 秒兜底。
+- `installReady()` 若无法启动（如暂存包缺失、spawn 失败），清除 main/updater/renderer 的 ready 缓存和橙点，回到应用内重试，允许重新准备。原有 URL、架构、版本、checksum、bundle 校验与安装脚本保持。
 
 ## 将来有签名时
 
