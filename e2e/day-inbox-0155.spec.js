@@ -97,10 +97,18 @@ test('A1/A2 当前时区：文字「当前时区」，带 is-current-zone，浅�
   for (const t of others) expect(t).not.toBe('当前时区');
   for (const [scheme, color] of [['light', 'rgb(0, 122, 255)'], ['dark', 'rgb(10, 132, 255)']]) {
     await page.emulateMedia({ colorScheme: scheme });
-    await expect(sub).toHaveCSS('color', color);
-    const m = await sub.evaluate((el) => ({ c: getComputedStyle(el).color, w: getComputedStyle(el).fontWeight, sw: el.scrollWidth, cw: el.clientWidth }));
-    expect(Number(m.w)).toBe(600);
-    expect(m.sw).toBeLessThanOrEqual(m.cw);
+    // The clock tick replaces these nodes. Query and measure the connected
+    // current node in one renderer turn instead of retaining an old handle.
+    await expect.poll(() => page.evaluate(() => {
+      const nodes = document.querySelectorAll('#clock-list .clock-entry-sub.is-current-zone');
+      const el = nodes[0];
+      const style = el ? getComputedStyle(el) : null;
+      return {
+        count: nodes.length, connected: Boolean(el?.isConnected), text: el?.textContent,
+        color: style?.color, weight: Number(style?.fontWeight),
+        unclipped: Boolean(el && el.scrollWidth <= el.clientWidth)
+      };
+    })).toEqual({ count: 1, connected: true, text: '当前时区', color, weight: 600, unclipped: true });
     await page.locator('.clocks-card, #clock-list').first().screenshot({ path: path.join(SHOTS, `55-current-zone-${scheme}.png`) }).catch(() => page.screenshot({ path: path.join(SHOTS, `55-current-zone-${scheme}.png`) }));
   }
   await page.emulateMedia({ colorScheme: null });

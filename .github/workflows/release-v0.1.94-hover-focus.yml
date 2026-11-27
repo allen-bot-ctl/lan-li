@@ -14,8 +14,8 @@ concurrency:
 
 env:
   VERSION_TAG: v0.1.94
-  SOURCE_SHA: ee66d07b7171a211d9d5504463d3e1f22a9079a4
-  SOURCE_TREE: da0b23806aa622c2dc9bb1720de2141deb1b76ec
+  SOURCE_SHA: 0ccb349d2d7c2895536edd3f4b5567314b7b6f88
+  SOURCE_TREE: 87ed9b6d3b14be868f3697621db70639148b5bbf
   BASELINE_SHA: 4809fbb0f76e0b4960ec6b88c5db30158a32483f
 
 jobs:
@@ -224,8 +224,12 @@ jobs:
       - name: Verify tray hover and explicit input focus on Intel
         run: npm run e2e -- --grep '悬停不抢焦点'
 
-      - name: Verify full native Electron suite
-        run: npm run e2e
+      - name: Verify repaired time-zone and date group, reuse other tests from exact prior product tree
+        shell: bash
+        run: |
+          git fetch --no-tags origin ee66d07b7171a211d9d5504463d3e1f22a9079a4
+          test "$(git diff --name-only ee66d07b7171a211d9d5504463d3e1f22a9079a4 "$SOURCE_SHA")" = e2e/day-inbox-0155.spec.js
+          npm run e2e -- e2e/day-inbox-0155.spec.js
 
       - name: Collect failed UI test diagnostics
         if: failure()
