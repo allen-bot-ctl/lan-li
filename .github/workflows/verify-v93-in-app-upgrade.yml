@@ -1,0 +1,96 @@
+name: Verify v0.1.92 to v0.1.93 upgrade
+on:
+  push:
+    branches: [verify/v93-in-app-upgrade]
+    paths: [.github/workflows/verify-v93-in-app-upgrade.yml]
+permissions:
+  contents: read
+jobs:
+  verify:
+    if: github.repository == 'allen-bot-ctl/lan-li' && github.actor_id == '352863755'
+    runs-on: macos-15-intel
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 7633c285667944b897e60ac92ccb274243b7f0e4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install test harness
+        run: ELECTRON_SKIP_BINARY_DOWNLOAD=1 npm ci
+      - name: Fetch exact signed baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/upgrade-box"
+          cd "$RUNNER_TEMP/upgrade-box"
+          zip=LanLi-0.1.92-mac-x64.zip
+          u=https://github.com/allen-bot-ctl/lan-li/releases/download/v0.1.92
+          curl -fsSL --retry 2 --max-time 90 "$u/$zip" -o "$zip"
+          echo "a3d2a5e527cc799d6233c4d6abdbb2eb73a0c10803e0be2150429e7694eeac0a  $zip" | shasum -a 256 -c -
+          ditto -x -k "$zip" .
+          codesign --verify --deep --strict 栏历.app
+      - name: Check, download, and restart from the packaged UI
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'JS'
+          const {_electron} = require('playwright');
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const {execFileSync} = require('node:child_process');
+          const root=path.join(process.env.RUNNER_TEMP, 'upgrade-box');
+          const app=path.join(root,'栏历.app');
+          const plist=path.join(app,'Contents','Info.plist');
+          const extract=(key,file=plist)=>execFileSync('/usr/bin/plutil',['-extract',key,'raw','-o','-',file],{encoding:'utf8'}).trim();
+          const exe=path.join(app,'Contents','MacOS',extract('CFBundleExecutable'));
+          const version=()=>extract('CFBundleShortVersionString');
+          (async () => {
+            const el=await _electron.launch({executablePath:exe,args:[],env:{...process.env,LANLI_E2E:'1',LANLI_E2E_USER_DATA_DIR:path.join(root,'profile')},timeout:30000});
+            try {
+              const started=await el.evaluate(({app})=>({packaged:app.isPackaged,version:app.getVersion(),arch:process.arch}));
+              console.log(JSON.stringify(started));
+              if(!started.packaged||started.version!=='0.1.92'||started.arch!=='x64') throw new Error('wrong starting app');
+              await el.evaluate(()=>globalThis.__lanliTest.trayEnter());
+              const page=await el.firstWindow();
+              await page.locator('#check-update').click({timeout:10000});
+              const action=page.getByRole('button',{name:/立即重启|下载新版/});
+              await action.waitFor({timeout:120000});
+              const label=await action.textContent();
+              console.log('Upgrade button:', label);
+              if(!label.includes('立即重启'))throw new Error('Manual download fallback reproduced');
+              const staged=path.join(root,'.栏历-update-0.1.93','栏历.app');
+              if(extract('CFBundleShortVersionString',path.join(staged,'Contents','Info.plist'))!=='0.1.93')throw new Error('wrong staged version');
+              execFileSync('/usr/bin/codesign',['--verify','--deep','--strict',staged]);
+              await action.click({noWaitAfter:true,timeout:5000}).catch(e=>console.log('Restart click closed window:',e.message));
+              const old=el.process();
+              for(let i=0;i<35;i++) {
+                const newVersion=fs.existsSync(plist)&&version()==='0.1.93';
+                if(newVersion&&old.exitCode!==null) {
+                  let pids='';
+                  try {pids=execFileSync('/usr/bin/pgrep',['-f',exe],{encoding:'utf8'}).trim()} catch {}
+                  if(pids.split(/\s+/).some(p=>p&&p!==String(old.pid))) {
+                    execFileSync('/usr/bin/codesign',['--verify','--deep','--strict',app]);
+                    console.log('NATIVE-IN-APP-UPGRADE: PASS v0.1.92 -> v0.1.93 with restart');
+                    return;
+                  }
+                }
+                await new Promise(r=>setTimeout(r,1000));
+              }
+              throw new Error('No confirmed 0.1.93 relaunch');
+            } finally { await el.close().catch(()=>{}); }
+          })().catch(e=>{console.error(e);process.exitCode=1});
+          JS
+      - name: Show updater diagnostics
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -d "$HOME/Library/Logs" ]; then
+            find "$HOME/Library/Logs" -maxdepth 4 -type f \( -name main.log -o -name 'update-install*.log' \) -print0 |
+              while IFS= read -r -d '' f; do
+                grep -E '自更新|更新：|self-update|staging|install|bundle' "$f" | tail -60 || true
+              done
+          fi
