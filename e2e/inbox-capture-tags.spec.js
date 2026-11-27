@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-test('录入和粘贴后就地多选标签；批量应用、跳过、重复及空剪贴板', async () => {
+test('收纳回执两态按钮、返回草稿、显式选标签保存及关闭保留内容', async () => {
   const work = fs.mkdtempSync(path.join(os.tmpdir(), 'lanli-capture-tags-'));
   const app = await electron.launch({
     args: process.platform === 'linux' ? ['--no-sandbox', '.'] : ['.'],
@@ -23,12 +23,61 @@ test('录入和粘贴后就地多选标签；批量应用、跳过、重复及�
     const toggle = dialog.locator('#capture-tags-toggle');
     const save = dialog.getByRole('button', { name: '保存标签' });
     const skip = dialog.getByRole('button', { name: '暂不添加' });
+    const back = dialog.getByRole('button', { name: '返回', exact: true });
+    const picked = dialog.locator('#capture-tags-picked');
+    const escape = () => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()
+      .find((w) => w.webContents.getURL().endsWith('/calendar.html')).webContents
+      .sendInputEvent({ type: 'keyDown', keyCode: 'Escape' }));
+    const receiptState = async () => {
+      await expect(dialog).toBeVisible();
+      await expect(dialog.locator('footer button:visible')).toHaveText(['暂不添加', '添加标签']);
+      await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+      await expect(input).toBeHidden();
+      await expect(picked).toBeHidden();
+      await expect(save).toBeHidden();
+      await expect(back).toBeHidden();
+      await expect(dialog).not.toContainText('可选');
+    };
+    const pickerState = async () => {
+      await expect(dialog).toBeVisible();
+      await expect(dialog.locator('footer button:visible')).toHaveText(['返回', '保存标签']);
+      await expect(toggle).toBeHidden();
+      await expect(skip).toBeHidden();
+      await expect(input).toBeVisible();
+      await expect(back).toBeInViewport();
+      await expect(save).toBeInViewport();
+    };
+    const checkLayout = async () => {
+      const boxes = await dialog.evaluate((el) => {
+        const rect = (selector) => {
+          const r = el.querySelector(selector).getBoundingClientRect();
+          return { left: r.left, right: r.right, top: r.top, bottom: r.bottom };
+        };
+        return { preview: rect('#capture-tags-saved'), footer: rect('footer'),
+          overflow: el.scrollWidth > el.clientWidth,
+          viewport: window.innerHeight };
+      });
+      // Hidden actions must not occupy a slot; both visible actions stay on one row.
+      const buttons = await dialog.locator('footer button:visible').all();
+      const left = await buttons[0].boundingBox();
+      const right = await buttons[1].boundingBox();
+      expect(left.x + left.width).toBeLessThan(right.x);
+      expect(left.y).toBe(right.y);
+      expect(boxes.preview.bottom).toBeLessThan(boxes.footer.top);
+      expect(boxes.footer.bottom).toBeLessThanOrEqual(boxes.viewport);
+      expect(boxes.overflow).toBe(false);
+      if (await input.isVisible()) {
+        const picker = await dialog.locator('#capture-tags-picker').boundingBox();
+        expect(picker.y).toBeGreaterThan(boxes.preview.bottom);
+        expect(picker.y + picker.height).toBeLessThan(boxes.footer.top);
+      }
+    };
     const read = async () => (await hook('inboxList')).map(({title, tags}) => ({title, tags}));
 
     await page.locator('#inbox-compose-btn').click();
     await page.locator('#inbox-compose-text').fill('录入的新条目');
     await page.locator('#inbox-compose-save').click();
-    await expect(dialog).toBeVisible();
+    await receiptState();
     await expect(dialog.getByRole('heading', { level: 2 })).toBeFocused();
     await expect(input).toBeHidden();
     await expect(dialog.getByRole('heading', { level: 2 })).toHaveText('录入成功');
@@ -39,15 +88,47 @@ test('录入和粘贴后就地多选标签；批量应用、跳过、重复及�
     await expect(page.locator('#toast')).toBeHidden();
     await expect(dialog.locator('#capture-tags-skip')).toBeInViewport();
     expect(await read()).toEqual([{ title: '录入的新条目', tags: [] }]);
+    for (const mode of ['dark', 'light']) {
+      await page.emulateMedia({ colorScheme: mode });
+      await checkLayout();
+      await page.screenshot({ path: path.join(__dirname, 'screenshots', 'capture-receipt-' + mode + '.png') });
+    }
     await toggle.click();
+    await pickerState();
     await expect(input).toBeFocused();
+    await expect(save).toBeDisabled();
+    await expect(dialog.locator('#capture-tags-count')).toBeHidden();
     await input.fill('项目');
+    await expect(save).toBeDisabled();
+    for (const mode of ['dark', 'light']) {
+      await page.emulateMedia({ colorScheme: mode });
+      await checkLayout();
+      await expect(save).toBeVisible();
+      await expect(save).toHaveCSS('opacity', '0.48');
+      await page.screenshot({ path: path.join(__dirname, 'screenshots', 'capture-tags-disabled-' + mode + '.png') });
+    }
     await input.press('Enter');
     await input.fill('待看');
-    await input.press('Enter');
+    await dialog.getByRole('button', { name: '添加', exact: true }).click();
+    await input.fill('搜索草稿');
+    await back.click();
+    await receiptState();
+    await expect(toggle).toBeFocused();
+    await toggle.click();
+    await pickerState();
+    await expect(input).toHaveValue('搜索草稿');
+    await expect(picked).toContainText('#项目');
+    await expect(picked).toContainText('#待看');
+    await escape();
+    await receiptState();
+    await expect(toggle).toBeFocused();
+    await toggle.click();
+    await pickerState();
+    await expect(input).toHaveValue('搜索草稿');
     await expect(dialog.locator('#capture-tags-count')).toHaveText('2 / 5');
     for (const mode of ['dark', 'light']) {
       await page.emulateMedia({ colorScheme: mode });
+      await checkLayout();
       await page.screenshot({ path: path.join(__dirname, 'screenshots', 'capture-tags-' + mode + '.png') });
     }
     await save.click();
@@ -64,12 +145,15 @@ test('录入和粘贴后就地多选标签；批量应用、跳过、重复及�
     await expect(dialog.locator('#capture-tags-items')).toContainText('另有 1 项');
     await expect(dialog.locator('#capture-tags-skip')).toBeInViewport();
     await page.screenshot({ path: path.join(__dirname, 'screenshots', 'capture-tags-batch.png') });
-    await expect(input).toBeHidden();
+    await receiptState();
     await toggle.click();
+    await pickerState();
     await dialog.getByRole('button', { name: '#项目', exact: true }).click();
     await dialog.getByRole('button', { name: '#待看', exact: true }).click();
     await dialog.getByRole('button', { name: '移除标签 待看' }).click();
     await input.fill('附件');
+    await dialog.getByRole('button', { name: '添加', exact: true }).click();
+    await input.fill('搜索不保存');
     await save.click();
     await expect(dialog).toBeHidden();
     const state = await read();
@@ -89,6 +173,9 @@ test('录入和粘贴后就地多选标签；批量应用、跳过、重复及�
     await toggle.click();
     await input.fill('未生效');
     await input.press('Enter');
+    await input.fill('一并丢弃的草稿');
+    await back.click();
+    await receiptState();
     await skip.click();
     await expect(dialog).toBeHidden();
     expect((await read()).find((r) => r.title === '跳过但保留内容').tags).toEqual([]);
@@ -96,11 +183,10 @@ test('录入和粘贴后就地多选标签；批量应用、跳过、重复及�
     await hook('setClipboardData', { text: 'Esc 也只关标签框' });
     await page.locator('#inbox-paste').click();
     await expect(dialog).toBeVisible();
-    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()
-      .find((w) => w.webContents.getURL().endsWith('/calendar.html')).webContents
-      .sendInputEvent({ type: 'keyDown', keyCode: 'Escape' }));
+    await escape();
     await expect(dialog).toBeHidden();
     await expect(page.locator('#inbox-view')).toBeVisible();
+    expect((await read()).find((r) => r.title === 'Esc 也只关标签框').tags).toEqual([]);
 
     await hook('setClipboardData', { text: '' });
     await page.locator('#inbox-paste').click();
@@ -126,10 +212,11 @@ test('录入和粘贴后就地多选标签；批量应用、跳过、重复及�
       await page.screenshot({ path: path.join(__dirname, 'screenshots', 'capture-rich-preview-' + mode + '.png') });
     }
     await toggle.click();
-    await expect(input).toBeVisible();
-    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()
-      .find((w) => w.webContents.getURL().endsWith('/calendar.html')).webContents
-      .sendInputEvent({ type: 'keyDown', keyCode: 'Escape' }));
+    await pickerState();
+    await expect(save).toBeDisabled();
+    await input.fill('未选搜索');
+    await expect(save).toBeDisabled();
+    await escape();
     await expect(input).toBeHidden();
     await expect(dialog).toBeVisible();
     await skip.click();

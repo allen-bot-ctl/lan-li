@@ -1738,7 +1738,8 @@ function renderCaptureTags() {
   capEl('input').disabled = state.saving;
   capEl('add').disabled = state.saving || !raw;
   capEl('skip').disabled = state.saving;
-  capEl('save').disabled = state.saving || (!state.tags.length && !raw);
+  capEl('back').disabled = state.saving;
+  capEl('save').disabled = state.saving || !state.tags.length;
   const chip = (name, picked) => {
     const b = document.createElement('button');
     b.type = 'button';
@@ -1764,7 +1765,8 @@ function renderCaptureTags() {
 function setCapturePicker(open, focus = true) {
   capEl('picker').hidden = !open;
   capEl('toggle').setAttribute('aria-expanded', String(open));
-  capEl('toggle').textContent = open ? '− 收起标签' : '＋ 添加标签';
+  for (const id of ['skip', 'toggle']) capEl(id).hidden = open;
+  for (const id of ['back', 'save']) capEl(id).hidden = !open;
   if (focus) (open ? capEl('input') : capEl('toggle')).focus();
 }
 
@@ -1843,7 +1845,6 @@ function closeCaptureTags() {
 async function saveCaptureTags() {
   const state = captureTagState;
   if (!state || state.saving) return;
-  if (IQ.normalizeTag(capEl('input').value) && !stageCaptureTag(capEl('input').value)) return;
   if (!state.tags.length) return;
   state.saving = true;
   renderCaptureTags();
@@ -1873,7 +1874,8 @@ function escapeCaptureTags() {
   else closeCaptureTags();
 }
 
-capEl('toggle').addEventListener('click', () => setCapturePicker(capEl('picker').hidden));
+capEl('toggle').addEventListener('click', () => setCapturePicker(true));
+capEl('back').addEventListener('click', () => setCapturePicker(false));
 capEl('input').addEventListener('input', () => { capEl('status').textContent = ''; renderCaptureTags(); });
 capEl('input').addEventListener('keydown', (e) => {
   if (e.key !== 'Enter' || e.isComposing) return;

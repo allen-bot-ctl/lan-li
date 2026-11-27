@@ -1710,12 +1710,10 @@ mark.inbox-hit{background:rgba(255,200,0,.45);color:inherit;border-radius:2px;}
 .capture-tags-single .capture-tags-item-type:not([hidden]) { display:block; margin-bottom:4px; }
 .capture-tags-single .capture-tags-item-title { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:3;
   white-space:normal; overflow-wrap:anywhere; line-height:1.5; font-weight:500; }
-.capture-tags-section { display:flex; align-items:center; gap:6px; min-height:26px; }
-.capture-tags-section #capture-tags-toggle { font-size:12px; font-weight:600; min-height:25px; }
-.capture-tags-optional, #capture-tags-count, #capture-tags-desc { font-size:11px; color:var(--muted-strong); }
+#capture-tags-count, #capture-tags-desc { font-size:11px; color:var(--muted-strong); }
 #capture-tags-count { margin-left:auto; }
 #capture-tags-picker { display:grid; gap:6px; padding:6px 8px; border:1px solid var(--sheet-border); border-radius:8px; }
-#capture-tags-picker[hidden] { display:none; }
+.capture-tags-card [hidden] { display:none !important; }
 #capture-tags-picked, #capture-tags-options { display:flex; flex-wrap:wrap; gap:4px; max-height:48px; overflow:auto; }
 #capture-tags-picked:empty, #capture-tags-options:empty, #capture-tags-status:empty { display:none; }
 .capture-tags-input-row { display:flex; gap:5px; }
@@ -1727,8 +1725,9 @@ mark.inbox-hit{background:rgba(255,200,0,.45);color:inherit;border-radius:2px;}
 .capture-tags-card :is(#capture-tags-picked,#capture-tags-options) button { padding:1px 6px; font-size:11px; line-height:17px; min-height:21px; }
 #capture-tags-picked button { color:var(--accent); }
 #capture-tags-status { color:var(--red); font-size:12px; }
-.capture-tags-card footer { border-top:1px solid var(--sheet-border); padding-top:8px; }
-#capture-tags-save:enabled { background:var(--accent); color:#1c1510; font-weight:650; }
+.capture-tags-card footer { border-top:1px solid var(--sheet-border); padding-top:8px; justify-content:space-between; }
+#capture-tags-back { color:var(--muted-strong); border-color:transparent; background:transparent; }
+#capture-tags-toggle, #capture-tags-save { background:var(--accent); color:#1c1510; font-weight:650; }
 #inbox-edit-form { display: grid; gap: 10px; }
 #inbox-edit-form h2, #inbox-edit-form p { margin: 0; }
 #inbox-edit-form h2 { font-size: 16px; }

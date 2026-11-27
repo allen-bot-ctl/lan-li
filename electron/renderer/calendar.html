@@ -252,22 +252,21 @@
             <ul id="capture-tags-items" aria-label="刚保存的收纳"></ul>
             <p id="capture-tags-desc"></p>
           </div>
-          <div class="capture-tags-section">
-            <button id="capture-tags-toggle" type="button" aria-controls="capture-tags-picker" aria-expanded="false">＋ 添加标签</button>
-            <span class="capture-tags-optional">可选</span><span id="capture-tags-count" aria-label="已选标签数量"></span>
-          </div>
-          <div id="capture-tags-picked" aria-label="已选标签"></div>
           <div id="capture-tags-picker" hidden>
+            <span id="capture-tags-count" aria-label="已选标签数量"></span>
+            <div id="capture-tags-picked" aria-label="已选标签"></div>
             <div class="capture-tags-input-row">
               <input id="capture-tags-input" type="text" autocomplete="off" aria-label="搜索或输入新标签" placeholder="搜索或输入新标签">
               <button id="capture-tags-add" type="button">添加</button>
             </div>
             <div id="capture-tags-options" aria-label="已有标签"></div>
+            <p id="capture-tags-status" role="alert"></p>
           </div>
-          <p id="capture-tags-status" role="alert"></p>
           <footer class="inbox-edit-actions">
             <button id="capture-tags-skip" type="button">暂不添加</button>
-            <button id="capture-tags-save" type="button">保存标签</button>
+            <button id="capture-tags-toggle" type="button" aria-controls="capture-tags-picker" aria-expanded="false">添加标签</button>
+            <button id="capture-tags-back" type="button" hidden>返回</button>
+            <button id="capture-tags-save" type="button" hidden>保存标签</button>
           </footer>
         </div>
       </dialog>
